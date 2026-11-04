@@ -1,0 +1,29 @@
+# Dependencies (installed inside the image)
+node_modules
+
+# Local data and database (persisted via a volume, not baked into the image)
+data
+
+# Environment variables and secrets (injected via env_file at runtime)
+.env
+.env.local
+.env.*.local
+
+# Version control and metadata
+.git
+.gitignore
+
+# Logs and temporary files
+*.log
+coverage
+.DS_Store
+
+# Material that is not part of the app
+*.jpeg
+*.jpg
+*.png
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore

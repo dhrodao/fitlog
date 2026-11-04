@@ -1,0 +1,46 @@
+services:
+  app:
+    build:
+      context: .
+      # Docker's bridge network has no Internet access on this host, so the
+      # build (npm ci) uses the host network to be able to download packages.
+      network: host
+    image: fitness-app
+    container_name: fitness-app
+    restart: unless-stopped
+
+    # Environment variables from .env (GOOGLE_CLIENT_ID, SESSION_SECRET, etc.).
+    # Copy .env.example to .env before starting.
+    env_file:
+      - .env
+
+    # Docker's bridge network has no Internet access on this host. With
+    # network_mode: host the container uses the host network, so:
+    #  - the wger exercise catalog can be synced, and
+    #  - the app is reachable on the .env PORT (e.g. http://localhost:3000)
+    #    without mapping ports (the `ports` block does not apply with host).
+    # If your bridge network does have Internet, you can drop this line and
+    # uncomment the `ports` block below.
+    network_mode: host
+
+    # ports:
+    #   - "${PORT:-3000}:${PORT:-3000}"
+
+    # Persist the SQLite database outside the container.
+    volumes:
+      - fitness-data:/app/data
+
+    # Health check against the app endpoint.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+
+volumes:
+  fitness-data:

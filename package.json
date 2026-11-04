@@ -1,0 +1,28 @@
+{
+  "name": "fitness-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "App personal para registrar entrenamientos, rutinas, pesos y medidas",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "sync:exercises": "node server/sync-cli.js",
+    "seed:demo": "node server/seed.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "9.6.0",
+    "cookie-parser": "1.4.7",
+    "dotenv": "16.4.7",
+    "express": "4.21.2",
+    "google-auth-library": "9.15.1",
+    "helmet": "8.1.0"
+  },
+  "devDependencies": {
+    "supertest": "7.0.0"
+  }
+}

@@ -1,0 +1,106 @@
+import path from 'node:path';
+import express from 'express';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import config from './config.js';
+import { attachUser, requireAuth } from './auth.js';
+import { HttpError } from './http.js';
+import authRoutes from './routes/auth.js';
+import exercisesRoutes from './routes/exercises.js';
+import routinesRoutes from './routes/routines.js';
+import workoutsRoutes from './routes/workouts.js';
+import measurementsRoutes from './routes/measurements.js';
+import statsRoutes from './routes/stats.js';
+
+export function createApp() {
+  const app = express();
+
+  if (config.isProduction) app.set('trust proxy', 1);
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          'default-src': ["'self'"],
+          'script-src': [
+            "'self'",
+            'https://accounts.google.com',
+            'https://accounts.google.com/gsi/client',
+          ],
+          'style-src': ["'self'", "'unsafe-inline'", 'https://accounts.google.com'],
+          'frame-src': ["'self'", 'https://accounts.google.com'],
+          'connect-src': ["'self'", 'https://accounts.google.com'],
+          'img-src': [
+            "'self'",
+            'data:',
+            'blob:',
+            'https://wger.de',
+            'https://*.wger.de',
+            'https://*.googleusercontent.com',
+          ],
+          'font-src': ["'self'", 'data:'],
+          'object-src': ["'none'"],
+          'base-uri': ["'self'"],
+        },
+      },
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    })
+  );
+
+  app.use(express.json({ limit: '1mb' }));
+  app.use(cookieParser());
+  app.use(attachUser);
+
+  app.get('/api/health', (_req, res) => {
+    res.json({ ok: true, time: new Date().toISOString() });
+  });
+
+  app.use('/api/auth', authRoutes);
+  app.use('/api/exercises', requireAuth, exercisesRoutes);
+  app.use('/api/routines', requireAuth, routinesRoutes);
+  app.use('/api/workouts', requireAuth, workoutsRoutes);
+  app.use('/api/measurements', requireAuth, measurementsRoutes);
+  app.use('/api/stats', requireAuth, statsRoutes);
+
+  const publicDir = path.join(config.root, 'public');
+  app.use(
+    express.static(publicDir, {
+      extensions: ['html'],
+      maxAge: config.isProduction ? '1h' : 0,
+    })
+  );
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(publicDir, 'index.html'));
+  });
+
+  app.use((req, res) => {
+    res.status(404).json({ error: 'Ruta no encontrada' });
+  });
+
+  app.use((error, req, res, _next) => {
+    if (error instanceof HttpError) {
+      return res
+        .status(error.status)
+        .json({ error: error.message, details: error.details });
+    }
+
+    if (error?.type === 'entity.parse.failed') {
+      return res.status(400).json({ error: 'JSON inválido' });
+    }
+
+    console.error('[error]', error);
+    res.status(500).json({
+      error: config.isProduction
+        ? 'Error interno del servidor'
+        : error.message || 'Error interno del servidor',
+    });
+  });
+
+  return app;
+}
+
+export default createApp;

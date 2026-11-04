@@ -1,0 +1,300 @@
+import { api, errorMessage } from './api.js';
+import { initTheme } from './theme.js';
+import { esc, errorScreen, icon, loaderScreen } from './ui.js';
+import * as LoginView from './views/login.js';
+import * as HomeView from './views/home.js';
+import * as TrainingView from './views/training.js';
+import * as RoutineView from './views/routine.js';
+import * as RoutineEditorView from './views/routine-editor.js';
+import * as ActiveView from './views/active.js';
+import * as HistoryView from './views/history.js';
+import * as WorkoutView from './views/workout.js';
+import * as ExercisesView from './views/exercises.js';
+import * as MeasurementsView from './views/measurements.js';
+import * as ProfileView from './views/profile.js';
+
+initTheme();
+
+const shell = document.getElementById('app');
+const viewRoot = document.createElement('main');
+viewRoot.id = 'view-root';
+const nav = document.createElement('nav');
+nav.className = 'bottom-nav';
+nav.setAttribute('aria-label', 'Navegación principal');
+shell.append(viewRoot, nav);
+
+const routes = [
+  { name: 'login', pattern: /^\/login\/?$/, view: LoginView },
+  { name: 'home', pattern: /^\/?$/, view: HomeView },
+  { name: 'routines', pattern: /^\/routines\/?$/, view: TrainingView },
+  {
+    name: 'routine-new',
+    pattern: /^\/routines\/new\/?$/,
+    view: RoutineEditorView,
+    params: () => ({ id: null }),
+  },
+  {
+    name: 'routine-edit',
+    pattern: /^\/routines\/(\d+)\/edit\/?$/,
+    view: RoutineEditorView,
+    params: (match) => ({ id: Number(match[1]) }),
+  },
+  {
+    name: 'routine',
+    pattern: /^\/routines\/(\d+)\/?$/,
+    view: RoutineView,
+    params: (match) => ({ id: Number(match[1]) }),
+  },
+  { name: 'active', pattern: /^\/workout\/active\/?$/, view: ActiveView },
+  { name: 'history', pattern: /^\/workouts\/?$/, view: HistoryView },
+  {
+    name: 'workout',
+    pattern: /^\/workouts\/(\d+)\/?$/,
+    view: WorkoutView,
+    params: (match) => ({ id: Number(match[1]) }),
+  },
+  { name: 'exercises', pattern: /^\/exercises\/?$/, view: ExercisesView },
+  {
+    name: 'measurements',
+    pattern: /^\/measurements\/?$/,
+    view: MeasurementsView,
+  },
+  { name: 'profile', pattern: /^\/profile\/?$/, view: ProfileView },
+];
+
+const state = {
+  user: null,
+  authConfig: null,
+  cleanup: null,
+  version: 0,
+  activeWorkout: null,
+};
+
+function matchRoute(path) {
+  for (const route of routes) {
+    const match = path.match(route.pattern);
+    if (match) {
+      return { ...route, params: route.params ? route.params(match) : {} };
+    }
+  }
+  return null;
+}
+
+function navigate(path, { replace = false } = {}) {
+  const target = path.startsWith('/') ? path : `/${path}`;
+  const nextHash = `#${target}`;
+  if (location.hash === nextHash) {
+    handleRoute();
+    return;
+  }
+  if (replace) {
+    history.replaceState(null, '', nextHash);
+    handleRoute();
+  } else {
+    location.hash = target;
+  }
+}
+
+async function logout() {
+  try {
+    await api.auth.logout();
+  } catch {
+    // no-op
+  }
+  state.user = null;
+  state.activeWorkout = null;
+  navigate('/login', { replace: true });
+}
+
+async function handleUnauthorized() {
+  state.user = null;
+  state.activeWorkout = null;
+  navigate('/login', { replace: true });
+}
+
+const ctx = {
+  get user() {
+    return state.user;
+  },
+  get authConfig() {
+    return state.authConfig;
+  },
+  get activeWorkout() {
+    return state.activeWorkout;
+  },
+  setActiveWorkout(workout) {
+    state.activeWorkout = workout;
+    updateNav(document.documentElement.dataset.route || 'home');
+  },
+  setUser(user) {
+    state.user = user;
+  },
+  completeLogin(user) {
+    state.user = user;
+    state.authConfig = null;
+    navigate('/', { replace: true });
+  },
+  navigate,
+  logout,
+  handleUnauthorized,
+  refresh: () => handleRoute(),
+  refreshActive: async () => {
+    if (!state.user) return null;
+    try {
+      const { workout } = await api.workouts.active();
+      state.activeWorkout = workout;
+      return workout;
+    } catch {
+      return null;
+    }
+  },
+};
+
+function navItem(name, label, path, iconName, active) {
+  return `
+    <a class="nav-item ${active ? 'active' : ''}" href="#${path}" data-link="${path}" aria-label="${label}">
+      ${icon(iconName, 23, 2)}
+      <span>${label}</span>
+      <span class="nav-dot ${name === 'active' && state.activeWorkout ? '' : 'hidden'}"></span>
+    </a>
+  `;
+}
+
+function updateNav(routeName) {
+  document.documentElement.dataset.route = routeName;
+  if (!state.user || routeName === 'login') {
+    nav.classList.add('hidden');
+    shell.classList.add('no-nav');
+    return;
+  }
+
+  const trainingActive = ['routines', 'routine', 'routine-new', 'routine-edit', 'active', 'history', 'workout'].includes(routeName);
+  const profileActive = ['profile', 'measurements', 'exercises'].includes(routeName);
+
+  nav.innerHTML = [
+    navItem('home', 'Inicio', '/', 'home', routeName === 'home'),
+    navItem('training', 'Entrenar', '/routines', 'dumbbell', trainingActive),
+    navItem('profile', 'Perfil', '/profile', 'user', profileActive),
+  ].join('');
+  nav.classList.remove('hidden');
+  shell.classList.remove('no-nav');
+}
+
+async function loadActiveState() {
+  try {
+    const { workout } = await api.workouts.active();
+    state.activeWorkout = workout;
+  } catch {
+    state.activeWorkout = null;
+  }
+}
+
+async function handleRoute() {
+  const path = location.hash.replace(/^#/, '') || '/';
+  const route = matchRoute(path);
+
+  if (!route) {
+    navigate('/', { replace: true });
+    return;
+  }
+
+  if (!state.user && route.name !== 'login') {
+    navigate('/login', { replace: true });
+    return;
+  }
+
+  if (state.user && route.name === 'login') {
+    navigate('/', { replace: true });
+    return;
+  }
+
+  if (state.cleanup) {
+    try {
+      state.cleanup();
+    } catch {
+      // ignore cleanup errors
+    }
+    state.cleanup = null;
+  }
+
+  const version = ++state.version;
+  updateNav(route.name);
+  viewRoot.innerHTML = loaderScreen();
+
+  if (!state.user) {
+    try {
+      const { user } = await api.auth.me();
+      state.user = user;
+    } catch {
+      state.user = null;
+    }
+  }
+
+  if (!state.user && route.name !== 'login') {
+    navigate('/login', { replace: true });
+    return;
+  }
+
+  if (state.user && route.name === 'login') {
+    navigate('/', { replace: true });
+    return;
+  }
+
+  try {
+    const cleanup = await route.view.render(viewRoot, ctx, route.params || {});
+    if (version !== state.version) {
+      cleanup?.();
+      return;
+    }
+    if (typeof cleanup === 'function') state.cleanup = cleanup;
+    updateNav(route.name);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  } catch (error) {
+    if (error?.status === 401) {
+      handleUnauthorized();
+      return;
+    }
+    console.error(error);
+    viewRoot.innerHTML = errorScreen(errorMessage(error), 'data-retry');
+  }
+}
+
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('[data-link]');
+  if (link) {
+    event.preventDefault();
+    navigate(link.dataset.link);
+    return;
+  }
+
+  const retry = event.target.closest('[data-retry]');
+  if (retry) {
+    event.preventDefault();
+    handleRoute();
+  }
+});
+
+window.addEventListener('hashchange', handleRoute);
+
+async function boot() {
+  shell.classList.add('no-nav');
+  viewRoot.innerHTML = loaderScreen('Preparando tu espacio...');
+
+  try {
+    state.authConfig = await api.auth.config();
+  } catch {
+    state.authConfig = { googleEnabled: false, devLoginEnabled: true };
+  }
+
+  try {
+    const { user } = await api.auth.me();
+    state.user = user;
+  } catch {
+    state.user = null;
+  }
+
+  await loadActiveState();
+  await handleRoute();
+}
+
+boot();

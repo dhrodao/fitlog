@@ -84,6 +84,38 @@ Docker setup details:
 > `PORT`. Do not run `npm run dev` and the container on the same port at the
 > same time.
 
+## Expose it with Cloudflare Tunnel (optional)
+
+The Compose file includes a `cloudflared` service that publishes the app over
+HTTPS without opening any inbound ports.
+
+1. In the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/)
+   go to **Networks → Tunnels → Create a tunnel** (type *Cloudflared*).
+2. Name the tunnel and copy its **token**.
+3. Under the tunnel's **Public Hostname** tab, add a hostname (e.g.
+   `fitlog.yourdomain.com`) pointing to the service `http://localhost:3000`
+   (the app runs on the host network).
+4. Put the token in `.env`:
+   ```
+   TUNNEL_TOKEN=eyJ...your-token...
+   ```
+5. Start everything:
+   ```bash
+   docker compose up -d
+   ```
+
+The `cloudflared` container also uses `network_mode: host` so it can reach both
+Cloudflare's edge (outbound) and the app at `http://localhost:3000`.
+
+When serving through the tunnel, set in `.env`:
+- `COOKIE_SECURE=true` (traffic is HTTPS end to end at the edge).
+- Add your tunnel hostname (e.g. `https://fitlog.yourdomain.com`) to the
+  **Authorized JavaScript origins** in Google Cloud so the Google login works.
+
+If you do not use the tunnel, leave `TUNNEL_TOKEN` empty; the `cloudflared`
+service will just keep retrying and the app still works locally. To skip it
+entirely, start only the app: `docker compose up -d app`.
+
 ## Google login (optional)
 
 1. In [Google Cloud Console](https://console.cloud.google.com/) create a

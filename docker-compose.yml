@@ -42,5 +42,22 @@ services:
       start_period: 40s
       retries: 3
 
+  # Cloudflare Tunnel: exposes the app over HTTPS without opening any inbound
+  # ports. Create a tunnel in the Cloudflare Zero Trust dashboard, copy its
+  # token into TUNNEL_TOKEN in .env, and point the tunnel's public hostname to
+  # http://localhost:3000 (the app runs on the host network).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: fitlog-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    # Host network so cloudflared can reach both Cloudflare's edge (outbound)
+    # and the app at http://localhost:3000 on this host.
+    network_mode: host
+    depends_on:
+      - app
+
 volumes:
   fitness-data:

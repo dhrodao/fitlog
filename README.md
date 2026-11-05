@@ -2,8 +2,9 @@
 
 Personal app to track workouts, routines, weights and body measurements.
 Backend in Node.js + Express with SQLite (`better-sqlite3`) and a lightweight
-build-less frontend (native ES modules). Exercise catalog from
-[wger.de](https://wger.de) (CC-BY-SA). The user-facing UI is in Spanish.
+build-less frontend (native ES modules). Exercise catalog and images from
+[free-exercise-db](https://github.com/yuhonas/free-exercise-db) (Unlicense).
+The user-facing UI is in Spanish; catalog exercise names remain in English.
 
 ## Requirements
 
@@ -27,6 +28,7 @@ cp .env.example .env
 | `COOKIE_SECURE` | `true` when serving over HTTPS. |
 | `SESSION_DAYS` | Session duration in days. |
 | `SESSION_SECRET` | Internal session secret. |
+| `CATALOG_SYNC_DAYS` | Days before the catalog is re-synced in the background (default `14`). |
 
 ## Run locally (Node)
 
@@ -42,10 +44,33 @@ The app is served at `http://localhost:3000`.
 Useful scripts:
 
 ```bash
-npm run sync:exercises   # sync the wger catalog
+npm run sync:exercises   # sync the free-exercise-db catalog
 npm run seed:demo        # sample data
 npm test                 # tests (node --test)
 ```
+
+### Exercise catalog
+
+`npm run sync:exercises` downloads `dist/exercises.json` from
+[`free-exercise-db`](https://github.com/yuhonas/free-exercise-db) and upserts
+all 876 exercises. The dataset is pinned to a fixed commit; image files are
+fetched from jsDelivr on demand, cached next to the database
+(`data/exercise-images`) and served by the app itself through
+`/api/exercises/image/...`, so the browser does not need direct access to the
+CDN.
+
+Catalog names and instructions are in English. The app derives the Spanish
+muscle category (`Pecho`, `Espalda`, `Piernas`…) from the first primary muscle,
+and translates muscle and equipment labels in the UI.
+
+The user's own exercises keep their Spanish names. The mapping from those names
+to free-exercise-db ids lives in
+[`server/user-exercise-aliases.json`](server/user-exercise-aliases.json); it is
+applied by normalized name during the sync, so existing exercises are linked to
+the catalog and receive an image without creating duplicates.
+
+The sync is idempotent; run it again after changing the pinned commit or the
+aliases.
 
 ## Run with Docker Compose
 
@@ -70,7 +95,7 @@ Docker setup details:
   `docker compose down -v`.
 - **Host network**: both the build and the runtime use `network_mode: host`
   because this machine's Docker *bridge* network has no Internet access
-  (required for `npm ci` and to sync the wger catalog). With host networking
+  (required for `npm ci` and to sync the exercise catalog). With host networking
   the app is reachable directly on the `.env` `PORT` (e.g.
   `http://localhost:3000`) and the `ports` block is unused. If your bridge
   network does have Internet, you can remove `network_mode: host` and

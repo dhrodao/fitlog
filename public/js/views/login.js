@@ -72,7 +72,7 @@ export async function render(container, ctx) {
             ? `<div class="notice danger">${icon('info', 17)} El acceso no está configurado. Define GOOGLE_CLIENT_ID en el servidor.</div>`
             : ''
         }
-        <p class="login-note">Tus datos se guardan únicamente en tu servidor personal. Catálogo de ejercicios: wger.de · CC-BY-SA.</p>
+        <p class="login-note">Tus datos se guardan únicamente en tu servidor personal. Catálogo de ejercicios: free-exercise-db · Unlicense.</p>
       </div>
     </div>
   `;

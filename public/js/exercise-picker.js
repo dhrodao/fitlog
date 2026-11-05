@@ -4,16 +4,18 @@ import { debounce, esc, icon, openModal } from './ui.js';
 // Groups the catalog categories the way Hevy splits muscles, so the muscle
 // sheet feels familiar. Any category not listed falls back to "Otros".
 const CATEGORY_GROUPS = [
-  { label: 'Tren superior', categories: ['Abdominales', 'Brazos', 'Espalda', 'Hombros', 'Pecho'] },
+  { label: 'Tren superior', categories: ['Abdominales', 'Brazos', 'Espalda', 'Cuello', 'Hombros', 'Pecho'] },
   { label: 'Tren inferior', categories: ['Piernas', 'Gemelos'] },
-  { label: 'Otros', categories: ['Cardio'] },
+  { label: 'Otros', categories: ['Cardio', 'Estiramientos'] },
 ];
 
 const CATEGORY_ICON = {
   Abdominales: 'target',
   Brazos: 'dumbbell',
   Cardio: 'activity',
+  Cuello: 'user',
   Espalda: 'layers',
+  Estiramientos: 'activity',
   Gemelos: 'arrowDown',
   Hombros: 'user',
   Pecho: 'target',
@@ -45,7 +47,7 @@ function groupCategories(categories) {
  * tabs and a muscle-group (category) filter.
  *
  * @param {object} options
- * @param {(item: {catalogId?: number, exerciseId?: number, name: string, category: string, imageUrl: string|null}) => void} options.onPick
+ * @param {(item: {catalogId?: string, exerciseId?: number, name: string, category: string, imageUrl: string|null}) => void} options.onPick
  *   Called with the chosen exercise. The sheet closes automatically afterwards.
  */
 export function openExercisePicker({ onPick } = {}) {

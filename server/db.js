@@ -10,6 +10,37 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
 
+const catalogColumns = `
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT,
+  muscles TEXT,
+  primary_muscles TEXT,
+  secondary_muscles TEXT,
+  equipment TEXT,
+  instructions TEXT,
+  level TEXT,
+  force TEXT,
+  mechanic TEXT,
+  image_url TEXT,
+  image_url_2 TEXT,
+  thumbnail_url TEXT,
+  description TEXT,
+  updated_at TEXT NOT NULL
+`;
+
+const exerciseColumns = `
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  catalog_id TEXT REFERENCES exercise_catalog(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  category TEXT,
+  image_url TEXT,
+  is_custom INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  UNIQUE(user_id, name)
+`;
+
 const schema = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
@@ -35,31 +66,11 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 
-CREATE TABLE IF NOT EXISTS exercise_catalog (
-  wger_id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL,
-  name_en TEXT,
-  category TEXT,
-  muscles TEXT,
-  equipment TEXT,
-  image_url TEXT,
-  thumbnail_url TEXT,
-  description TEXT,
-  updated_at TEXT NOT NULL
-);
+CREATE TABLE IF NOT EXISTS exercise_catalog (${catalogColumns});
 CREATE INDEX IF NOT EXISTS idx_catalog_name ON exercise_catalog(name);
+CREATE INDEX IF NOT EXISTS idx_catalog_category ON exercise_catalog(category);
 
-CREATE TABLE IF NOT EXISTS exercises (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  catalog_id INTEGER REFERENCES exercise_catalog(wger_id) ON DELETE SET NULL,
-  name TEXT NOT NULL,
-  category TEXT,
-  image_url TEXT,
-  is_custom INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL,
-  UNIQUE(user_id, name)
-);
+CREATE TABLE IF NOT EXISTS exercises (${exerciseColumns});
 CREATE INDEX IF NOT EXISTS idx_exercises_user ON exercises(user_id);
 
 CREATE TABLE IF NOT EXISTS routines (
@@ -135,6 +146,60 @@ CREATE INDEX IF NOT EXISTS idx_measurements_user ON measurements(user_id, date);
 `;
 
 db.exec(schema);
+
+function isLegacyCatalog() {
+  const columns = db.prepare('PRAGMA table_info(exercise_catalog)').all();
+  return columns.some((entry) => entry.name === 'wger_id');
+}
+
+function migrateLegacyCatalog() {
+  if (!isLegacyCatalog()) return false;
+
+  // The old catalog and its user links point to wger ids, so they cannot be
+  // reused. User exercises are preserved by id; any old catalog_id becomes
+  // NULL and is relinked by name during the next catalog sync.
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      db.exec(`CREATE TABLE exercise_catalog_new (${catalogColumns})`);
+      db.exec('DROP TABLE exercise_catalog');
+      db.exec('ALTER TABLE exercise_catalog_new RENAME TO exercise_catalog');
+
+      db.exec(`CREATE TABLE exercises_new (${exerciseColumns})`);
+      db.exec(
+        `INSERT INTO exercises_new
+           (id, user_id, catalog_id, name, category, image_url, is_custom, created_at)
+         SELECT id, user_id, NULL, name, category, image_url, is_custom, created_at
+         FROM exercises`
+      );
+      db.exec('DROP TABLE exercises');
+      db.exec('ALTER TABLE exercises_new RENAME TO exercises');
+
+      db.prepare(
+        `DELETE FROM meta
+         WHERE key IN (
+           'wger_last_sync', 'wger_count',
+           'free_images_last_sync', 'free_images_count'
+         )`
+      ).run();
+    })();
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+
+  const violations = db.pragma('foreign_key_check');
+  if (violations.length > 0) {
+    throw new Error(
+      `La migración del catálogo dejó ${violations.length} referencias rotas`
+    );
+  }
+
+  return true;
+}
+
+if (migrateLegacyCatalog()) {
+  db.exec(schema);
+}
 
 export const nowIso = () => new Date().toISOString();
 

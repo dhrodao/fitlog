@@ -8,6 +8,7 @@ import request from 'supertest';
 const dbPath = path.join(os.tmpdir(), `fitlog-test-${process.pid}.db`);
 process.env.DB_PATH = dbPath;
 process.env.NODE_ENV = 'test';
+process.env.COOKIE_SECURE = 'false';
 process.env.ALLOW_DEV_LOGIN = 'true';
 process.env.GOOGLE_CLIENT_ID = '';
 

@@ -1,5 +1,8 @@
 import { db, nowIso } from '../db.js';
-import { getCatalogExercise } from '../wger.js';
+import {
+  getCatalogExercise,
+  getAliasNamesForCatalogId,
+} from '../catalog.js';
 import { HttpError, requireString } from '../http.js';
 
 export function serializeExercise(row) {
@@ -20,29 +23,41 @@ export function getUserExercise(userId, exerciseId) {
     .get(exerciseId, userId);
 }
 
+function linkExercise(row, catalog) {
+  db.prepare(
+    `UPDATE exercises SET catalog_id = COALESCE(catalog_id, ?),
+      image_url = COALESCE(image_url, ?), category = COALESCE(category, ?)
+     WHERE id = ?`
+  ).run(catalog.id, catalog.thumbnailUrl, catalog.category, row.id);
+  return db.prepare('SELECT * FROM exercises WHERE id = ?').get(row.id);
+}
+
 export function getOrCreateFromCatalog(userId, catalogId) {
-  const catalog = getCatalogExercise(catalogId);
+  const id = String(catalogId || '').trim();
+  if (!id) throw new HttpError(400, 'Debes indicar un ejercicio del catálogo');
+
+  const catalog = getCatalogExercise(id);
   if (!catalog) {
     throw new HttpError(404, 'Ejercicio no encontrado en el catálogo');
   }
 
   const byCatalog = db
     .prepare('SELECT * FROM exercises WHERE user_id = ? AND catalog_id = ?')
-    .get(userId, catalogId);
+    .get(userId, id);
   if (byCatalog) return byCatalog;
+
+  for (const aliasName of getAliasNamesForCatalogId(id)) {
+    const byAlias = db
+      .prepare('SELECT * FROM exercises WHERE user_id = ? AND name = ?')
+      .get(userId, aliasName);
+    if (byAlias) return linkExercise(byAlias, catalog);
+  }
 
   const byName = db
     .prepare('SELECT * FROM exercises WHERE user_id = ? AND name = ?')
     .get(userId, catalog.name);
 
-  if (byName) {
-    db.prepare(
-      `UPDATE exercises SET catalog_id = COALESCE(catalog_id, ?),
-        image_url = COALESCE(image_url, ?), category = COALESCE(category, ?)
-       WHERE id = ?`
-    ).run(catalogId, catalog.thumbnailUrl, catalog.category, byName.id);
-    return db.prepare('SELECT * FROM exercises WHERE id = ?').get(byName.id);
-  }
+  if (byName) return linkExercise(byName, catalog);
 
   const info = db
     .prepare(
@@ -51,7 +66,7 @@ export function getOrCreateFromCatalog(userId, catalogId) {
     )
     .run(
       userId,
-      catalogId,
+      id,
       catalog.name,
       catalog.category,
       catalog.thumbnailUrl,
@@ -86,7 +101,7 @@ export function resolveExercise(userId, input = {}) {
   }
 
   if (input.catalogId) {
-    return getOrCreateFromCatalog(userId, Number(input.catalogId));
+    return getOrCreateFromCatalog(userId, input.catalogId);
   }
 
   if (input.name) {

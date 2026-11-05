@@ -16,7 +16,7 @@ services:
 
     # Docker's bridge network has no Internet access on this host. With
     # network_mode: host the container uses the host network, so:
-    #  - the wger exercise catalog can be synced, and
+    #  - the exercise catalog can be synced, and
     #  - the app is reachable on the .env PORT (e.g. http://localhost:3000)
     #    without mapping ports (the `ports` block does not apply with host).
     # If your bridge network does have Internet, you can drop this line and

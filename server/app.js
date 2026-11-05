@@ -35,8 +35,7 @@ export function createApp() {
             "'self'",
             'data:',
             'blob:',
-            'https://wger.de',
-            'https://*.wger.de',
+            'https://cdn.jsdelivr.net',
             'https://*.googleusercontent.com',
           ],
           'font-src': ["'self'", 'data:'],
@@ -68,12 +67,19 @@ export function createApp() {
   app.use(
     express.static(publicDir, {
       extensions: ['html'],
-      maxAge: config.isProduction ? '1h' : 0,
+      // The frontend assets are not content-hashed (files are always requested
+      // as /js/views/home.js, etc.), so caching them makes deploys invisible
+      // until the cache expires. Use no-cache: clients (and Cloudflare, which
+      // honors origin Cache-Control) revalidate with ETag on every request.
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'no-cache');
+      },
     })
   );
 
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(publicDir, 'index.html'));
   });
 

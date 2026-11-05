@@ -161,7 +161,7 @@ export async function render(container, ctx) {
   resultsEl.addEventListener('click', (event) => {
     const card = event.target.closest('[data-exercise]');
     if (!card) return;
-    openDetail(Number(card.dataset.exercise));
+    openDetail(card.dataset.exercise);
   });
 
   await load();

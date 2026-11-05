@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "dataset": {
+    "repo": "yuhonas/free-exercise-db",
+    "ref": "f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5",
+    "distPath": "dist/exercises.json",
+    "imageBaseUrl": "https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5/exercises/"
+  },
+  "userExercises": {
+    "press banca con barra": { "name": "Press banca con barra", "freeId": "Barbell_Bench_Press_-_Medium_Grip" },
+    "sentadilla con barra": { "name": "Sentadilla con barra", "freeId": "Barbell_Squat" },
+    "peso muerto convencional": { "name": "Peso muerto convencional", "freeId": "Barbell_Deadlift" },
+    "peso muerto rumano": { "name": "Peso muerto rumano", "freeId": "Romanian_Deadlift" },
+    "press militar con barra": { "name": "Press militar con barra", "freeId": "Barbell_Shoulder_Press" },
+    "remo con barra": { "name": "Remo con barra", "freeId": "Bent_Over_Barbell_Row" },
+    "dominadas": { "name": "Dominadas", "freeId": "Pullups" },
+    "jalon al pecho": { "name": "Jalón al pecho", "freeId": "Wide-Grip_Lat_Pulldown" },
+    "curl con mancuernas": { "name": "Curl con mancuernas", "freeId": "Dumbbell_Bicep_Curl" },
+    "extension de triceps en polea": { "name": "Extensión de tríceps en polea", "freeId": "Triceps_Pushdown" },
+    "elevaciones laterales": { "name": "Elevaciones laterales", "freeId": "Side_Lateral_Raise" },
+    "prensa de piernas": { "name": "Prensa de piernas", "freeId": "Leg_Press" },
+    "curl femoral": { "name": "Curl femoral", "freeId": "Lying_Leg_Curls" },
+    "elevacion de gemelos": { "name": "Elevación de gemelos", "freeId": "Standing_Calf_Raises" },
+    "fondos en paralelas": { "name": "Fondos en paralelas", "freeId": "Parallel_Bar_Dip" },
+    "face pull": { "name": "Face pull", "freeId": "Face_Pull" },
+    "plancha abdominal": { "name": "Plancha abdominal", "freeId": "Plank" }
+  }
+}

@@ -1,5 +1,6 @@
 import { db, nowIso, getMeta, setMeta } from './db.js';
 import { ensureDevUser } from './auth.js';
+import { linkUserExercises } from './catalog.js';
 
 const SEED_KEY = 'demo_seed_v2';
 const force = process.argv.includes('--force');
@@ -330,6 +331,7 @@ function main() {
 
     const measurements = seedMeasurements(user.id);
     const workoutStats = seedWorkouts(user.id, exerciseMap, routineMap);
+    linkUserExercises();
     setMeta(SEED_KEY, `${user.id}:${nowIso()}`);
 
     return { measurements, routines: ROUTINES.length, ...workoutStats };

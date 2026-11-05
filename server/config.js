@@ -23,8 +23,7 @@ export const config = {
     process.env.ALLOW_DEV_LOGIN !== 'false' && nodeEnv !== 'production',
   cookieSecure: process.env.COOKIE_SECURE === 'true',
   sessionDays: Number(process.env.SESSION_DAYS || 30),
-  wgerBase: 'https://wger.de/api/v2',
-  wgerSyncDays: Number(process.env.WGER_SYNC_DAYS || 14),
+  catalogSyncDays: Number(process.env.CATALOG_SYNC_DAYS || 14),
 };
 
 if (config.isProduction && !config.googleClientId) {

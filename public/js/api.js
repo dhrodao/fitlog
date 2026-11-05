@@ -61,7 +61,7 @@ export const api = {
         method: 'POST',
         body: { catalogId },
       }),
-    catalog: (id) => request(`/exercises/catalog/${id}`),
+    catalog: (id) => request(`/exercises/catalog/${encodeURIComponent(id)}`),
     status: () => request('/exercises/status'),
     sync: () => request('/exercises/sync', { method: 'POST', body: {} }),
   },

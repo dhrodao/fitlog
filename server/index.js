@@ -1,6 +1,6 @@
 import { createApp } from './app.js';
 import config from './config.js';
-import { syncWger, getWgerStatus } from './wger.js';
+import { syncCatalog, getCatalogStatus } from './catalog.js';
 
 const app = createApp();
 
@@ -9,17 +9,21 @@ app.listen(config.port, () => {
     `[fitness-app] escuchando en http://localhost:${config.port} (${config.nodeEnv})`
   );
 
-  const status = getWgerStatus();
+  const status = getCatalogStatus();
   if (status.count === 0 || status.stale) {
-    console.log('[wger] sincronizando catálogo de ejercicios en segundo plano...');
-    syncWger({ force: true })
+    console.log(
+      '[catálogo] sincronizando free-exercise-db en segundo plano...'
+    );
+    syncCatalog({ force: true })
       .then((result) => {
-        console.log(`[wger] ${result.count} ejercicios disponibles`);
+        console.log(
+          `[catálogo] ${result.count} ejercicios disponibles · ${result.linked} propios enlazados`
+        );
       })
       .catch((error) => {
-        console.warn('[wger] no se pudo sincronizar:', error.message);
+        console.warn('[catálogo] no se pudo sincronizar:', error.message);
       });
   } else {
-    console.log(`[wger] catálogo en caché: ${status.count} ejercicios`);
+    console.log(`[catálogo] en caché: ${status.count} ejercicios`);
   }
 });

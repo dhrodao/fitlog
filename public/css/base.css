@@ -117,6 +117,23 @@ button {
   background: none;
 }
 
+/* Mobile input latency & feedback:
+   - touch-action: manipulation removes the ~300ms tap delay and double-tap
+     zoom on interactive elements.
+   - transparent tap highlight avoids the grey flash on Android; our own
+     :active states provide the feedback instead. */
+button,
+a,
+[role="button"],
+label,
+summary,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 img {
   display: block;
   max-width: 100%;

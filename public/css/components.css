@@ -105,7 +105,20 @@
   color: var(--text-2);
   background: transparent;
   flex: none;
+  position: relative;
   transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
+}
+
+/* Guarantee a >=44x44 touch target without enlarging the visible 40px circle
+   (WCAG 2.5.5 / comfortable thumb tapping). */
+.icon-btn::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 
 .icon-btn:hover {
@@ -135,6 +148,9 @@
   font-weight: 650;
   font-size: 13.5px;
   padding: 6px 2px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 
 .topbar {

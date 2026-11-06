@@ -56,6 +56,8 @@ export function lineChart({
   labelFn,
   formatValue = formatVolume,
   area = true,
+  interactive = false,
+  tooltipRows,
 }) {
   const points = data.map((item) => ({
     raw: item,
@@ -115,14 +117,46 @@ export function lineChart({
       ? points
           .map(
             (point, index) =>
-              `<circle cx="${xAt(index).toFixed(1)}" cy="${yAt(point.value).toFixed(1)}" r="2.6" fill="${color}" stroke="var(--surface)" stroke-width="1.5"><title>${esc(shortLabel(point.label, labelFn))}: ${esc(formatValue(point.value))}</title></circle>`
+              `<circle data-dot="${index}" cx="${xAt(index).toFixed(1)}" cy="${yAt(point.value).toFixed(1)}" r="2.6" fill="${color}" stroke="var(--surface)" stroke-width="1.5"><title>${esc(shortLabel(point.label, labelFn))}: ${esc(formatValue(point.value))}</title></circle>`
           )
           .join('')
       : '';
 
   const gradientId = `line-gradient-${++gradientCounter}`;
 
-  return `
+  // Interactive overlay: full-height hit area per point (Hevy-style tap/hover)
+  // plus a movable marker, an active dot and a floating tooltip.
+  const slot = points.length > 0 ? innerW / points.length : innerW;
+  const hitAreas = interactive
+    ? points
+        .map((point, index) => {
+          const cx = xAt(index);
+          const defaultRows = [
+            [shortLabel(point.label, labelFn), formatValue(point.value)],
+          ];
+          const rows =
+            typeof tooltipRows === 'function' ? tooltipRows(point.raw) : defaultRows;
+          const tipHtml = rows
+            .map(
+              ([label, value]) =>
+                `<div class="ct-row"><span>${esc(String(label))}</span><strong>${esc(String(value))}</strong></div>`
+            )
+            .join('');
+          const hx = Math.max(padLeft, cx - slot / 2);
+          return `<rect class="chart-hit" data-hit="${index}" x="${hx.toFixed(1)}" y="${padTop.toFixed(1)}" width="${slot.toFixed(1)}" height="${innerH.toFixed(1)}" fill="transparent" data-cx="${cx.toFixed(1)}" data-cy="${yAt(point.value).toFixed(1)}" data-tip="${esc(tipHtml)}" />`;
+        })
+        .join('')
+    : '';
+
+  const svgBody = `
+        ${gridLines.join('')}
+        ${area && points.length > 1 ? `<path d="${areaPath}" fill="url(#${gradientId})" />` : ''}
+        ${points.length > 1 ? `<path d="${linePath}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />` : ''}
+        ${dots}
+        ${xLabels}`;
+
+  if (!interactive) {
+    return `
     <div class="chart-wrap">
       <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de progreso">
         <defs>
@@ -131,12 +165,27 @@ export function lineChart({
             <stop offset="100%" stop-color="${color}" stop-opacity="0" />
           </linearGradient>
         </defs>
-        ${gridLines.join('')}
-        ${area && points.length > 1 ? `<path d="${areaPath}" fill="url(#${gradientId})" />` : ''}
-        ${points.length > 1 ? `<path d="${linePath}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />` : ''}
-        ${dots}
-        ${xLabels}
+        ${svgBody}
       </svg>
+    </div>
+  `;
+  }
+
+  return `
+    <div class="chart-wrap chart-interactive" data-line-chart>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de progreso">
+        <defs>
+          <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.32" />
+            <stop offset="100%" stop-color="${color}" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        <line class="chart-marker" data-marker x1="0" y1="${padTop.toFixed(1)}" x2="0" y2="${(padTop + innerH).toFixed(1)}" stroke="${color}" stroke-width="1.5" stroke-dasharray="3 4" opacity="0" />
+        ${svgBody}
+        <circle class="chart-active-dot" data-active-dot cx="0" cy="0" r="4.2" fill="${color}" stroke="var(--surface)" stroke-width="2" opacity="0" />
+        ${hitAreas}
+      </svg>
+      <div class="chart-tooltip" data-chart-tooltip hidden></div>
     </div>
   `;
 }
@@ -303,6 +352,72 @@ export function attachBarChart(root) {
 
   svg.addEventListener('pointermove', (event) => {
     if (event.pointerType === 'touch') return; // touch uses tap/click
+    const hit = event.target.closest('.chart-hit');
+    if (hit) select(hit);
+  });
+  svg.addEventListener('pointerleave', (event) => {
+    if (event.pointerType === 'touch') return;
+    clear();
+  });
+}
+
+// Wires tap/hover interaction for an interactive lineChart rendered inside
+// `root`. Mirrors attachBarChart: floating tooltip, vertical marker and an
+// active dot that snaps to the selected point. Safe to call when no
+// interactive line chart is present.
+export function attachLineChart(root) {
+  const wrap = root.querySelector('[data-line-chart]');
+  if (!wrap || wrap.dataset.wired === '1') return;
+  wrap.dataset.wired = '1';
+  const svg = wrap.querySelector('svg');
+  const tooltip = wrap.querySelector('[data-chart-tooltip]');
+  const marker = wrap.querySelector('[data-marker]');
+  const activeDot = wrap.querySelector('[data-active-dot]');
+  if (!svg || !tooltip) return;
+
+  const clear = () => {
+    tooltip.hidden = true;
+    if (marker) marker.setAttribute('opacity', '0');
+    if (activeDot) activeDot.setAttribute('opacity', '0');
+    wrap.querySelectorAll('.chart-hit.active').forEach((el) => el.classList.remove('active'));
+  };
+
+  const select = (hit) => {
+    const cx = Number(hit.dataset.cx);
+    const cy = Number(hit.dataset.cy);
+    tooltip.innerHTML = hit.dataset.tip || '';
+    tooltip.hidden = false;
+
+    const rect = wrap.getBoundingClientRect();
+    const ratio = cx / 340; // viewBox width used by lineChart
+    tooltip.style.left = `${ratio * rect.width}px`;
+
+    if (marker) {
+      marker.setAttribute('x1', String(cx));
+      marker.setAttribute('x2', String(cx));
+      marker.setAttribute('opacity', '1');
+    }
+    if (activeDot) {
+      activeDot.setAttribute('cx', String(cx));
+      activeDot.setAttribute('cy', String(cy));
+      activeDot.setAttribute('opacity', '1');
+    }
+    wrap.querySelectorAll('.chart-hit.active').forEach((el) => el.classList.remove('active'));
+    hit.classList.add('active');
+  };
+
+  svg.addEventListener('click', (event) => {
+    const hit = event.target.closest('.chart-hit');
+    if (!hit) {
+      clear();
+      return;
+    }
+    if (hit.classList.contains('active')) clear();
+    else select(hit);
+  });
+
+  svg.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'touch') return;
     const hit = event.target.closest('.chart-hit');
     if (hit) select(hit);
   });

@@ -1,5 +1,5 @@
 import { api, errorMessage } from '../api.js';
-import { lineChart } from '../charts.js';
+import { lineChart, attachLineChart } from '../charts.js';
 import {
   confirmDialog,
   esc,
@@ -70,6 +70,14 @@ export async function render(container, ctx, params) {
       labelKey: 'date',
       height: 170,
       formatValue: config.formatValue,
+      interactive: true,
+      tooltipRows: (item) => [
+        [formatDate(item.date), ''],
+        ['Volumen', `${formatVolume(item.volume || 0)} kg`],
+        ['Repeticiones', formatNumber(item.reps || 0)],
+        ['Series', String(item.sets || 0)],
+        ['Duración', formatDuration(item.durationSeconds || 0, { short: true })],
+      ],
     });
   };
 
@@ -152,6 +160,8 @@ export async function render(container, ctx, params) {
     </div>
   `;
 
+  attachLineChart(container.querySelector('[data-chart]'));
+
   const start = async (button) => {
     setLoading(button, true, 'Empezando...');
     try {
@@ -177,6 +187,7 @@ export async function render(container, ctx, params) {
       item.classList.toggle('active', item.dataset.metric === metric);
     });
     container.querySelector('[data-chart]').innerHTML = chartHtml(metric);
+    attachLineChart(container.querySelector('[data-chart]'));
     const title = container.querySelector('[data-chart-title]');
     if (title) {
       title.textContent = `${METRICS[metric].label}${lastVolume ? ` · ${formatDate(lastVolume.date)}` : ''}`;

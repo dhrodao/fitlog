@@ -631,6 +631,11 @@
   opacity: 0.32;
 }
 
+.chart-interactive .chart-active-dot {
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
 .chart-tooltip {
   position: absolute;
   top: 2px;

@@ -1,5 +1,5 @@
 import { api, errorMessage } from '../api.js';
-import { barChart } from '../charts.js';
+import { barChart, attachBarChart } from '../charts.js';
 import { currentTheme, toggleTheme } from '../theme.js';
 import {
   avatar,
@@ -31,6 +31,22 @@ const METRICS = {
     formatValue: (value) => formatNumber(value),
   },
 };
+
+// Human-friendly label for a week bucket: "14 – 20 nov".
+function weekRangeLabel(weekStart) {
+  const start = new Date(weekStart);
+  if (Number.isNaN(start.getTime())) return '';
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const fmt = (d, withMonth) =>
+    d.toLocaleDateString('es-ES', {
+      day: 'numeric',
+      ...(withMonth ? { month: 'short' } : {}),
+      timeZone: 'UTC',
+    });
+  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
+  return `${fmt(start, !sameMonth)} – ${fmt(end, true)}`;
+}
 
 function totalsSummary(totals, write) {
   const rows = write
@@ -290,6 +306,14 @@ export async function render(container, ctx) {
       labelKey: 'weekStart',
       height: 170,
       formatValue: config.formatValue,
+      interactive: true,
+      tooltipRows: (item) => [
+        [weekRangeLabel(item.weekStart), ''],
+        ['Entrenos', String(item.workouts || 0)],
+        ['Tiempo', formatDuration(item.durationSeconds || 0, { short: true })],
+        ['Volumen', `${formatVolume(item.volume || 0)} kg`],
+        ['Series', String(item.sets || 0)],
+      ],
     });
   };
 
@@ -422,9 +446,14 @@ export async function render(container, ctx) {
     const button = container.querySelector('[data-theme-toggle]');
     if (button) button.innerHTML = icon(currentTheme() === 'dark' ? 'sun' : 'moon', 18);
     const chart = container.querySelector('[data-chart]');
-    if (chart) chart.innerHTML = chartHtml(metric);
+    if (chart) {
+      chart.innerHTML = chartHtml(metric);
+      attachBarChart(chart);
+    }
   };
   window.addEventListener('themechange', themeListener);
+
+  attachBarChart(container.querySelector('[data-chart]'));
 
   container.querySelector('[data-theme-toggle]')?.addEventListener('click', () => toggleTheme());
 
@@ -572,6 +601,7 @@ export async function render(container, ctx) {
     });
     container.querySelector('[data-chart]').innerHTML = chartHtml(metric);
     container.querySelector('[data-chart-title]').textContent = METRICS[metric].label;
+    attachBarChart(container.querySelector('[data-chart]'));
   });
 
   container.querySelector('[data-logout]')?.addEventListener('click', async () => {

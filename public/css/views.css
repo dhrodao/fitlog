@@ -218,6 +218,11 @@
   gap: 5px;
   height: 100%;
   justify-content: flex-end;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .week-bar .bar {
@@ -226,11 +231,20 @@
   min-height: 3px;
   border-radius: 5px;
   background: var(--surface-3);
-  transition: height 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: height 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .week-bar.has .bar {
   background: var(--gradient-accent);
+}
+
+.week-bar.selected .bar {
+  transform: scaleX(1.12);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--accent);
+}
+
+.week-bar.selected .d {
+  color: var(--accent);
 }
 
 .week-bar .d {
@@ -598,6 +612,67 @@
   width: 100%;
   height: auto;
   overflow: visible;
+}
+
+.chart-interactive {
+  position: relative;
+  overflow: visible;
+}
+
+.chart-interactive .chart-hit {
+  cursor: pointer;
+}
+
+.chart-interactive rect[data-bar] {
+  transition: opacity 0.18s ease;
+}
+
+.chart-interactive rect[data-bar].dim {
+  opacity: 0.32;
+}
+
+.chart-tooltip {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  min-width: 128px;
+  max-width: 190px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chart-tooltip[hidden] {
+  display: none;
+}
+
+.chart-tooltip .ct-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chart-tooltip .ct-row:first-child {
+  font-weight: 700;
+  color: var(--text);
+  font-size: 12.5px;
+  margin-bottom: 1px;
+}
+
+.chart-tooltip .ct-row strong {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .chart-label {

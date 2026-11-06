@@ -21,16 +21,19 @@ function greeting() {
 function weekBars(weekly = []) {
   const recent = weekly.slice(-8);
   const max = Math.max(1, ...recent.map((week) => week.durationSeconds || 0));
+  // Keep the first visible index aligned with the full `weekly` array so the
+  // tap handler can read the right bucket.
+  const offset = weekly.length - recent.length;
   return recent
     .map((week, index) => {
       const value = week.durationSeconds || 0;
       const ratio = value / max;
       const isLast = index === recent.length - 1;
       return `
-        <div class="week-bar ${value > 0 ? 'has' : ''} ${isLast ? 'today' : ''}">
+        <button type="button" class="week-bar ${value > 0 ? 'has' : ''} ${isLast ? 'today' : ''}" data-week="${offset + index}" aria-label="${esc(weekLabel(week.weekStart))}">
           <div class="bar" style="height:${Math.max(3, Math.round(ratio * 100))}%"></div>
           <span class="d">${esc(weekLabel(week.weekStart))}</span>
-        </div>
+        </button>
       `;
     })
     .join('');
@@ -42,6 +45,22 @@ function weekLabel(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return `${date.getDate()}/${date.getMonth() + 1}`;
+}
+
+// "14 – 20 nov" range for a selected week.
+function weekRangeLabel(weekStart) {
+  const start = new Date(weekStart);
+  if (Number.isNaN(start.getTime())) return '';
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const fmt = (d, withMonth) =>
+    d.toLocaleDateString('es-ES', {
+      day: 'numeric',
+      ...(withMonth ? { month: 'short' } : {}),
+      timeZone: 'UTC',
+    });
+  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
+  return `${fmt(start, !sameMonth)} – ${fmt(end, true)}`;
 }
 
 export async function render(container, ctx) {
@@ -111,24 +130,24 @@ export async function render(container, ctx) {
       <section class="card-hero hero-week">
         <div class="hero-week-top">
           <div>
-            <div class="label">Esta semana</div>
-            <div class="big">${esc(formatDuration(data.thisWeekSeconds || 0))}</div>
+            <div class="label" data-week-label>Esta semana</div>
+            <div class="big" data-week-big>${esc(formatDuration(data.thisWeekSeconds || 0))}</div>
           </div>
           <a class="chip" href="#/profile" data-link="/profile">Ver estadísticas</a>
         </div>
         <div class="week-bars">${weekBars(data.weekly)}</div>
-        <div class="hero-stats">
+        <div class="hero-stats" data-week-stats>
           <div class="hero-stat">
-            <span class="v">${esc(String(totals.workouts || 0))}</span>
-            <span class="l">Entrenos (3m)</span>
+            <span class="v" data-stat="a">${esc(String(totals.workouts || 0))}</span>
+            <span class="l" data-stat-l="a">Entrenos (3m)</span>
           </div>
           <div class="hero-stat">
-            <span class="v">${esc(formatVolume(totals.volume))} kg</span>
-            <span class="l">Volumen</span>
+            <span class="v" data-stat="b">${esc(formatVolume(totals.volume))} kg</span>
+            <span class="l" data-stat-l="b">Volumen</span>
           </div>
           <div class="hero-stat">
-            <span class="v">${esc(String(data.allTimeWorkouts || 0))}</span>
-            <span class="l">Total</span>
+            <span class="v" data-stat="c">${esc(String(data.allTimeWorkouts || 0))}</span>
+            <span class="l" data-stat-l="c">Total</span>
           </div>
         </div>
       </section>
@@ -187,6 +206,42 @@ export async function render(container, ctx) {
     }
   };
 
+  const weekly = data.weekly || [];
+  const defaultWeekState = {
+    label: 'Esta semana',
+    big: formatDuration(data.thisWeekSeconds || 0),
+    a: [String(totals.workouts || 0), 'Entrenos (3m)'],
+    b: [`${formatVolume(totals.volume)} kg`, 'Volumen'],
+    c: [String(data.allTimeWorkouts || 0), 'Total'],
+  };
+
+  const applyWeekState = (state) => {
+    const set = (sel, text) => {
+      const el = container.querySelector(sel);
+      if (el) el.textContent = text;
+    };
+    set('[data-week-label]', state.label);
+    set('[data-week-big]', state.big);
+    set('[data-stat="a"]', state.a[0]);
+    set('[data-stat-l="a"]', state.a[1]);
+    set('[data-stat="b"]', state.b[0]);
+    set('[data-stat-l="b"]', state.b[1]);
+    set('[data-stat="c"]', state.c[0]);
+    set('[data-stat-l="c"]', state.c[1]);
+  };
+
+  const selectWeek = (index) => {
+    const week = weekly[index];
+    if (!week) return;
+    applyWeekState({
+      label: weekRangeLabel(week.weekStart),
+      big: formatDuration(week.durationSeconds || 0),
+      a: [String(week.workouts || 0), 'Entrenos'],
+      b: [`${formatVolume(week.volume || 0)} kg`, 'Volumen'],
+      c: [String(week.sets || 0), 'Series'],
+    });
+  };
+
   container.addEventListener('click', (event) => {
     if (event.target.closest('[data-open-active]')) {
       ctx.navigate('/workout/active');
@@ -195,6 +250,20 @@ export async function render(container, ctx) {
     const start = event.target.closest('[data-start]');
     if (start) {
       ctx.navigate('/routines');
+      return;
+    }
+    const bar = event.target.closest('[data-week]');
+    if (bar) {
+      const index = Number(bar.dataset.week);
+      const bars = container.querySelectorAll('[data-week]');
+      if (bar.classList.contains('selected')) {
+        bar.classList.remove('selected');
+        applyWeekState(defaultWeekState);
+      } else {
+        bars.forEach((b) => b.classList.remove('selected'));
+        bar.classList.add('selected');
+        selectWeek(index);
+      }
     }
   });
 

@@ -149,6 +149,8 @@ export function barChart({
   color = '#0a84ff',
   labelFn,
   formatValue = formatVolume,
+  interactive = false,
+  tooltipRows,
 }) {
   if (!data.length) {
     return '<div class="chart-empty">Aún no hay datos para mostrar</div>';
@@ -182,9 +184,28 @@ export function barChart({
       const barHeight = ((value - min) / range) * innerH;
       const x = padLeft + slot * index + (slot - barWidth) / 2;
       const y = padTop + innerH - Math.max(barHeight, value > 0 ? 2 : 0);
-      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${Math.max(barHeight, value > 0 ? 2 : 0).toFixed(1)}" rx="${Math.min(5, barWidth / 2).toFixed(1)}" fill="${value > 0 ? color : 'var(--surface-3)'}"><title>${esc(shortLabel(item[labelKey], labelFn))}: ${esc(formatValue(value))}</title></rect>`;
+      const idxAttr = interactive ? ` data-bar="${index}"` : '';
+      return `<rect${idxAttr} x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${Math.max(barHeight, value > 0 ? 2 : 0).toFixed(1)}" rx="${Math.min(5, barWidth / 2).toFixed(1)}" fill="${value > 0 ? color : 'var(--surface-3)'}"><title>${esc(shortLabel(item[labelKey], labelFn))}: ${esc(formatValue(value))}</title></rect>`;
     })
     .join('');
+
+  // Full-slot transparent hit areas make the bars easy to tap, Hevy-style.
+  const hitAreas = interactive
+    ? data
+        .map((item, index) => {
+          const cx = padLeft + slot * index + slot / 2;
+          const defaultRows = [[shortLabel(item[labelKey], labelFn), formatValue(Number(item[valueKey]) || 0)]];
+          const rows = typeof tooltipRows === 'function' ? tooltipRows(item) : defaultRows;
+          const tipHtml = rows
+            .map(
+              ([label, value]) =>
+                `<div class="ct-row"><span>${esc(String(label))}</span><strong>${esc(String(value))}</strong></div>`
+            )
+            .join('');
+          return `<rect class="chart-hit" data-hit="${index}" x="${(padLeft + slot * index).toFixed(1)}" y="${padTop.toFixed(1)}" width="${slot.toFixed(1)}" height="${innerH.toFixed(1)}" fill="transparent" data-cx="${cx.toFixed(1)}" data-tip="${esc(tipHtml)}" />`;
+        })
+        .join('')
+    : '';
 
   const step = Math.max(1, Math.ceil(data.length / 5));
   const labelIndexes = pickLabelIndexes(data.length, step);
@@ -198,7 +219,8 @@ export function barChart({
     })
     .join('');
 
-  return `
+  if (!interactive) {
+    return `
     <div class="chart-wrap">
       <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de progreso">
         ${gridLines.join('')}
@@ -207,6 +229,87 @@ export function barChart({
       </svg>
     </div>
   `;
+  }
+
+  return `
+    <div class="chart-wrap chart-interactive" data-bar-chart>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de progreso">
+        ${gridLines.join('')}
+        <line class="chart-marker" data-marker x1="0" y1="${padTop.toFixed(1)}" x2="0" y2="${(padTop + innerH).toFixed(1)}" stroke="${color}" stroke-width="1.5" stroke-dasharray="3 4" opacity="0" />
+        ${bars}
+        ${xLabels}
+        ${hitAreas}
+      </svg>
+      <div class="chart-tooltip" data-chart-tooltip hidden></div>
+    </div>
+  `;
+}
+
+// Wires tap/hover interaction for an interactive barChart rendered inside
+// `root`. Shows a tooltip with the bar's detail (Hevy-style) and highlights
+// the selected column. Safe to call on containers without an interactive chart.
+export function attachBarChart(root) {
+  const wrap = root.querySelector('[data-bar-chart]');
+  if (!wrap || wrap.dataset.wired === '1') return;
+  wrap.dataset.wired = '1';
+  const svg = wrap.querySelector('svg');
+  const tooltip = wrap.querySelector('[data-chart-tooltip]');
+  const marker = wrap.querySelector('[data-marker]');
+  if (!svg || !tooltip) return;
+
+  const clear = () => {
+    tooltip.hidden = true;
+    if (marker) marker.setAttribute('opacity', '0');
+    wrap.querySelectorAll('.chart-hit.active').forEach((el) => el.classList.remove('active'));
+    wrap.querySelectorAll('rect[data-bar].dim').forEach((el) => el.classList.remove('dim'));
+  };
+
+  const select = (hit) => {
+    const index = hit.dataset.hit;
+    const cx = Number(hit.dataset.cx);
+    tooltip.innerHTML = hit.dataset.tip || '';
+    tooltip.hidden = false;
+
+    // Position the tooltip horizontally over the bar, clamped to the wrap.
+    const rect = wrap.getBoundingClientRect();
+    const ratio = cx / 340; // viewBox width used by barChart
+    const px = ratio * rect.width;
+    tooltip.style.left = `${px}px`;
+
+    if (marker) {
+      marker.setAttribute('x1', String(cx));
+      marker.setAttribute('x2', String(cx));
+      marker.setAttribute('opacity', '1');
+    }
+    wrap.querySelectorAll('.chart-hit.active').forEach((el) => el.classList.remove('active'));
+    hit.classList.add('active');
+    wrap.querySelectorAll('rect[data-bar]').forEach((el) => {
+      el.classList.toggle('dim', el.dataset.bar !== index);
+    });
+  };
+
+  svg.addEventListener('click', (event) => {
+    const hit = event.target.closest('.chart-hit');
+    if (!hit) {
+      clear();
+      return;
+    }
+    if (hit.classList.contains('active')) {
+      clear();
+    } else {
+      select(hit);
+    }
+  });
+
+  svg.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'touch') return; // touch uses tap/click
+    const hit = event.target.closest('.chart-hit');
+    if (hit) select(hit);
+  });
+  svg.addEventListener('pointerleave', (event) => {
+    if (event.pointerType === 'touch') return;
+    clear();
+  });
 }
 
 export function sparkline(values, { width = 64, height = 24, color = '#0a84ff' } = {}) {

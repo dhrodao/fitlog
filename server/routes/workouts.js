@@ -12,6 +12,10 @@ import {
   getActiveWorkout,
   getWorkoutDetail,
   listWorkouts,
+  removeFromSuperset,
+  reorderWorkoutExercises,
+  replaceWorkoutExercise,
+  setSuperset,
   updateSet,
   updateWorkout,
   updateWorkoutExercise,
@@ -113,6 +117,49 @@ router.delete('/:id/exercises/:workoutExerciseId', (req, res) => {
   );
   res.json({
     workout: getWorkoutDetail(req.user.id, Number(req.params.id)),
+  });
+});
+
+router.put('/:id/exercises/order', (req, res) => {
+  res.json({
+    workout: reorderWorkoutExercises(
+      req.user.id,
+      Number(req.params.id),
+      req.body?.exerciseIds
+    ),
+  });
+});
+
+router.post('/:id/exercises/:workoutExerciseId/superset', (req, res) => {
+  res.json({
+    workout: setSuperset(
+      req.user.id,
+      Number(req.params.id),
+      Number(req.params.workoutExerciseId),
+      Number(req.body?.otherWorkoutExerciseId)
+    ),
+  });
+});
+
+router.delete('/:id/exercises/:workoutExerciseId/superset', (req, res) => {
+  res.json({
+    workout: removeFromSuperset(
+      req.user.id,
+      Number(req.params.id),
+      Number(req.params.workoutExerciseId)
+    ),
+  });
+});
+
+router.post('/:id/exercises/:workoutExerciseId/replace', (req, res) => {
+  const exercise = resolveExercise(req.user.id, req.body || {});
+  res.json({
+    workout: replaceWorkoutExercise(
+      req.user.id,
+      Number(req.params.id),
+      Number(req.params.workoutExerciseId),
+      exercise.id
+    ),
   });
 });
 

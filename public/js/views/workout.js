@@ -17,10 +17,31 @@ function setChip(set) {
   return `<span class="set-chip ${set.completed ? 'done' : ''}">${weight} × ${set.reps ?? '—'}</span>`;
 }
 
-function exerciseBlock(exercise) {
+function groupExercises(exercises) {
+  const groups = [];
+  for (const exercise of exercises) {
+    const current = groups[groups.length - 1];
+    if (
+      exercise.supersetGroup != null &&
+      current &&
+      current.supersetGroup === exercise.supersetGroup
+    ) {
+      current.items.push(exercise);
+    } else {
+      groups.push({
+        supersetGroup: exercise.supersetGroup,
+        items: [exercise],
+      });
+    }
+  }
+  return groups;
+}
+
+function exerciseBlock(exercise, { inSuperset = false } = {}) {
   const done = exercise.sets.filter((set) => set.completed).length;
   return `
-    <div class="detail-exercise">
+    <div class="detail-exercise ${inSuperset ? 'in-superset' : ''}">
+      ${inSuperset ? `<span class="superset-chip">${icon('layers', 12)} Superset</span>` : ''}
       <div class="head">
         <span class="exercise-thumb ${exercise.imageUrl ? '' : 'gray'}">
           ${exercise.imageUrl ? `<img src="${esc(exercise.imageUrl)}" alt="" referrerpolicy="no-referrer" />` : icon('dumbbell', 22)}
@@ -109,7 +130,17 @@ export async function render(container, ctx, params) {
         <div class="stack-sm">
           ${
             workout.exercises.length
-              ? workout.exercises.map(exerciseBlock).join('')
+              ? groupExercises(workout.exercises)
+                  .map((group) =>
+                    group.items
+                      .map((exercise) =>
+                        exerciseBlock(exercise, {
+                          inSuperset: group.items.length > 1,
+                        })
+                      )
+                      .join('')
+                  )
+                  .join('')
               : `<div class="card"><div class="empty" style="padding:18px 8px">
                    <div class="empty-icon">${icon('dumbbell', 22)}</div>
                    <h3>Sin ejercicios registrados</h3>

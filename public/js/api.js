@@ -98,6 +98,25 @@ export const api = {
       }),
     removeExercise: (id, weId) =>
       request(`/workouts/${id}/exercises/${weId}`, { method: 'DELETE' }),
+    reorderExercises: (id, exerciseIds) =>
+      request(`/workouts/${id}/exercises/order`, {
+        method: 'PUT',
+        body: { exerciseIds },
+      }),
+    addToSuperset: (id, weId, otherWorkoutExerciseId) =>
+      request(`/workouts/${id}/exercises/${weId}/superset`, {
+        method: 'POST',
+        body: { otherWorkoutExerciseId },
+      }),
+    removeFromSuperset: (id, weId) =>
+      request(`/workouts/${id}/exercises/${weId}/superset`, {
+        method: 'DELETE',
+      }),
+    replaceExercise: (id, weId, payload) =>
+      request(`/workouts/${id}/exercises/${weId}/replace`, {
+        method: 'POST',
+        body: payload,
+      }),
     addSet: (id, weId, payload = {}) =>
       request(`/workouts/${id}/exercises/${weId}/sets`, {
         method: 'POST',

@@ -115,7 +115,8 @@ CREATE TABLE IF NOT EXISTS workout_exercises (
   workout_id INTEGER NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
   exercise_id INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
   position INTEGER NOT NULL DEFAULT 0,
-  notes TEXT
+  notes TEXT,
+  superset_group INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_we_workout ON workout_exercises(workout_id, position);
 
@@ -200,6 +201,14 @@ function migrateLegacyCatalog() {
 if (migrateLegacyCatalog()) {
   db.exec(schema);
 }
+
+function ensureColumn(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (columns.some((entry) => entry.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+ensureColumn('workout_exercises', 'superset_group', 'INTEGER');
 
 export const nowIso = () => new Date().toISOString();
 

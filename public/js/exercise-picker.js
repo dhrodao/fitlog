@@ -50,13 +50,13 @@ function groupCategories(categories) {
  * @param {(item: {catalogId?: string, exerciseId?: number, name: string, category: string, imageUrl: string|null}) => void} options.onPick
  *   Called with the chosen exercise. The sheet closes automatically afterwards.
  */
-export function openExercisePicker({ onPick } = {}) {
+export function openExercisePicker({ onPick, title = 'Añadir ejercicio' } = {}) {
   let categories = [];
   let tab = 'catalog';
   let category = ''; // '' == all muscle groups
 
   const modal = openModal({
-    title: 'Añadir ejercicio',
+    title,
     sheet: true,
     content: `
       <div class="stack-sm">

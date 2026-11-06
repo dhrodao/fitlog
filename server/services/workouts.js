@@ -122,7 +122,8 @@ export function getPreviousSets(userId, exerciseId, beforeIso, excludeWorkoutId 
 export function getWorkoutExercises(workoutId) {
   return db
     .prepare(
-      `SELECT we.id AS workout_exercise_id, we.position, we.notes AS we_notes, e.*
+      `SELECT we.id AS workout_exercise_id, we.position, we.notes AS we_notes,
+              we.superset_group, e.*
        FROM workout_exercises we
        JOIN exercises e ON e.id = we.exercise_id
        WHERE we.workout_id = ?
@@ -155,6 +156,7 @@ export function getWorkoutDetail(userId, workoutId) {
       category: row.category,
       imageUrl: row.image_url,
       notes: row.we_notes,
+      supersetGroup: row.superset_group,
       sets,
       previousSets,
       targetSets: sets.length,
@@ -398,6 +400,150 @@ export function deleteWorkoutExercise(userId, workoutId, workoutExerciseId) {
     .all(workoutId);
   const renumber = db.prepare('UPDATE workout_exercises SET position = ? WHERE id = ?');
   remaining.forEach((we, index) => renumber.run(index, we.id));
+
+  clearLoneSupersetGroups(workoutId);
+}
+
+function clearLoneSupersetGroups(workoutId) {
+  db.prepare(
+    `UPDATE workout_exercises
+     SET superset_group = NULL
+     WHERE workout_id = ? AND superset_group IS NOT NULL
+       AND superset_group IN (
+         SELECT superset_group
+         FROM workout_exercises
+         WHERE workout_id = ? AND superset_group IS NOT NULL
+         GROUP BY superset_group
+         HAVING COUNT(*) < 2
+       )`
+  ).run(workoutId, workoutId);
+}
+
+function getOrderedWorkoutExercises(workoutId) {
+  return db
+    .prepare(
+      `SELECT id, superset_group
+       FROM workout_exercises
+       WHERE workout_id = ?
+       ORDER BY position ASC, id ASC`
+    )
+    .all(workoutId);
+}
+
+function writeExerciseOrder(workoutId, orderedIds) {
+  const renumber = db.prepare(
+    'UPDATE workout_exercises SET position = ? WHERE id = ? AND workout_id = ?'
+  );
+  orderedIds.forEach((id, index) => renumber.run(index, id, workoutId));
+}
+
+export function setSuperset(userId, workoutId, workoutExerciseId, otherWorkoutExerciseId) {
+  assertWorkout(userId, workoutId);
+  const rows = getOrderedWorkoutExercises(workoutId);
+  const source = rows.find((row) => row.id === workoutExerciseId);
+  const target = rows.find((row) => row.id === otherWorkoutExerciseId);
+  if (!source) throw new HttpError(404, 'Ejercicio del entreno no encontrado');
+  if (!target) throw new HttpError(404, 'Ejercicio para la superserie no encontrado');
+  if (source.id === target.id) throw new HttpError(400, 'Elige otro ejercicio');
+  if (
+    source.superset_group !== null &&
+    source.superset_group === target.superset_group
+  ) {
+    return getWorkoutDetail(userId, workoutId);
+  }
+
+  const sourceMembers = source.superset_group
+    ? rows.filter((row) => row.superset_group === source.superset_group)
+    : [source];
+  const targetMembers = target.superset_group
+    ? rows.filter((row) => row.superset_group === target.superset_group)
+    : [target];
+  const targetIds = new Set(targetMembers.map((row) => row.id));
+  const remaining = rows.filter((row) => !targetIds.has(row.id));
+  const anchorId = sourceMembers[sourceMembers.length - 1].id;
+  const anchorIndex = remaining.findIndex((row) => row.id === anchorId);
+  const ordered = [
+    ...remaining.slice(0, anchorIndex + 1),
+    ...targetMembers,
+    ...remaining.slice(anchorIndex + 1),
+  ];
+
+  const groupId =
+    source.superset_group ??
+    target.superset_group ??
+    db
+      .prepare(
+        `SELECT COALESCE(MAX(superset_group), 0) + 1 AS next_group
+         FROM workout_exercises WHERE workout_id = ?`
+      )
+      .get(workoutId).next_group;
+
+  const combinedIds = [...sourceMembers, ...targetMembers].map((row) => row.id);
+  const transaction = db.transaction(() => {
+    const assign = db.prepare(
+      'UPDATE workout_exercises SET superset_group = ? WHERE id = ?'
+    );
+    for (const id of combinedIds) assign.run(groupId, id);
+    writeExerciseOrder(workoutId, ordered.map((row) => row.id));
+    clearLoneSupersetGroups(workoutId);
+  });
+  transaction();
+
+  return getWorkoutDetail(userId, workoutId);
+}
+
+export function removeFromSuperset(userId, workoutId, workoutExerciseId) {
+  assertWorkout(userId, workoutId);
+  const row = db
+    .prepare(
+      'SELECT * FROM workout_exercises WHERE id = ? AND workout_id = ?'
+    )
+    .get(workoutExerciseId, workoutId);
+  if (!row) throw new HttpError(404, 'Ejercicio del entreno no encontrado');
+
+  db.prepare('UPDATE workout_exercises SET superset_group = NULL WHERE id = ?').run(
+    workoutExerciseId
+  );
+  clearLoneSupersetGroups(workoutId);
+
+  return getWorkoutDetail(userId, workoutId);
+}
+
+export function reorderWorkoutExercises(userId, workoutId, orderedIds) {
+  assertWorkout(userId, workoutId);
+  const rows = getOrderedWorkoutExercises(workoutId);
+  const currentIds = rows.map((row) => row.id);
+  const ids = Array.isArray(orderedIds)
+    ? orderedIds.map((id) => Number(id)).filter((id) => Number.isInteger(id))
+    : [];
+
+  if (
+    ids.length !== currentIds.length ||
+    new Set(ids).size !== currentIds.length ||
+    !currentIds.every((id) => ids.includes(id))
+  ) {
+    throw new HttpError(400, 'El orden de ejercicios no es válido');
+  }
+
+  writeExerciseOrder(workoutId, ids);
+  return getWorkoutDetail(userId, workoutId);
+}
+
+export function replaceWorkoutExercise(userId, workoutId, workoutExerciseId, exerciseId) {
+  assertWorkout(userId, workoutId);
+  const row = db
+    .prepare(
+      'SELECT * FROM workout_exercises WHERE id = ? AND workout_id = ?'
+    )
+    .get(workoutExerciseId, workoutId);
+  if (!row) throw new HttpError(404, 'Ejercicio del entreno no encontrado');
+
+  db.prepare('UPDATE workout_exercises SET exercise_id = ? WHERE id = ?').run(
+    exerciseId,
+    workoutExerciseId
+  );
+
+  return getWorkoutDetail(userId, workoutId);
 }
 
 export function finishWorkout(userId, workoutId, input = {}) {
@@ -446,7 +592,7 @@ export function listWorkouts(userId, { limit = 20, offset = 0 } = {}) {
     const totals = workoutTotals(workout.id);
     const exercises = db
       .prepare(
-        `SELECT we.id, e.name, e.image_url,
+        `SELECT we.id, we.superset_group, e.name, e.image_url,
            (SELECT COUNT(*) FROM workout_sets s WHERE s.workout_exercise_id = we.id AND s.completed = 1) AS completed_sets,
            (SELECT COUNT(*) FROM workout_sets s WHERE s.workout_exercise_id = we.id) AS total_sets
          FROM workout_exercises we
@@ -473,6 +619,7 @@ export function listWorkouts(userId, { limit = 20, offset = 0 } = {}) {
         id: ex.id,
         name: ex.name,
         imageUrl: ex.image_url,
+        supersetGroup: ex.superset_group,
         completedSets: ex.completed_sets,
         totalSets: ex.total_sets,
       })),

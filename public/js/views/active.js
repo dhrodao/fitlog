@@ -8,6 +8,8 @@ import {
   formatNumber,
   formatVolume,
   icon,
+  openActionSheet,
+  openModal,
   setLoading,
   toast,
 } from '../ui.js';
@@ -53,9 +55,30 @@ function setRow(exercise, set, index) {
   `;
 }
 
-function exerciseBlock(exercise) {
+function groupExercises(exercises) {
+  const groups = [];
+  for (const exercise of exercises) {
+    const current = groups[groups.length - 1];
+    if (
+      exercise.supersetGroup != null &&
+      current &&
+      current.supersetGroup === exercise.supersetGroup
+    ) {
+      current.items.push(exercise);
+    } else {
+      groups.push({
+        supersetGroup: exercise.supersetGroup,
+        items: [exercise],
+      });
+    }
+  }
+  return groups;
+}
+
+function exerciseBlock(exercise, { inSuperset = false } = {}) {
   return `
-    <div class="exercise-block" data-we-id="${exercise.id}">
+    <div class="exercise-block ${inSuperset ? 'in-superset' : ''}" data-we-id="${exercise.id}">
+      ${inSuperset ? `<span class="superset-chip">${icon('layers', 12)} Superset</span>` : ''}
       <div class="exercise-block-head">
         <span class="exercise-thumb ${exercise.imageUrl ? '' : 'gray'}">
           ${exercise.imageUrl ? `<img src="${esc(exercise.imageUrl)}" alt="" referrerpolicy="no-referrer" />` : icon('dumbbell', 22)}
@@ -122,7 +145,17 @@ export async function render(container, ctx) {
     const list = container.querySelector('[data-exercises]');
     if (!list) return;
     list.innerHTML = workout.exercises.length
-      ? workout.exercises.map(exerciseBlock).join('')
+      ? groupExercises(workout.exercises)
+          .map((group) =>
+            group.items
+              .map((exercise) =>
+                exerciseBlock(exercise, {
+                  inSuperset: group.items.length > 1,
+                })
+              )
+              .join('')
+          )
+          .join('')
       : `<div class="card"><div class="empty" style="padding:18px 8px">
            <div class="empty-icon">${icon('dumbbell', 22)}</div>
            <h3>Sin ejercicios</h3>
@@ -211,6 +244,181 @@ export async function render(container, ctx) {
     }
   }, 500);
 
+  const applyWorkout = (fresh) => {
+    workout = fresh;
+    ctx.setActiveWorkout(workout);
+    renderExercises();
+  };
+
+  const openReplacePicker = (exercise) => {
+    openExercisePicker({
+      title: 'Reemplazar ejercicio',
+      onPick: async (item) => {
+        try {
+          const { workout: fresh } = await api.workouts.replaceExercise(
+            workout.id,
+            exercise.id,
+            {
+              ...(item.exerciseId ? { exerciseId: item.exerciseId } : {}),
+              ...(item.catalogId ? { catalogId: item.catalogId } : {}),
+            }
+          );
+          applyWorkout(fresh);
+          toast(`${item.name} reemplazado`, 'success');
+        } catch (error) {
+          if (error.status === 401) ctx.handleUnauthorized();
+          else toast(errorMessage(error), 'error');
+        }
+      },
+    });
+  };
+
+  const openSupersetSheet = (exercise) => {
+    const candidates = workout.exercises.filter(
+      (item) =>
+        item.id !== exercise.id &&
+        !(
+          exercise.supersetGroup != null &&
+          item.supersetGroup === exercise.supersetGroup
+        )
+    );
+
+    if (!candidates.length) {
+      toast('Añade otro ejercicio para crear una superserie', 'error');
+      return;
+    }
+
+    const content = `<div class="menu-list">${candidates
+      .map(
+        (item) => `
+        <button type="button" class="list-card" data-superset-pick="${item.id}">
+          <span class="exercise-thumb ${item.imageUrl ? '' : 'gray'}" style="width:40px;height:40px;border-radius:11px">
+            ${item.imageUrl ? `<img src="${esc(item.imageUrl)}" alt="" referrerpolicy="no-referrer" />` : icon('dumbbell', 18)}
+          </span>
+          <span class="grow">
+            <span class="title">${esc(item.name)}</span>
+            <span class="subtitle">${item.supersetGroup != null ? 'Ya está en otra superserie' : esc(item.category || '')}</span>
+          </span>
+          ${icon('plus', 17)}
+        </button>`
+      )
+      .join('')}</div>`;
+
+    const modal = openModal({
+      title: 'Agregar a superserie',
+      subtitle: exercise.name,
+      sheet: true,
+      content,
+    });
+
+    modal.body.addEventListener('click', async (event) => {
+      const pick = event.target.closest('[data-superset-pick]');
+      if (!pick) return;
+      const other = getExercise(Number(pick.dataset.supersetPick));
+      if (!other) return;
+      try {
+        const { workout: fresh } = await api.workouts.addToSuperset(
+          workout.id,
+          exercise.id,
+          other.id
+        );
+        applyWorkout(fresh);
+        modal.close();
+        toast(`${exercise.name} + ${other.name}`, 'success');
+      } catch (error) {
+        if (error.status === 401) ctx.handleUnauthorized();
+        else toast(errorMessage(error), 'error');
+      }
+    });
+  };
+
+  const openReorderSheet = () => {
+    if (workout.exercises.length < 2) {
+      toast('Añade más ejercicios para reordenar', 'error');
+      return;
+    }
+
+    const buildUnits = () =>
+      groupExercises(workout.exercises).map((group) => ({
+        ids: group.items.map((item) => item.id),
+        items: group.items,
+        superset: group.items.length > 1,
+      }));
+
+    let units = buildUnits();
+
+    const modal = openModal({
+      title: 'Reordenar ejercicios',
+      sheet: true,
+      content: `<div class="reorder-list" data-reorder-list></div>`,
+      actions: [
+        {
+          label: 'Guardar orden',
+          variant: 'btn-primary',
+          close: false,
+          onClick: async (close) => {
+            try {
+              const ids = units.flatMap((unit) => unit.ids);
+              const { workout: fresh } = await api.workouts.reorderExercises(
+                workout.id,
+                ids
+              );
+              applyWorkout(fresh);
+              close();
+              toast('Orden actualizado', 'success');
+            } catch (error) {
+              if (error.status === 401) ctx.handleUnauthorized();
+              else toast(errorMessage(error), 'error');
+            }
+          },
+        },
+      ],
+    });
+
+    const renderReorder = () => {
+      const list = modal.body.querySelector('[data-reorder-list]');
+      if (!list) return;
+      list.innerHTML = units
+        .map(
+          (unit, index) => `
+          <div class="reorder-row" data-reorder-index="${index}">
+            <div class="reorder-main">
+              ${unit.superset ? `<span class="superset-chip">${icon('layers', 12)} Superset</span>` : ''}
+              ${unit.items
+                .map(
+                  (item) => `
+                <div class="reorder-item">
+                  <span class="exercise-thumb ${item.imageUrl ? '' : 'gray'}" style="width:38px;height:38px;border-radius:10px">
+                    ${item.imageUrl ? `<img src="${esc(item.imageUrl)}" alt="" referrerpolicy="no-referrer" />` : icon('dumbbell', 16)}
+                  </span>
+                  <span class="reorder-name">${esc(item.name)}</span>
+                </div>`
+                )
+                .join('')}
+            </div>
+            <div class="reorder-actions">
+              <button type="button" data-reorder-dir="up" ${index === 0 ? 'disabled' : ''} aria-label="Mover arriba">${icon('arrowUp', 15)}</button>
+              <button type="button" data-reorder-dir="down" ${index === units.length - 1 ? 'disabled' : ''} aria-label="Mover abajo">${icon('arrowDown', 15)}</button>
+            </div>
+          </div>`
+        )
+        .join('');
+    };
+
+    modal.body.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-reorder-dir]');
+      if (!button) return;
+      const row = button.closest('[data-reorder-index]');
+      const index = Number(row.dataset.reorderIndex);
+      const target = button.dataset.reorderDir === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= units.length) return;
+      [units[index], units[target]] = [units[target], units[index]];
+      renderReorder();
+    });
+
+    renderReorder();
+  };
+
   // --- set interactions ---
   container.querySelector('[data-exercises]').addEventListener('input', (event) => {
     const field = event.target.closest('[data-field]');
@@ -272,24 +480,65 @@ export async function render(container, ctx) {
     const menu = event.target.closest('[data-exercise-menu]');
     if (menu) {
       const exercise = getExercise(weId);
-      const { openActionSheet } = await import('../ui.js');
-      openActionSheet(exercise.name, [
+      const items = [
         {
-          label: 'Eliminar ejercicio',
-          icon: 'trash',
-          danger: true,
+          label: 'Reordenar Ejercicios',
+          icon: 'sort',
+          onClick: openReorderSheet,
+        },
+        {
+          label: 'Reemplazar Ejercicio',
+          icon: 'refresh',
+          onClick: () => openReplacePicker(exercise),
+        },
+      ];
+
+      if (workout.exercises.length > 1) {
+        items.push({
+          label: 'Agregar a Superserie',
+          icon: 'layers',
+          onClick: () => openSupersetSheet(exercise),
+        });
+      }
+
+      if (exercise.supersetGroup != null) {
+        items.push({
+          label: 'Quitar de Superserie',
+          icon: 'x',
           onClick: async () => {
             try {
-              const { workout: fresh } = await api.workouts.removeExercise(workout.id, weId);
-              workout = fresh;
-              ctx.setActiveWorkout(workout);
-              renderExercises();
+              const { workout: fresh } = await api.workouts.removeFromSuperset(
+                workout.id,
+                weId
+              );
+              applyWorkout(fresh);
+              toast('Superserie deshecha', 'success');
             } catch (error) {
-              toast(errorMessage(error), 'error');
+              if (error.status === 401) ctx.handleUnauthorized();
+              else toast(errorMessage(error), 'error');
             }
           },
+        });
+      }
+
+      items.push({
+        label: 'Eliminar Ejercicio',
+        icon: 'trash',
+        danger: true,
+        onClick: async () => {
+          try {
+            const { workout: fresh } = await api.workouts.removeExercise(
+              workout.id,
+              weId
+            );
+            applyWorkout(fresh);
+          } catch (error) {
+            toast(errorMessage(error), 'error');
+          }
         },
-      ]);
+      });
+
+      openActionSheet(exercise.name, items);
     }
   });
 

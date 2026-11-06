@@ -275,6 +275,67 @@ test('flujo completo de la API', async (t) => {
     await agent.get(`/api/workouts/${id}`).expect(404);
   });
 
+  await t.test('superseries, reordenar y reemplazar ejercicios', async () => {
+    const created = await agent
+      .post('/api/workouts')
+      .send({ name: 'Superset QA' })
+      .expect(201);
+    const id = created.body.workout.id;
+
+    for (const name of ['Press banca test', 'Sentadilla test']) {
+      await agent
+        .post(`/api/workouts/${id}/exercises`)
+        .send({ name, targetSets: 2, prefill: false })
+        .expect(201);
+    }
+
+    const third = await agent
+      .post('/api/exercises/custom')
+      .send({ name: 'Remo QA', category: 'Espalda' })
+      .expect(201);
+
+    const withThird = await agent
+      .post(`/api/workouts/${id}/exercises`)
+      .send({ exerciseId: third.body.exercise.id, targetSets: 2, prefill: false })
+      .expect(201);
+
+    const ids = withThird.body.workout.exercises.map((item) => item.id);
+    assert.equal(ids.length, 3);
+
+    const paired = await agent
+      .post(`/api/workouts/${id}/exercises/${ids[0]}/superset`)
+      .send({ otherWorkoutExerciseId: ids[1] })
+      .expect(200);
+
+    const [first, second, last] = paired.body.workout.exercises;
+    assert.ok(first.supersetGroup != null);
+    assert.equal(first.supersetGroup, second.supersetGroup);
+    assert.equal(last.supersetGroup, null);
+
+    const reordered = await agent
+      .put(`/api/workouts/${id}/exercises/order`)
+      .send({ exerciseIds: [ids[2], ids[0], ids[1]] })
+      .expect(200);
+    assert.deepEqual(
+      reordered.body.workout.exercises.map((item) => item.id),
+      [ids[2], ids[0], ids[1]]
+    );
+
+    const replaced = await agent
+      .post(`/api/workouts/${id}/exercises/${ids[0]}/replace`)
+      .send({ exerciseId: third.body.exercise.id })
+      .expect(200);
+    assert.equal(replaced.body.workout.exercises[1].name, 'Remo QA');
+
+    const unpaired = await agent
+      .delete(`/api/workouts/${id}/exercises/${ids[0]}/superset`)
+      .expect(200);
+    assert.equal(unpaired.body.workout.exercises[1].supersetGroup, null);
+    assert.equal(unpaired.body.workout.exercises[2].supersetGroup, null);
+
+    await agent.delete(`/api/workouts/${id}`).expect(200);
+  });
+
   await t.test('cerrar sesión', async () => {
     await agent.post('/api/auth/logout').expect(200);
     await agent.get('/api/auth/me').expect(401);

@@ -15,3 +15,5 @@ coverage/
 WhatsApp*.jpeg
 WhatsApp*.jpg
 *.png
+# ...except the app's own PWA icons, which are part of the source.
+!public/assets/*.png

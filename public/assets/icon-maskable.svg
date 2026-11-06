@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Fitlog">
+  <!-- Full-bleed background so the maskable safe zone is always covered. -->
+  <rect width="512" height="512" fill="#0a84ff"/>
+  <!-- Glyph kept within the ~80% maskable safe zone (centered, scaled down). -->
+  <g transform="translate(256 256) scale(0.78) translate(-256 -256)">
+    <path d="M136 196v120M376 196v120M184 164v184M328 164v184M184 256h144"
+          fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round"/>
+  </g>
+</svg>

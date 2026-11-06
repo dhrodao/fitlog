@@ -332,3 +332,13 @@ async function boot() {
 }
 
 boot();
+
+// Register the service worker (PWA install + offline shell). Non-blocking and
+// best-effort: failures must never break the app.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      /* ignore: offline/PWA features simply stay disabled */
+    });
+  });
+}

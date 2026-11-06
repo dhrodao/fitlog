@@ -158,6 +158,10 @@ export const api = {
     run: (full = false) =>
       request('/import/hevy/sync/run', { method: 'POST', body: { full } }),
     disconnect: () => request('/import/hevy/sync', { method: 'DELETE' }),
+    enableWebhook: () =>
+      request('/import/hevy/sync/webhook', { method: 'POST', body: {} }),
+    disableWebhook: () =>
+      request('/import/hevy/sync/webhook', { method: 'DELETE' }),
   },
 };
 

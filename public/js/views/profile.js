@@ -77,6 +77,14 @@ function hevySyncSection(status) {
           <input type="checkbox" data-sync-auto ${status.autoSync ? 'checked' : ''}>
           <span>Sincronización automática (cada 6 h)</span>
         </label>
+        ${
+          status.webhookAvailable
+            ? `<label class="sync-toggle">
+                 <input type="checkbox" data-sync-webhook ${status.webhookEnabled ? 'checked' : ''}>
+                 <span>Webhook en tiempo real (sincroniza al guardar en Hevy)</span>
+               </label>`
+            : `<div class="sync-sub">Webhook en tiempo real no disponible: define <code>PUBLIC_URL</code> en el servidor.</div>`
+        }
         ${errorLine}
         <div class="sync-actions">
           <button type="button" class="btn btn-primary btn-sm" data-sync-now>
@@ -485,19 +493,41 @@ export async function render(container, ctx) {
   });
 
   syncSection?.addEventListener('change', async (event) => {
-    const toggle = event.target.closest('[data-sync-auto]');
-    if (!toggle) return;
-    try {
-      await api.hevySync.setAuto(toggle.checked);
-      toast(
-        toggle.checked
-          ? 'Sincronización automática activada'
-          : 'Sincronización automática desactivada',
-        'success'
-      );
-    } catch (error) {
-      toggle.checked = !toggle.checked;
-      toast(errorMessage(error), 'error');
+    const auto = event.target.closest('[data-sync-auto]');
+    if (auto) {
+      try {
+        await api.hevySync.setAuto(auto.checked);
+        toast(
+          auto.checked
+            ? 'Sincronización automática activada'
+            : 'Sincronización automática desactivada',
+          'success'
+        );
+      } catch (error) {
+        auto.checked = !auto.checked;
+        toast(errorMessage(error), 'error');
+      }
+      return;
+    }
+
+    const webhook = event.target.closest('[data-sync-webhook]');
+    if (webhook) {
+      const wanted = webhook.checked;
+      webhook.disabled = true;
+      try {
+        const { status } = wanted
+          ? await api.hevySync.enableWebhook()
+          : await api.hevySync.disableWebhook();
+        toast(
+          wanted ? 'Webhook en tiempo real activado' : 'Webhook desactivado',
+          'success'
+        );
+        rerenderSync(status);
+      } catch (error) {
+        webhook.checked = !wanted;
+        webhook.disabled = false;
+        toast(errorMessage(error), 'error');
+      }
     }
   });
 

@@ -14,6 +14,8 @@ import {
   setAutoSync,
   disconnect as disconnectHevy,
   syncUser,
+  enableWebhook,
+  disableWebhook,
 } from '../hevy-sync.js';
 
 const router = Router();
@@ -213,8 +215,38 @@ router.post(
 );
 
 /** Disconnect and remove the stored key. */
-router.delete('/hevy/sync', (req, res) => {
-  res.json({ ok: true, status: disconnectHevy(req.user.id) });
-});
+router.delete(
+  '/hevy/sync',
+  asyncHandler(async (req, res) => {
+    const status = await disconnectHevy(req.user.id);
+    res.json({ ok: true, status });
+  })
+);
+
+/** Enable real-time webhook (registers the subscription with Hevy). */
+router.post(
+  '/hevy/sync/webhook',
+  asyncHandler(async (req, res) => {
+    try {
+      const status = await enableWebhook(req.user.id);
+      res.json({ ok: true, status });
+    } catch (err) {
+      throw new HttpError(err.status || 502, err.message);
+    }
+  })
+);
+
+/** Disable the real-time webhook. */
+router.delete(
+  '/hevy/sync/webhook',
+  asyncHandler(async (req, res) => {
+    try {
+      const status = await disableWebhook(req.user.id);
+      res.json({ ok: true, status });
+    } catch (err) {
+      throw new HttpError(err.status || 502, err.message);
+    }
+  })
+);
 
 export default router;

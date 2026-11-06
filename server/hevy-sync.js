@@ -1,4 +1,6 @@
 import { db, nowIso } from './db.js';
+import crypto from 'node:crypto';
+import config from './config.js';
 import { linkUserExercises, normalizeExerciseName } from './catalog.js';
 import { encryptSecret, decryptSecret, maskSecret } from './crypto-box.js';
 import { importWorkout } from './hevy-import.js';
@@ -30,6 +32,8 @@ export function getSyncStatus(userId) {
     lastSyncAt: row.last_sync_at,
     lastStatus: row.last_status,
     lastError: row.last_error,
+    webhookEnabled: Boolean(row.webhook_enabled),
+    webhookAvailable: Boolean(config.publicUrl),
   };
 }
 
@@ -89,9 +93,106 @@ export function setAutoSync(userId, autoSync) {
   return getSyncStatus(userId);
 }
 
-export function disconnect(userId) {
+export async function disconnect(userId) {
+  const row = getSyncRow(userId);
+  // Best-effort: remove the webhook subscription from Hevy before forgetting
+  // the key. Failures here must not block disconnecting locally.
+  if (row?.webhook_enabled) {
+    const key = decryptSecret(row.api_key);
+    if (key) {
+      try {
+        await new HevyClient(key).deleteWebhookSubscription();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
   db.prepare('DELETE FROM hevy_sync WHERE user_id = ?').run(userId);
   return { connected: false };
+}
+
+/** The public URL Hevy will POST to for a given user token. */
+function webhookUrl() {
+  if (!config.publicUrl) return null;
+  return `${config.publicUrl}/api/hevy/webhook`;
+}
+
+/** Look up the user that owns a webhook auth token (constant-time compare). */
+export function userByWebhookToken(token) {
+  const clean = String(token || '').trim();
+  if (!clean) return null;
+  const row = db
+    .prepare(
+      'SELECT user_id FROM hevy_sync WHERE webhook_token = ? AND webhook_enabled = 1'
+    )
+    .get(clean);
+  return row ? row.user_id : null;
+}
+
+/** Register the Hevy webhook for a user. Requires a connected account + PUBLIC_URL. */
+export async function enableWebhook(userId) {
+  const row = getSyncRow(userId);
+  if (!row) {
+    const e = new Error('No hay ninguna cuenta de Hevy conectada');
+    e.status = 404;
+    throw e;
+  }
+  const url = webhookUrl();
+  if (!url) {
+    const e = new Error(
+      'Define PUBLIC_URL en el servidor para usar webhooks en tiempo real'
+    );
+    e.status = 400;
+    throw e;
+  }
+  const key = decryptSecret(row.api_key);
+  if (!key) {
+    const e = new Error('No se pudo descifrar la API key');
+    e.status = 400;
+    throw e;
+  }
+
+  const token = row.webhook_token || crypto.randomBytes(24).toString('hex');
+  const client = new HevyClient(key);
+  try {
+    await client.createWebhookSubscription({
+      url,
+      authToken: `Bearer ${token}`,
+    });
+  } catch (err) {
+    const e = new Error(`Hevy rechazó la suscripción al webhook: ${err.message}`);
+    e.status = err instanceof HevyApiError ? err.status : 502;
+    throw e;
+  }
+
+  db.prepare(
+    `UPDATE hevy_sync
+       SET webhook_token = ?, webhook_enabled = 1, updated_at = ?
+     WHERE user_id = ?`
+  ).run(token, nowIso(), userId);
+  return getSyncStatus(userId);
+}
+
+/** Remove the Hevy webhook subscription for a user. */
+export async function disableWebhook(userId) {
+  const row = getSyncRow(userId);
+  if (!row) {
+    const e = new Error('No hay ninguna cuenta de Hevy conectada');
+    e.status = 404;
+    throw e;
+  }
+  const key = decryptSecret(row.api_key);
+  if (key) {
+    try {
+      await new HevyClient(key).deleteWebhookSubscription();
+    } catch {
+      // Non-fatal: still disable locally.
+    }
+  }
+  db.prepare(
+    'UPDATE hevy_sync SET webhook_enabled = 0, updated_at = ? WHERE user_id = ?'
+  ).run(nowIso(), userId);
+  return getSyncStatus(userId);
 }
 
 function buildTemplateMap(templates) {

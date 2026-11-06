@@ -12,6 +12,7 @@ import workoutsRoutes from './routes/workouts.js';
 import measurementsRoutes from './routes/measurements.js';
 import statsRoutes from './routes/stats.js';
 import importRoutes from './routes/import.js';
+import hevyWebhookRoutes from './routes/hevy-webhook.js';
 
 export function createApp() {
   const app = express();
@@ -64,6 +65,8 @@ export function createApp() {
   app.use('/api/measurements', requireAuth, measurementsRoutes);
   app.use('/api/stats', requireAuth, statsRoutes);
   app.use('/api/import', requireAuth, importRoutes);
+  // Public: Hevy calls this; authenticated via the per-user webhook token.
+  app.use('/api/hevy', hevyWebhookRoutes);
 
   const publicDir = path.join(config.root, 'public');
   app.use(

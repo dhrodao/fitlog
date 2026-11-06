@@ -22,6 +22,7 @@ export const config = {
   allowDevLogin:
     process.env.ALLOW_DEV_LOGIN !== 'false' && nodeEnv !== 'production',
   cookieSecure: process.env.COOKIE_SECURE === 'true',
+  publicUrl: (process.env.PUBLIC_URL || '').trim().replace(/\/$/, ''),
   sessionDays: Number(process.env.SESSION_DAYS || 30),
   catalogSyncDays: Number(process.env.CATALOG_SYNC_DAYS || 14),
 };

@@ -51,6 +51,45 @@ export class HevyClient {
     }
   }
 
+  /** Perform a write request (POST/DELETE) with a JSON body. */
+  async send(pathname, method, body) {
+    const url = `${this.baseUrl}${pathname}`;
+    const res = await this.fetch(url, {
+      method,
+      headers: {
+        'api-key': this.apiKey,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new HevyApiError(res.status, text.slice(0, 300), url);
+    }
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {};
+    }
+  }
+
+  /** Current webhook subscription (throws 404 if none). */
+  async getWebhookSubscription() {
+    return this.request('/webhook-subscription');
+  }
+
+  /** Create/replace the webhook subscription. */
+  async createWebhookSubscription({ url, authToken }) {
+    return this.send('/webhook-subscription', 'POST', { url, authToken });
+  }
+
+  /** Remove the webhook subscription. */
+  async deleteWebhookSubscription() {
+    return this.send('/webhook-subscription', 'DELETE');
+  }
+
   /** Iterate over every page of a paginated collection. */
   async *paginate(pathname, collectionKey, { pageSize = 10 } = {}) {
     let page = 1;

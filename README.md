@@ -29,6 +29,7 @@ cp .env.example .env
 | `SESSION_DAYS` | Session duration in days. |
 | `SESSION_SECRET` | Internal session secret. |
 | `CATALOG_SYNC_DAYS` | Days before the catalog is re-synced in the background (default `14`). |
+| `PUBLIC_URL` | Public HTTPS base URL (no trailing slash). Required for Hevy real-time webhooks. |
 
 ## Run locally (Node)
 
@@ -171,6 +172,13 @@ From the **Profile** view:
   enable automatic background sync (every 6 h). Syncs are incremental via the
   Hevy `/v1/workouts/events` feed and idempotent, so re-running never
   duplicates workouts.
+- **Webhook en tiempo real**: when `PUBLIC_URL` is set, you can enable Hevy
+  webhooks. Fitlog registers `PUBLIC_URL/api/hevy/webhook` with Hevy and
+  stores a per-user token sent back as `Authorization: Bearer <token>`. When
+  you save a workout in Hevy, Hevy POSTs `{ "workoutId": "..." }`; Fitlog
+  acknowledges immediately (Hevy requires a 200 within 5 s) and runs an
+  incremental sync in the background. The app must be reachable over HTTPS
+  (e.g. via the Cloudflare Tunnel described above).
 
 Exercise names from Hevy are matched to the free-exercise-db catalog (directly
 or after stripping the trailing `(Equipment)` suffix); unmatched names are kept

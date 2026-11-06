@@ -960,6 +960,45 @@
   gap: 6px;
 }
 
+/* Swipe-to-delete: the row slides left over a revealed delete action. */
+.set-swipe {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.set-swipe-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: stretch;
+  background: var(--danger);
+  border-radius: 10px;
+}
+
+.set-delete-btn {
+  width: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.set-swipe .set-row {
+  position: relative;
+  background: var(--surface);
+  will-change: transform;
+  touch-action: pan-y;
+}
+
+.set-swipe .set-row.completed {
+  background: var(--success-soft);
+}
+
 .set-head {
   padding: 0 4px 5px;
   font-size: 10px;

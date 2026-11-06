@@ -1,5 +1,6 @@
 import { api, errorMessage } from '../api.js';
 import { openExercisePicker } from '../exercise-picker.js';
+import { attachSwipeToDelete } from '../swipe.js';
 import {
   confirmDialog,
   debounce,
@@ -38,22 +39,29 @@ function prevLabel(previousSets, index) {
 
 function setRow(exercise, set, index) {
   return `
-    <div class="set-row ${set.completed ? 'completed' : ''}" data-set-id="${set.id}">
-      <div class="set-num">${index + 1}</div>
-      <div class="set-cell" style="display:flex;flex-direction:column;gap:2px">
-        <span class="text-xs text-muted" style="text-align:center;font-size:10px">${esc(prevLabel(exercise.previousSets, index))}</span>
-        <input class="number-input" type="number" inputmode="decimal" step="0.5" placeholder="0"
-          enterkeyhint="next"
-          value="${set.weightKg != null ? esc(String(set.weightKg)) : ''}" data-field="weightKg" aria-label="Peso en kg" />
+    <div class="set-swipe" data-set-id="${set.id}">
+      <div class="set-swipe-bg" aria-hidden="true">
+        <button type="button" class="set-delete-btn" data-delete-set aria-label="Eliminar serie ${index + 1}">
+          ${icon('trash', 16)}
+        </button>
       </div>
-      <div class="set-cell">
-        <input class="number-input" type="number" inputmode="numeric" placeholder="0"
-          enterkeyhint="done"
-          value="${set.reps != null ? esc(String(set.reps)) : ''}" data-field="reps" aria-label="Repeticiones" />
+      <div class="set-row ${set.completed ? 'completed' : ''}" data-set-handle>
+        <div class="set-num">${index + 1}</div>
+        <div class="set-cell" style="display:flex;flex-direction:column;gap:2px">
+          <span class="text-xs text-muted" style="text-align:center;font-size:10px">${esc(prevLabel(exercise.previousSets, index))}</span>
+          <input class="number-input" type="number" inputmode="decimal" step="0.5" placeholder="0"
+            enterkeyhint="next"
+            value="${set.weightKg != null ? esc(String(set.weightKg)) : ''}" data-field="weightKg" aria-label="Peso en kg" />
+        </div>
+        <div class="set-cell">
+          <input class="number-input" type="number" inputmode="numeric" placeholder="0"
+            enterkeyhint="done"
+            value="${set.reps != null ? esc(String(set.reps)) : ''}" data-field="reps" aria-label="Repeticiones" />
+        </div>
+        <button type="button" class="check-btn ${set.completed ? 'checked' : ''}" data-toggle aria-label="Completar serie">
+          ${icon('check', 18)}
+        </button>
       </div>
-      <button type="button" class="check-btn ${set.completed ? 'checked' : ''}" data-toggle aria-label="Completar serie">
-        ${icon('check', 18)}
-      </button>
     </div>
   `;
 }
@@ -165,7 +173,56 @@ export async function render(container, ctx) {
            <p>Añade un ejercicio para empezar a registrar series.</p>
          </div></div>`;
     renderStats();
+    wireSwipes();
   };
+
+  // Track live swipe controllers so a newly opened row collapses the others.
+  const swipeControllers = new Set();
+
+  async function deleteSet(weId, setId) {
+    try {
+      await api.workouts.removeSet(workout.id, setId);
+      const exercise = getExercise(weId);
+      if (exercise) exercise.sets = exercise.sets.filter((s) => s.id !== setId);
+      haptic(16);
+      renderExercises();
+    } catch (error) {
+      if (error.status === 401) ctx.handleUnauthorized();
+      else toast(errorMessage(error), 'error');
+      throw error; // let the row spring back
+    }
+  }
+
+  function wireSwipes() {
+    swipeControllers.clear();
+    const list = container.querySelector('[data-exercises]');
+    if (!list) return;
+    list.querySelectorAll('.set-swipe').forEach((wrapper) => {
+      const handle = wrapper.querySelector('[data-set-handle]');
+      if (!handle || wrapper.dataset.swipeWired === '1') return;
+      wrapper.dataset.swipeWired = '1';
+      const block = wrapper.closest('[data-we-id]');
+      const weId = Number(block.dataset.weId);
+      const setId = Number(wrapper.dataset.setId);
+
+      const controller = attachSwipeToDelete(handle, {
+        onDelete: () => deleteSet(weId, setId),
+      });
+      swipeControllers.add(controller);
+
+      // Opening one row closes the rest.
+      handle.addEventListener('pointerdown', () => {
+        swipeControllers.forEach((other) => {
+          if (other !== controller && other.isOpen()) other.close();
+        });
+      });
+
+      // The revealed button deletes directly (accessible via keyboard too).
+      wrapper
+        .querySelector('[data-delete-set]')
+        ?.addEventListener('click', () => deleteSet(weId, setId));
+    });
+  }
 
   container.innerHTML = `
     <div class="view" style="gap:14px">
@@ -445,12 +502,12 @@ export async function render(container, ctx) {
 
     const toggle = event.target.closest('[data-toggle]');
     if (toggle) {
-      const row = toggle.closest('[data-set-id]');
-      const setId = Number(row.dataset.setId);
+      const wrapper = toggle.closest('[data-set-id]');
+      const setId = Number(wrapper.dataset.setId);
       const set = getSet(weId, setId);
       if (!set) return;
       set.completed = !set.completed;
-      row.classList.toggle('completed', set.completed);
+      wrapper.querySelector('[data-set-handle]')?.classList.toggle('completed', set.completed);
       toggle.classList.toggle('checked', set.completed);
       if (set.completed) haptic(12);
       renderStats();

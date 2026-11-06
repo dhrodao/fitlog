@@ -439,7 +439,7 @@ export async function render(container, ctx) {
         <div data-sync-section>${hevySyncSection(syncStatus)}</div>
         <div data-hevy-flush>${
           importedCount > 0 || importedRoutines > 0
-            ? `<button type="button" class="btn btn-danger btn-block btn-sm" data-flush-hevy style="margin-top:10px">
+            ? `<button type="button" class="btn btn-danger btn-block btn-sm btn-wrap" data-flush-hevy style="margin-top:10px">
                  ${icon('trash', 15)} Eliminar datos importados de Hevy (${esc(hevyFlushLabel(importedCount, importedRoutines))})
                </button>`
             : ''

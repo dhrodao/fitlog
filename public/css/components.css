@@ -72,6 +72,21 @@
   border-radius: 12px;
 }
 
+/* Allow the label to wrap on narrow screens instead of overflowing. */
+.btn-wrap {
+  height: auto;
+  min-height: 38px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  white-space: normal;
+  text-wrap: balance;
+  line-height: 1.25;
+}
+
+.btn svg {
+  flex-shrink: 0;
+}
+
 .btn-xs {
   height: 32px;
   padding: 0 11px;

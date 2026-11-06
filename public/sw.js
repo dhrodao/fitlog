@@ -10,7 +10,7 @@
  *
  * Bump CACHE_VERSION to force clients to drop old caches.
  */
-const CACHE_VERSION = 'fitlog-v3';
+const CACHE_VERSION = 'fitlog-v4';
 const PRECACHE = [
   '/',
   '/index.html',

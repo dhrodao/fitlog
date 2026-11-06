@@ -1394,3 +1394,55 @@ dialog::backdrop {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* Pull-to-refresh indicator. Fixed just under the top safe area; the JS module
+   moves it down (translateY) as the user pulls and spins it while refreshing.
+   Starts hidden (opacity 0) and off the top. */
+.ptr-indicator {
+  position: fixed;
+  top: calc(6px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.ptr-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  transition: transform 0.15s ease;
+}
+
+/* When past the trigger threshold, hint it's ready to release. */
+.ptr-indicator.ptr-ready .ptr-spinner {
+  transform: rotate(180deg);
+  border-top-color: var(--accent);
+}
+
+/* While the refresh runs, spin continuously. */
+.ptr-indicator.ptr-spinning .ptr-spinner {
+  animation: ptr-spin 0.7s linear infinite;
+}
+
+@keyframes ptr-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ptr-indicator.ptr-spinning .ptr-spinner {
+    animation-duration: 1.4s;
+  }
+}

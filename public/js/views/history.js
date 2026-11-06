@@ -1,4 +1,5 @@
 import { api, errorMessage } from '../api.js';
+import { attachPullToRefresh } from '../pull-refresh.js';
 import {
   esc,
   formatDate,
@@ -124,4 +125,6 @@ export async function render(container, ctx) {
       if (error.status === 401) ctx.handleUnauthorized();
     }
   });
+
+  return attachPullToRefresh({ onRefresh: () => ctx.refresh() });
 }

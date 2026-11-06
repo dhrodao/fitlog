@@ -1,4 +1,5 @@
 import { api, errorMessage } from '../api.js';
+import { attachPullToRefresh } from '../pull-refresh.js';
 import { currentTheme } from '../theme.js';
 import {
   confirmDialog,
@@ -384,8 +385,11 @@ export async function render(container, ctx) {
       }, 30000)
     : null;
 
+  const detachPull = attachPullToRefresh({ onRefresh: () => ctx.refresh() });
+
   return () => {
     container.removeEventListener('click', onClick);
     if (timer) clearInterval(timer);
+    detachPull();
   };
 }

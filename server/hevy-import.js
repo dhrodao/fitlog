@@ -81,10 +81,14 @@ export function parseCsvObjects(input) {
   });
 }
 
-function stripEquipment(name) {
-  return String(name || '')
-    .replace(/\s*\([^)]*\)\s*$/, '')
-    .trim();
+/**
+ * Split "Bench Press (Barbell)" into { base: "Bench Press", equip: "Barbell" }.
+ * Returns null when there is no trailing "(...)" group.
+ */
+function splitEquipment(name) {
+  const m = String(name || '').match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (!m) return null;
+  return { base: m[1].trim(), equip: m[2].trim() };
 }
 
 let catalogByNormCache = null;
@@ -107,7 +111,9 @@ function catalogByNorm() {
  *   1. an explicit Hevy->catalog id override (templateMap),
  *   2. exact normalized catalog name,
  *   3. catalog name after stripping the trailing "(Equipment)" suffix,
- *   4. otherwise create a custom exercise keeping the original Hevy name.
+ *   4. equipment moved to the front ("Bench Press (Barbell)" ->
+ *      "Barbell Bench Press"), matching free-exercise-db's naming,
+ *   5. otherwise create a custom exercise keeping the original Hevy name.
  */
 export function resolveHevyExercise(userId, hevyName, { templateMap = null } = {}) {
   const name = String(hevyName || '').trim();
@@ -126,12 +132,24 @@ export function resolveHevyExercise(userId, hevyName, { templateMap = null } = {
     return { row: getOrCreateFromCatalog(userId, direct), source: 'catalog' };
   }
 
-  const stripped = map.get(normalizeExerciseName(stripEquipment(name)));
-  if (stripped) {
-    return {
-      row: getOrCreateFromCatalog(userId, stripped),
-      source: 'catalog-stripped',
-    };
+  const parts = splitEquipment(name);
+  if (parts) {
+    const stripped = map.get(normalizeExerciseName(parts.base));
+    if (stripped) {
+      return {
+        row: getOrCreateFromCatalog(userId, stripped),
+        source: 'catalog-stripped',
+      };
+    }
+    // Hevy puts equipment as a trailing "(Equipment)" suffix, while
+    // free-exercise-db uses it as a prefix (e.g. "Barbell Bench Press").
+    const prefixed = map.get(normalizeExerciseName(`${parts.equip} ${parts.base}`));
+    if (prefixed) {
+      return {
+        row: getOrCreateFromCatalog(userId, prefixed),
+        source: 'catalog-prefixed',
+      };
+    }
   }
 
   return {

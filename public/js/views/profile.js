@@ -80,6 +80,40 @@ function totalsSummary(totals, write) {
     </div>`;
 }
 
+// Summary for a manual Hevy sync: shows workouts, exercises/sets and routines.
+// Unlike the one-off CSV/API import, exercises/sets only count newly imported
+// workouts, so we omit zero rows and surface a clear "no changes" message.
+function syncTotalsSummary(totals) {
+  const routinesChanged =
+    (totals.routinesImported || 0) + (totals.routinesUpdated || 0);
+  const rows = [];
+  if (totals.imported > 0) {
+    rows.push(['Entrenos importados', totals.imported]);
+    rows.push(['Ejercicios', totals.exercises]);
+    rows.push(['Series', totals.sets]);
+  }
+  if (totals.routinesImported > 0) {
+    rows.push(['Rutinas importadas', totals.routinesImported]);
+  }
+  if (totals.routinesUpdated > 0) {
+    rows.push(['Rutinas actualizadas', totals.routinesUpdated]);
+  }
+
+  if (!rows.length) {
+    return `<div class="import-summary"><div class="import-summary-row"><span>Todo al día</span><strong>Sin cambios</strong></div></div>`;
+  }
+
+  return `
+    <div class="import-summary">
+      ${rows
+        .map(
+          ([label, value]) =>
+            `<div class="import-summary-row"><span>${esc(label)}</span><strong>${esc(String(value))}</strong></div>`
+        )
+        .join('')}
+    </div>`;
+}
+
 function hevySyncSection(status) {
   if (status.connected) {
     const last = status.lastSyncAt
@@ -536,9 +570,20 @@ export async function render(container, ctx) {
         const response = await api.hevySync.run(false);
         rerenderSync(response.status);
         const after = syncSection.querySelector('[data-sync-result]');
-        if (after) after.innerHTML = totalsSummary(response.totals, true);
-        toast(`Sincronizado: +${response.totals.imported} entrenos`, 'success');
-        if (response.totals.imported > 0) setTimeout(() => ctx.refresh(), 1400);
+        if (after) after.innerHTML = syncTotalsSummary(response.totals);
+        const t = response.totals;
+        const routinesChanged =
+          (t.routinesImported || 0) + (t.routinesUpdated || 0);
+        const bits = [];
+        if (t.imported > 0) bits.push(`+${t.imported} entrenos`);
+        if (routinesChanged > 0) bits.push(`${routinesChanged} rutinas`);
+        toast(
+          bits.length ? `Sincronizado: ${bits.join(', ')}` : 'Ya estabas al día',
+          'success'
+        );
+        if (t.imported > 0 || routinesChanged > 0) {
+          setTimeout(() => ctx.refresh(), 1400);
+        }
       } catch (error) {
         setBusy(false);
         if (result) result.innerHTML = `<div class="import-error">${esc(errorMessage(error))}</div>`;

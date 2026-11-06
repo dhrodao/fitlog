@@ -1,5 +1,5 @@
 import { db, nowIso } from './db.js';
-import { normalizeExerciseName } from './catalog.js';
+import { normalizeExerciseName, normalizeName } from './catalog.js';
 import { getOrCreateFromCatalog, getOrCreateByName } from './services/exercises.js';
 import { resolveByTemplateId } from './hevy-templates.js';
 
@@ -318,6 +318,27 @@ export function importWorkout(userId, workout, { templateMap = null } = {}) {
         stats.sets += 1;
       });
     });
+
+    // If an imported Hevy routine shares this workout's name, link them so the
+    // routine's history/chart includes this workout. Hevy's API doesn't expose
+    // the workout's routine, so we match by normalized name (see option B).
+    const targetName = normalizeName(name);
+    if (targetName) {
+      const routines = db
+        .prepare(
+          "SELECT id, name FROM routines WHERE user_id = ? AND source = 'hevy'"
+        )
+        .all(userId);
+      const match = routines.find(
+        (r) => normalizeName(r.name) === targetName
+      );
+      if (match) {
+        db.prepare('UPDATE workouts SET routine_id = ? WHERE id = ?').run(
+          match.id,
+          workoutId
+        );
+      }
+    }
 
     return { workoutId, stats };
   });

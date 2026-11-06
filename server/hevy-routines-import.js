@@ -1,4 +1,5 @@
 import { db, nowIso } from './db.js';
+import { normalizeName } from './catalog.js';
 import { resolveHevyExercise } from './hevy-import.js';
 
 /**
@@ -119,7 +120,14 @@ export function importRoutine(userId, routine, { templateMap = null, folderMap =
       stats.exercises += 1;
     }
 
-    return { routineId, updated, ...stats };
+    // Link imported Hevy workouts to this routine by matching the (normalized)
+    // name. Hevy's API does not tell us which routine a workout came from, so
+    // we rely on the title, which in Hevy is usually the routine name. Only
+    // Hevy-imported workouts are touched (never manual ones), and only when the
+    // workout is unlinked or already pointed at an imported routine.
+    const linked = linkImportedWorkoutsToRoutine(userId, routineId, name);
+
+    return { routineId, updated, linked, ...stats };
   });
 
   const res = run();
@@ -129,7 +137,41 @@ export function importRoutine(userId, routine, { templateMap = null, folderMap =
     exercises: res.exercises,
     matched: res.matched,
     custom: res.custom,
+    linked: res.linked,
   };
+}
+
+/**
+ * Point every Hevy-imported workout whose name matches `routineName`
+ * (normalized) at `routineId`. Returns how many workouts were linked.
+ * Safe to re-run: it only (re)assigns Hevy workouts that are unlinked or
+ * already attached to an imported routine, so manual routine links are
+ * never overwritten.
+ */
+export function linkImportedWorkoutsToRoutine(userId, routineId, routineName) {
+  const target = normalizeName(routineName);
+  if (!target) return 0;
+
+  const candidates = db
+    .prepare(
+      `SELECT w.id, w.name, w.routine_id, r.source AS routine_source
+         FROM workouts w
+         LEFT JOIN routines r ON r.id = w.routine_id
+        WHERE w.user_id = ? AND w.source = 'hevy'`
+    )
+    .all(userId);
+
+  const update = db.prepare('UPDATE workouts SET routine_id = ? WHERE id = ?');
+  let linked = 0;
+  for (const w of candidates) {
+    if (normalizeName(w.name) !== target) continue;
+    // Skip if already linked to this routine, or to a non-Hevy (manual) routine.
+    if (w.routine_id === routineId) continue;
+    if (w.routine_id != null && w.routine_source !== 'hevy') continue;
+    update.run(routineId, w.id);
+    linked += 1;
+  }
+  return linked;
 }
 
 /** Count routines imported from Hevy for a user. */

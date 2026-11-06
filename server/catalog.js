@@ -85,7 +85,12 @@ function loadAliases() {
   return aliases;
 }
 
-export function normalizeExerciseName(value) {
+/**
+ * Normalize a free-text label for comparison: strip accents, lowercase and
+ * collapse any non-alphanumeric run into a single space. Used for matching
+ * exercise names, but also routine/workout titles, so the name is generic.
+ */
+export function normalizeName(value) {
   return String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -93,6 +98,9 @@ export function normalizeExerciseName(value) {
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }
+
+/** @deprecated Backwards-compatible alias of {@link normalizeName}. */
+export const normalizeExerciseName = normalizeName;
 
 function datasetUrl() {
   const dataset = loadAliases().dataset;

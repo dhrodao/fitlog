@@ -10,6 +10,29 @@ let gradientCounter = 0;
 // freshly mounted chart ignore a ghost click that trails a recent touch.
 let lastTouchEndGlobal = 0;
 
+// A single, module-wide scroll listener dismisses the currently open chart
+// tooltip (it is absolutely positioned and would otherwise float away). Using
+// one shared listener — instead of one per chart instance — avoids leaking a
+// growing pile of scroll handlers as the user navigates between views.
+let activeChartClear = null;
+let scrollListenerAttached = false;
+
+function ensureScrollDismiss() {
+  if (scrollListenerAttached || typeof window === 'undefined') return;
+  scrollListenerAttached = true;
+  window.addEventListener(
+    'scroll',
+    () => {
+      if (activeChartClear) {
+        const fn = activeChartClear;
+        activeChartClear = null;
+        fn();
+      }
+    },
+    { capture: true, passive: true }
+  );
+}
+
 function niceBounds(values, { fromZero = false } = {}) {
   const clean = values.filter((value) => Number.isFinite(value));
   if (!clean.length) return { min: 0, max: 1 };
@@ -335,7 +358,18 @@ function positionTooltip(wrap, svg, tooltip, cx, cy) {
 // scrubbing (drag a finger across the chart to sweep through points), and
 // auto-dismissing the tooltip on scroll so it never lingers detached from the
 // chart. `select(hit)` and `clear()` encapsulate the chart-specific visuals.
-function wireChart(wrap, svg, { select, clear }) {
+function wireChart(wrap, svg, { select: rawSelect, clear: rawClear }) {
+  // Wrap the chart-specific visuals so selecting marks this chart as the one
+  // the shared scroll-dismiss listener should close, and clearing unmarks it.
+  const select = (hit) => {
+    rawSelect(hit);
+    activeChartClear = clear;
+  };
+  const clear = () => {
+    rawClear();
+    if (activeChartClear === clear) activeChartClear = null;
+  };
+
   const hitAt = (clientX, clientY) => {
     const el = document.elementFromPoint(clientX, clientY);
     return el && el.closest ? el.closest('.chart-hit') : null;
@@ -416,16 +450,9 @@ function wireChart(wrap, svg, { select, clear }) {
   svg.addEventListener('pointerup', endTouch, { passive: true });
   svg.addEventListener('pointercancel', endTouch, { passive: true });
 
-  // Dismiss the tooltip on scroll; it is absolutely positioned so it would
-  // otherwise float away from the chart. Self-detaches once the chart is gone.
-  const onScroll = () => {
-    if (!wrap.isConnected) {
-      window.removeEventListener('scroll', onScroll, true);
-      return;
-    }
-    clear();
-  };
-  window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+  // Register this chart's tooltip as the one the shared scroll listener will
+  // dismiss, so scrolling closes whichever tooltip is currently open.
+  ensureScrollDismiss();
 }
 
 // Wires tap/hover interaction for an interactive barChart rendered inside

@@ -25,15 +25,46 @@ export function attachSwipeToDelete(handle, { onDelete, actionWidth = 76 } = {})
   let locked = null; // 'x' | 'y' | null
   let open = false;
   let pointerId = null;
+  let committing = false; // true while an async delete is in flight
 
   const setX = (x, animate) => {
+    const offset = Math.min(0, x);
     handle.style.transition = animate ? 'transform 0.18s ease' : 'none';
-    handle.style.transform = `translateX(${Math.min(0, x)}px)`;
+    handle.style.transform = `translateX(${offset}px)`;
+    // Reveal the red delete background only while the row is pulled aside.
+    // When closing (animating back to 0) keep it visible until the transition
+    // settles (handled in close()), so the row slides back over it instead of
+    // the red vanishing instantly.
+    if (offset < -0.5) {
+      handle.parentElement?.classList.add('swiping');
+    } else if (!animate) {
+      handle.parentElement?.classList.remove('swiping');
+    }
+  };
+
+  // Release any active pointer capture and clear per-gesture state so the next
+  // gesture (possibly on a freshly rendered row) starts clean.
+  const endGesture = () => {
+    if (pointerId != null) {
+      try {
+        handle.releasePointerCapture?.(pointerId);
+      } catch {}
+    }
+    pointerId = null;
+    dragging = false;
+    locked = null;
+    dx = 0;
   };
 
   const close = () => {
     open = false;
     setX(0, true);
+    // Hide the background once the slide-back animation has finished.
+    window.setTimeout(() => {
+      if (handle.style.transform === 'translateX(0px)') {
+        handle.parentElement?.classList.remove('swiping');
+      }
+    }, 200);
   };
   const openRow = () => {
     open = true;
@@ -41,6 +72,7 @@ export function attachSwipeToDelete(handle, { onDelete, actionWidth = 76 } = {})
   };
 
   const onDown = (event) => {
+    if (committing) return; // row is being removed; ignore new gestures
     // Ignore drags that begin on interactive controls (inputs, buttons).
     if (event.target.closest('input, button, select, textarea, a')) {
       if (open) close();
@@ -82,22 +114,17 @@ export function attachSwipeToDelete(handle, { onDelete, actionWidth = 76 } = {})
   };
 
   const onUp = (event) => {
-    if (!dragging && locked !== 'x') {
-      // vertical or non-starter; nothing to settle
-      if (locked === 'y') locked = null;
+    if (event && event.pointerId != null && pointerId != null && event.pointerId !== pointerId) {
       return;
     }
-    if (event && event.pointerId != null && event.pointerId !== pointerId) return;
-    dragging = false;
-    if (locked !== 'x') {
-      locked = null;
-      return;
-    }
-    locked = null;
+    const wasHorizontal = locked === 'x';
+    const settledDx = dx;
+    endGesture();
+    if (!wasHorizontal) return; // vertical scroll or a plain tap; nothing to settle
 
-    if (-dx >= COMMIT_AT) {
+    if (-settledDx >= COMMIT_AT) {
       commitDelete();
-    } else if (-dx >= OPEN_AT) {
+    } else if (-settledDx >= OPEN_AT) {
       openRow();
     } else {
       close();
@@ -105,12 +132,16 @@ export function attachSwipeToDelete(handle, { onDelete, actionWidth = 76 } = {})
   };
 
   async function commitDelete() {
-    setX(-handle.offsetWidth || -400, true);
+    if (committing) return;
+    committing = true;
+    setX(-(handle.offsetWidth || 400), true);
     try {
       await onDelete();
-      // Caller re-renders the list; nothing else to do.
+      // Caller re-renders the list; this controller is discarded afterwards.
     } catch {
       close(); // spring back on failure
+    } finally {
+      committing = false;
     }
   }
 

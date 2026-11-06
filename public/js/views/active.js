@@ -199,8 +199,7 @@ export async function render(container, ctx) {
     if (!list) return;
     list.querySelectorAll('.set-swipe').forEach((wrapper) => {
       const handle = wrapper.querySelector('[data-set-handle]');
-      if (!handle || wrapper.dataset.swipeWired === '1') return;
-      wrapper.dataset.swipeWired = '1';
+      if (!handle) return;
       const block = wrapper.closest('[data-we-id]');
       const weId = Number(block.dataset.weId);
       const setId = Number(wrapper.dataset.setId);

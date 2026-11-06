@@ -981,16 +981,32 @@
   position: relative;
   overflow: hidden;
   border-radius: 10px;
+  background: var(--surface);
 }
 
 .set-swipe-bg {
   position: absolute;
-  inset: 0;
+  /* Only cover the right-hand action strip (where the trash button sits).
+     Inset 1px vertically so a GPU-composited row (will-change: transform) that
+     rounds to a slightly shorter box can't expose a red hairline above/below
+     the button when the row is swiped aside. */
+  top: 1px;
+  bottom: 1px;
+  right: 0;
+  width: 76px;
   display: flex;
   justify-content: flex-end;
   align-items: stretch;
   background: var(--danger);
-  border-radius: 10px;
+  border-radius: inherit;
+  /* Hidden until the row is actually swiped aside. */
+  opacity: 0;
+  pointer-events: none;
+}
+
+.set-swipe.swiping .set-swipe-bg {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .set-delete-btn {
@@ -1007,6 +1023,9 @@
 .set-swipe .set-row {
   position: relative;
   background: var(--surface);
+  /* Square corners so the row fully covers the red delete background; the
+     rounded clip comes from .set-swipe (overflow:hidden + border-radius). */
+  border-radius: 0;
   will-change: transform;
   touch-action: pan-y;
 }

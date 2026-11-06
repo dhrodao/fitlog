@@ -7,6 +7,7 @@ import { importWorkout } from './hevy-import.js';
 import {
   importRoutine,
   foldersToMap,
+  relinkAllImportedWorkouts,
 } from './hevy-routines-import.js';
 import { storeTemplates } from './hevy-templates.js';
 import {
@@ -265,6 +266,7 @@ export async function syncUser(userId, { full = false } = {}) {
     deletedSeen: 0,
     routinesImported: 0,
     routinesUpdated: 0,
+    routinesLinked: 0,
   };
 
   try {
@@ -335,6 +337,18 @@ export async function syncUser(userId, { full = false } = {}) {
           if (res.updated) totals.routinesUpdated += 1;
           else if (res.imported) totals.routinesImported += 1;
         }
+        // Self-heal: link any imported workouts to their routine by name
+        // (covers workouts imported before their routine existed).
+        relinkAllImportedWorkouts(userId);
+        // Report how many imported workouts are now attached to a routine.
+        totals.routinesLinked = db
+          .prepare(
+            `SELECT COUNT(*) AS c
+               FROM workouts w
+               JOIN routines r ON r.id = w.routine_id
+              WHERE w.user_id = ? AND w.source = 'hevy' AND r.source = 'hevy'`
+          )
+          .get(userId).c;
       });
       applyRoutines();
     } catch (err) {

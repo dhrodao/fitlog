@@ -174,6 +174,26 @@ export function linkImportedWorkoutsToRoutine(userId, routineId, routineName) {
   return linked;
 }
 
+/**
+ * Reconcile links for every Hevy routine of a user: attach imported workouts
+ * to the imported routine that shares their (normalized) name. Idempotent and
+ * cheap, so it is run at the end of each sync to self-heal any workouts that
+ * were imported before their routine existed (or before name-linking shipped).
+ * Returns the total number of workouts (re)linked.
+ */
+export function relinkAllImportedWorkouts(userId) {
+  const routines = db
+    .prepare(
+      "SELECT id, name FROM routines WHERE user_id = ? AND source = 'hevy'"
+    )
+    .all(userId);
+  let linked = 0;
+  for (const r of routines) {
+    linked += linkImportedWorkoutsToRoutine(userId, r.id, r.name);
+  }
+  return linked;
+}
+
 /** Count routines imported from Hevy for a user. */
 export function countImportedRoutines(userId) {
   const row = db

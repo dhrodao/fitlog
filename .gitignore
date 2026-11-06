@@ -11,9 +11,3 @@ data/
 .DS_Store
 coverage/
 
-# Scratch screenshots / images not part of the app
-WhatsApp*.jpeg
-WhatsApp*.jpg
-*.png
-# ...except the app's own PWA icons, which are part of the source.
-!public/assets/*.png

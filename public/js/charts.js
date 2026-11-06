@@ -2,14 +2,6 @@ import { esc, formatNumber, formatVolume } from './ui.js';
 
 let gradientCounter = 0;
 
-// Timestamp of the most recent touch end across ALL chart instances. The
-// browser fires a synthetic "ghost" click ~300ms after a touch tap; when you
-// tap a chart and immediately navigate to another view, that ghost click can
-// land on the *new* chart. A per-instance flag misses it because the new
-// instance never saw the touch. Sharing the timestamp at module scope lets any
-// freshly mounted chart ignore a ghost click that trails a recent touch.
-let lastTouchEndGlobal = 0;
-
 // A single, module-wide scroll listener dismisses the currently open chart
 // tooltip (it is absolutely positioned and would otherwise float away). Using
 // one shared listener — instead of one per chart instance — avoids leaking a
@@ -381,11 +373,9 @@ function wireChart(wrap, svg, { select: rawSelect, clear: rawClear }) {
   let downHit = null;
   let downWasActive = false;
 
-  // Desktop: hover to preview, click to pin/unpin. Touch is handled by the
-  // pointer cycle below; the synthetic click that follows a tap is ignored so
-  // it doesn't undo the selection made on pointerdown.
+  // --- Mouse (desktop): hover to preview, click to pin/unpin. ---
   svg.addEventListener('pointermove', (event) => {
-    if (event.pointerType === 'touch') return; // touch uses scrubbing below
+    if (event.pointerType === 'touch') return; // touch handled below
     const hit = event.target.closest('.chart-hit');
     if (hit) select(hit);
   });
@@ -394,11 +384,11 @@ function wireChart(wrap, svg, { select: rawSelect, clear: rawClear }) {
     clear();
   });
   svg.addEventListener('click', (event) => {
-    // Swallow the synthetic click that the browser fires right after a touch
-    // tap — including a ghost click that trails a tap in a previous view and
-    // lands on this freshly mounted chart. The touch pointer cycle already
-    // handled any real selection.
-    if (Date.now() - lastTouchEndGlobal < 700) return;
+    // Only real mouse clicks reach here: the touch path calls preventDefault()
+    // on pointerdown, which suppresses the browser's synthetic click. So there
+    // is no timing window or global flag to get stuck — a tap never produces a
+    // click here, and a mouse click always does.
+    if (event.pointerType === 'touch') return;
     const hit = event.target.closest('.chart-hit');
     if (!hit) {
       clear();
@@ -408,23 +398,18 @@ function wireChart(wrap, svg, { select: rawSelect, clear: rawClear }) {
     else select(hit);
   });
 
-  // Touch: tap toggles, drag scrubs. On drag the pointer events keep firing on
-  // the original target, so resolve the hit under the finger with
-  // elementFromPoint. The browser fires a synthetic click after touch, so we
-  // flag it to be ignored by the click handler above.
-  svg.addEventListener(
-    'pointerdown',
-    (event) => {
-      if (event.pointerType !== 'touch') return;
-      scrubbing = true;
-      movedDuringTouch = false;
-      downHit = hitAt(event.clientX, event.clientY);
-      downWasActive = !!(downHit && downHit.classList.contains('active'));
-      // Preview immediately on press (does nothing extra if already active).
-      if (downHit) select(downHit);
-    },
-    { passive: true }
-  );
+  // --- Touch: tap toggles, drag scrubs. ---
+  // Not passive: we call preventDefault() to stop the synthetic mouse click
+  // (and text selection) the browser would otherwise emit after the touch.
+  svg.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'touch') return;
+    event.preventDefault();
+    scrubbing = true;
+    movedDuringTouch = false;
+    downHit = hitAt(event.clientX, event.clientY);
+    downWasActive = !!(downHit && downHit.classList.contains('active'));
+    if (downHit) select(downHit); // preview on press
+  });
   svg.addEventListener(
     'pointermove',
     (event) => {
@@ -439,7 +424,6 @@ function wireChart(wrap, svg, { select: rawSelect, clear: rawClear }) {
     if (event && event.pointerType && event.pointerType !== 'touch') return;
     if (!scrubbing) return;
     scrubbing = false;
-    lastTouchEndGlobal = Date.now(); // ghost click that follows is ignored
     // A stationary tap on a point that was already selected toggles it off.
     const upHit = event ? hitAt(event.clientX, event.clientY) : downHit;
     if (!movedDuringTouch && downWasActive && upHit && upHit === downHit) {

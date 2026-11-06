@@ -1,3 +1,22 @@
+// Subtle haptic feedback for key actions. No-ops where the Vibration API is
+// unavailable (iOS Safari, desktop) or when the user prefers reduced motion.
+// `pattern` is an ms duration or an array accepted by navigator.vibrate.
+const reducedMotion =
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+export function haptic(pattern = 10) {
+  if (reducedMotion) return;
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(pattern);
+    }
+  } catch {
+    /* ignore: haptics are best-effort */
+  }
+}
+
 const paths = {
   home: '<path d="m3 10.2 9-7.2 9 7.2V20a1 1 0 0 1-1 1h-4.8v-6.5H8.8V21H4a1 1 0 0 1-1-1Z"/>',
   dumbbell:
@@ -358,7 +377,10 @@ export function confirmDialog({
         {
           label: confirmLabel,
           variant: danger ? 'btn-danger' : 'btn-primary',
-          onClick: () => settle(true),
+          onClick: () => {
+            if (danger) haptic(18);
+            settle(true);
+          },
         },
       ],
       onClose: () => settle(false),

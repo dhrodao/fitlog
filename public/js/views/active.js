@@ -7,6 +7,7 @@ import {
   formatClock,
   formatNumber,
   formatVolume,
+  haptic,
   icon,
   openActionSheet,
   openModal,
@@ -451,6 +452,7 @@ export async function render(container, ctx) {
       set.completed = !set.completed;
       row.classList.toggle('completed', set.completed);
       toggle.classList.toggle('checked', set.completed);
+      if (set.completed) haptic(12);
       renderStats();
       try {
         await api.workouts.updateSet(workout.id, setId, {
@@ -581,6 +583,7 @@ export async function render(container, ctx) {
     try {
       const { workout: finished } = await api.workouts.finish(workout.id, {});
       ctx.setActiveWorkout(null);
+      haptic([12, 40, 24]);
       toast('¡Entrenamiento guardado!', 'success');
       ctx.navigate(`/workouts/${finished.id}`);
     } catch (error) {

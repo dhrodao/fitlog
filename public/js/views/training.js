@@ -6,6 +6,7 @@ import {
   formatDate,
   formatDuration,
   formatVolume,
+  haptic,
   icon,
   openActionSheet,
   setLoading,
@@ -223,6 +224,7 @@ export async function render(container, ctx) {
     buttons.forEach((button) => setLoading(button, true, 'Empezando...'));
     try {
       await api.workouts.create({ name: 'Entreno' });
+      haptic(10);
       ctx.navigate('/workout/active');
     } catch (error) {
       buttons.forEach((button) => setLoading(button, false));
@@ -240,6 +242,7 @@ export async function render(container, ctx) {
     setLoading(button, true, 'Empezando...');
     try {
       await api.routines.start(id);
+      haptic(10);
       ctx.navigate('/workout/active');
     } catch (error) {
       setLoading(button, false);

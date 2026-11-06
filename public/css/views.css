@@ -971,7 +971,7 @@
 .set-head,
 .set-row {
   display: grid;
-  grid-template-columns: 34px 1fr 1fr 44px;
+  grid-template-columns: 30px 1.1fr 1fr 1fr 44px;
   align-items: center;
   gap: 6px;
 }
@@ -1076,6 +1076,24 @@
 
 .set-cell {
   position: relative;
+}
+
+.set-prev {
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--muted-2);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.set-prev:active {
+  color: var(--text);
 }
 
 .set-cell .unit {

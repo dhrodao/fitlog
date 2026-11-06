@@ -30,14 +30,21 @@ function computeTotals(workout) {
   return { volume, sets };
 }
 
+function prevSet(previousSets, index) {
+  return previousSets?.[index] || previousSets?.[previousSets.length - 1] || null;
+}
+
 function prevLabel(previousSets, index) {
-  const prev = previousSets?.[index] || previousSets?.[previousSets.length - 1];
+  const prev = prevSet(previousSets, index);
   if (!prev) return '—';
   const weight = prev.weightKg != null ? `${formatNumber(prev.weightKg, 1)}kg` : '—';
   return `${weight} × ${prev.reps ?? '—'}`;
 }
 
 function setRow(exercise, set, index) {
+  const previous = prevSet(exercise.previousSets, index);
+  const weightPlaceholder = previous?.weightKg != null ? formatNumber(previous.weightKg, 1) : '0';
+  const repsPlaceholder = previous?.reps != null ? String(previous.reps) : '0';
   return `
     <div class="set-swipe" data-set-id="${set.id}">
       <div class="set-swipe-bg" aria-hidden="true">
@@ -47,14 +54,16 @@ function setRow(exercise, set, index) {
       </div>
       <div class="set-row ${set.completed ? 'completed' : ''}" data-set-handle>
         <div class="set-num">${index + 1}</div>
-        <div class="set-cell" style="display:flex;flex-direction:column;gap:2px">
-          <span class="text-xs text-muted" style="text-align:center;font-size:10px">${esc(prevLabel(exercise.previousSets, index))}</span>
-          <input class="number-input" type="number" inputmode="decimal" step="0.5" placeholder="0"
+        <button type="button" class="set-prev" data-prev-fill aria-label="Usar datos de la serie anterior">
+          ${esc(prevLabel(exercise.previousSets, index))}
+        </button>
+        <div class="set-cell">
+          <input class="number-input" type="number" inputmode="decimal" step="0.5" min="0" placeholder="${esc(weightPlaceholder)}"
             enterkeyhint="next"
             value="${set.weightKg != null ? esc(String(set.weightKg)) : ''}" data-field="weightKg" aria-label="Peso en kg" />
         </div>
         <div class="set-cell">
-          <input class="number-input" type="number" inputmode="numeric" placeholder="0"
+          <input class="number-input" type="number" inputmode="numeric" min="0" placeholder="${esc(repsPlaceholder)}"
             enterkeyhint="done"
             value="${set.reps != null ? esc(String(set.reps)) : ''}" data-field="reps" aria-label="Repeticiones" />
         </div>
@@ -105,8 +114,9 @@ function exerciseBlock(exercise, { inSuperset = false } = {}) {
       <div class="set-table">
         <div class="set-head">
           <span>Serie</span>
-          <span class="l">Kg</span>
-          <span class="l">Reps</span>
+          <span>Anterior</span>
+          <span>Kg</span>
+          <span>Reps</span>
           <span>${icon('check', 13)}</span>
         </div>
         ${exercise.sets.map((set, index) => setRow(exercise, set, index)).join('')}
@@ -488,7 +498,17 @@ export async function render(container, ctx) {
     const setId = Number(row.dataset.setId);
     const set = getSet(weId, setId);
     if (!set) return;
-    const value = field.value === '' ? null : Number(field.value);
+    const raw = field.value;
+    let value = raw === '' ? null : Number(raw);
+    if (value != null) {
+      // Clamp negatives / invalid input to 0 and keep reps integer. Only
+      // overwrite the field when we actually changed it, so mid-typing values
+      // like "60." are not clobbered.
+      const invalid = !Number.isFinite(value) || value < 0;
+      if (invalid) value = 0;
+      if (field.dataset.field === 'reps') value = Math.round(value);
+      if (invalid) field.value = String(value);
+    }
     set[field.dataset.field] = value;
     renderStats();
     persistSet(weId, setId);
@@ -498,6 +518,30 @@ export async function render(container, ctx) {
     const block = event.target.closest('[data-we-id]');
     if (!block) return;
     const weId = Number(block.dataset.weId);
+
+    const prevFill = event.target.closest('[data-prev-fill]');
+    if (prevFill) {
+      const wrapper = prevFill.closest('[data-set-id]');
+      const setId = Number(wrapper.dataset.setId);
+      const exercise = getExercise(weId);
+      const set = getSet(weId, setId);
+      if (!exercise || !set) return;
+      const index = exercise.sets.indexOf(set);
+      const previous =
+        exercise.previousSets?.[index] ||
+        exercise.previousSets?.[exercise.previousSets.length - 1];
+      if (!previous) return;
+      if (previous.weightKg != null) set.weightKg = previous.weightKg;
+      if (previous.reps != null) set.reps = previous.reps;
+      const weightInput = wrapper.querySelector('[data-field="weightKg"]');
+      const repsInput = wrapper.querySelector('[data-field="reps"]');
+      if (weightInput && set.weightKg != null) weightInput.value = String(set.weightKg);
+      if (repsInput && set.reps != null) repsInput.value = String(set.reps);
+      haptic(8);
+      renderStats();
+      persistSet(weId, setId);
+      return;
+    }
 
     const toggle = event.target.closest('[data-toggle]');
     if (toggle) {

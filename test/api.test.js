@@ -119,8 +119,11 @@ test('flujo completo de la API', async (t) => {
     assert.equal(workout.exercises.length, 2);
     assert.equal(workout.exercises[0].sets.length, 3);
     assert.equal(workout.exercises[1].sets.length, 4);
-    assert.equal(workout.exercises[0].sets[0].reps, 8);
-    assert.equal(workout.exercises[1].sets[0].reps, 6);
+    // Sets start empty (no prefill); values are entered by the user or filled
+    // on demand from the "Anterior" column.
+    assert.equal(workout.exercises[0].sets[0].reps, null);
+    assert.equal(workout.exercises[0].sets[0].weightKg, null);
+    assert.equal(workout.exercises[1].sets[0].reps, null);
 
     await agent.post(`/api/routines/${routine.id}/start`).expect(409);
     await agent.post('/api/workouts').send({ name: 'Otro' }).expect(409);
@@ -135,6 +138,19 @@ test('flujo completo de la API', async (t) => {
       .expect(200);
     assert.equal(updated.body.set.weightKg, 60);
     assert.equal(updated.body.set.completed, true);
+
+    // Negative values are clamped to 0 server-side.
+    const clamped = await agent
+      .patch(`/api/workouts/${workoutId}/sets/${firstSet.id}`)
+      .send({ weightKg: -20, reps: -5 })
+      .expect(200);
+    assert.equal(clamped.body.set.weightKg, 0);
+    assert.equal(clamped.body.set.reps, 0);
+    // Restore the set for the rest of the flow.
+    await agent
+      .patch(`/api/workouts/${workoutId}/sets/${firstSet.id}`)
+      .send({ weightKg: 60, reps: 8, completed: true })
+      .expect(200);
 
     const added = await agent
       .post(

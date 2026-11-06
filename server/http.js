@@ -22,6 +22,12 @@ export function toPositiveInt(value, fallback = null) {
   return Math.max(0, Math.round(num));
 }
 
+export function toNonNegativeNumber(value, fallback = null) {
+  const num = toNumber(value, fallback);
+  if (num === null) return fallback;
+  return Math.max(0, num);
+}
+
 export function requireString(value, field, { max = 200 } = {}) {
   if (typeof value !== 'string' || !value.trim()) {
     throw new HttpError(400, `El campo "${field}" es obligatorio`);

@@ -1,5 +1,5 @@
 import { db, nowIso } from '../db.js';
-import { HttpError, toNumber, toPositiveInt } from '../http.js';
+import { HttpError, toNumber, toPositiveInt, toNonNegativeNumber } from '../http.js';
 import { serializeExercise } from './exercises.js';
 
 export function serializeSet(row) {
@@ -187,12 +187,6 @@ export function getWorkoutDetail(userId, workoutId) {
   };
 }
 
-function parseTargetReps(value) {
-  if (!value) return null;
-  const match = String(value).match(/\d+/);
-  return match ? Number(match[0]) : null;
-}
-
 export function createWorkout(userId, { name, location = null, notes = null, routineId = null } = {}) {
   const startedAt = nowIso();
   const info = db
@@ -234,25 +228,14 @@ export function addExerciseToWorkout(
 
   const workoutExerciseId = info.lastInsertRowid;
   const count = Math.max(1, Math.min(Number(targetSets) || 3, 12));
-  const previous = prefill
-    ? getPreviousSets(userId, exerciseId, workout.started_at, workout.id)
-    : [];
-  const defaultReps = parseTargetReps(targetReps);
 
   const insertSet = db.prepare(
     `INSERT INTO workout_sets (workout_exercise_id, set_number, weight_kg, reps, completed, rest_seconds, created_at)
-     VALUES (?, ?, ?, ?, 0, NULL, ?)`
+     VALUES (?, ?, NULL, NULL, 0, NULL, ?)`
   );
 
   for (let i = 0; i < count; i += 1) {
-    const prev = previous[i] || previous[previous.length - 1] || null;
-    insertSet.run(
-      workoutExerciseId,
-      i + 1,
-      prev ? prev.weightKg : null,
-      prev ? prev.reps : defaultReps,
-      nowIso()
-    );
+    insertSet.run(workoutExerciseId, i + 1, nowIso());
   }
 
   return workoutExerciseId;
@@ -322,7 +305,7 @@ export function addSet(userId, workoutId, workoutExerciseId, input = {}) {
     .run(
       workoutExerciseId,
       next,
-      toNumber(input.weightKg),
+      toNonNegativeNumber(input.weightKg),
       toPositiveInt(input.reps),
       input.completed ? 1 : 0,
       toPositiveInt(input.restSeconds),
@@ -344,7 +327,7 @@ export function updateSet(userId, workoutId, setId, input = {}) {
   if (!row) throw new HttpError(404, 'Serie no encontrada');
 
   const weight =
-    input.weightKg === undefined ? row.weight_kg : toNumber(input.weightKg);
+    input.weightKg === undefined ? row.weight_kg : toNonNegativeNumber(input.weightKg);
   const reps = input.reps === undefined ? row.reps : toPositiveInt(input.reps);
   const completed =
     input.completed === undefined ? row.completed : input.completed ? 1 : 0;

@@ -1,0 +1,63 @@
+name: Deploy to production
+
+# Redeploys the production stack whenever main is updated. Runs on a
+# self-hosted runner installed on the production machine (the app lives behind
+# a Cloudflare Tunnel with no inbound ports, so the deploy must be pull-based:
+# the runner on that host fetches the new code and rebuilds the container).
+#
+# The deploy operates on the existing production checkout at PROD_DIR, which
+# already holds the real .env and the ./data bind mount (the SQLite database).
+# We intentionally do NOT use the runner's own checkout so the database and
+# configuration are never replaced.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Never run two deploys at once.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  PROD_DIR: /opt/fitlog
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Update production checkout
+        run: |
+          set -euo pipefail
+          cd "$PROD_DIR"
+          git fetch --prune origin
+          git checkout main
+          git reset --hard origin/main
+
+      - name: Build and (re)start the stack
+        run: |
+          set -euo pipefail
+          cd "$PROD_DIR"
+          # Rebuild only the app image and recreate the container. The
+          # cloudflared service and the ./data bind mount are left untouched.
+          docker compose up -d --build app
+
+      - name: Wait for the app to become healthy
+        run: |
+          set -euo pipefail
+          cd "$PROD_DIR"
+          PORT="$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2)"
+          PORT="${PORT:-3000}"
+          url="http://127.0.0.1:${PORT}/api/health"
+          echo "Probing ${url} ..."
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 3 "$url" >/dev/null 2>&1; then
+              echo "App is healthy."
+              exit 0
+            fi
+            echo "  attempt ${i}/30 not ready yet; retrying in 2s"
+            sleep 2
+          done
+          echo "::error::App did not become healthy in time; dumping recent logs" >&2
+          docker compose logs --tail 60 app >&2 || true
+          exit 1

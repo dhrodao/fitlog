@@ -158,8 +158,6 @@ CREATE TABLE IF NOT EXISTS hevy_sync (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_hevy_webhook_token
-  ON hevy_sync(webhook_token) WHERE webhook_token IS NOT NULL;
 `;
 
 db.exec(schema);

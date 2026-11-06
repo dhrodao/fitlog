@@ -91,9 +91,14 @@ docker compose up -d
 
 Docker setup details:
 
-- **Persistence**: the SQLite database lives in the `fitness-data` volume
-  (mounted at `/app/data`), so it survives `down`/`up`. To start fresh:
-  `docker compose down -v`.
+- **Persistence**: the SQLite database is stored on the host via a bind mount
+  (`./data` on the host → `/app/data` in the container), so `data/fitness.db`
+  lives in the project's `data/` directory and survives `down`/`up`. It is
+  directly visible and easy to back up from the host (just copy the file, ideally
+  with the app stopped or using `sqlite3 ... ".backup"` for WAL consistency).
+  The container runs as the non-root `node` user (UID/GID 1000); on single-user
+  Linux hosts that matches the host user, so SQLite can write without extra
+  tweaks. To start fresh, stop the stack and delete `data/fitness.db`.
 - **Host network**: both the build and the runtime use `network_mode: host`
   because this machine's Docker *bridge* network has no Internet access
   (required for `npm ci` and to sync the exercise catalog). With host networking

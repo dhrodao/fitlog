@@ -26,9 +26,14 @@ services:
     # ports:
     #   - "${PORT:-3000}:${PORT:-3000}"
 
-    # Persist the SQLite database outside the container.
+    # Persist the SQLite database on the host via a bind mount.
+    # ./data on the host is mounted at /app/data in the container, so the
+    # DB_PATH (data/fitness.db) lives in the project's ./data directory and
+    # is directly visible/backup-able from the host. The container runs as the
+    # non-root `node` user (UID/GID 1000); on single-user Linux hosts that
+    # matches the host user, so SQLite can write without extra tweaks.
     volumes:
-      - fitness-data:/app/data
+      - ./data:/app/data
 
     # Health check against the app endpoint.
     healthcheck:
@@ -59,5 +64,3 @@ services:
     depends_on:
       - app
 
-volumes:
-  fitness-data:

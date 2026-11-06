@@ -333,7 +333,17 @@ function wireChart(wrap, svg, { select, clear }) {
     return el && el.closest ? el.closest('.chart-hit') : null;
   };
 
-  // Desktop: hover to preview, click to pin/unpin.
+  // Touch interaction state (declared up front so the click handler can read
+  // suppressClick regardless of listener registration order).
+  let scrubbing = false;
+  let lastTouchEnd = 0;
+  let movedDuringTouch = false;
+  let downHit = null;
+  let downWasActive = false;
+
+  // Desktop: hover to preview, click to pin/unpin. Touch is handled by the
+  // pointer cycle below; the synthetic click that follows a tap is ignored so
+  // it doesn't undo the selection made on pointerdown.
   svg.addEventListener('pointermove', (event) => {
     if (event.pointerType === 'touch') return; // touch uses scrubbing below
     const hit = event.target.closest('.chart-hit');
@@ -344,6 +354,9 @@ function wireChart(wrap, svg, { select, clear }) {
     clear();
   });
   svg.addEventListener('click', (event) => {
+    // Swallow the synthetic click that the browser fires right after a touch
+    // tap; the touch pointer cycle already handled the selection.
+    if (Date.now() - lastTouchEnd < 700) return;
     const hit = event.target.closest('.chart-hit');
     if (!hit) {
       clear();
@@ -353,16 +366,20 @@ function wireChart(wrap, svg, { select, clear }) {
     else select(hit);
   });
 
-  // Touch: scrub. On drag the pointer events keep firing on the original
-  // target, so resolve the hit under the finger with elementFromPoint.
-  let scrubbing = false;
+  // Touch: tap toggles, drag scrubs. On drag the pointer events keep firing on
+  // the original target, so resolve the hit under the finger with
+  // elementFromPoint. The browser fires a synthetic click after touch, so we
+  // flag it to be ignored by the click handler above.
   svg.addEventListener(
     'pointerdown',
     (event) => {
       if (event.pointerType !== 'touch') return;
       scrubbing = true;
-      const hit = hitAt(event.clientX, event.clientY);
-      if (hit) select(hit);
+      movedDuringTouch = false;
+      downHit = hitAt(event.clientX, event.clientY);
+      downWasActive = !!(downHit && downHit.classList.contains('active'));
+      // Preview immediately on press (does nothing extra if already active).
+      if (downHit) select(downHit);
     },
     { passive: true }
   );
@@ -370,16 +387,26 @@ function wireChart(wrap, svg, { select, clear }) {
     'pointermove',
     (event) => {
       if (event.pointerType !== 'touch' || !scrubbing) return;
+      movedDuringTouch = true;
       const hit = hitAt(event.clientX, event.clientY);
       if (hit) select(hit);
     },
     { passive: true }
   );
-  const endScrub = () => {
+  const endTouch = (event) => {
+    if (event && event.pointerType && event.pointerType !== 'touch') return;
+    if (!scrubbing) return;
     scrubbing = false;
+    lastTouchEnd = Date.now(); // the synthetic click that follows is ignored
+    // A stationary tap on a point that was already selected toggles it off.
+    const upHit = event ? hitAt(event.clientX, event.clientY) : downHit;
+    if (!movedDuringTouch && downWasActive && upHit && upHit === downHit) {
+      clear();
+    }
+    downHit = null;
   };
-  svg.addEventListener('pointerup', endScrub, { passive: true });
-  svg.addEventListener('pointercancel', endScrub, { passive: true });
+  svg.addEventListener('pointerup', endTouch, { passive: true });
+  svg.addEventListener('pointercancel', endTouch, { passive: true });
 
   // Dismiss the tooltip on scroll; it is absolutely positioned so it would
   // otherwise float away from the chart. Self-detaches once the chart is gone.

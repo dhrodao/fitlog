@@ -42,10 +42,12 @@ function setRow(exercise, set, index) {
       <div class="set-cell" style="display:flex;flex-direction:column;gap:2px">
         <span class="text-xs text-muted" style="text-align:center;font-size:10px">${esc(prevLabel(exercise.previousSets, index))}</span>
         <input class="number-input" type="number" inputmode="decimal" step="0.5" placeholder="0"
+          enterkeyhint="next"
           value="${set.weightKg != null ? esc(String(set.weightKg)) : ''}" data-field="weightKg" aria-label="Peso en kg" />
       </div>
       <div class="set-cell">
         <input class="number-input" type="number" inputmode="numeric" placeholder="0"
+          enterkeyhint="done"
           value="${set.reps != null ? esc(String(set.reps)) : ''}" data-field="reps" aria-label="Repeticiones" />
       </div>
       <button type="button" class="check-btn ${set.completed ? 'checked' : ''}" data-toggle aria-label="Completar serie">

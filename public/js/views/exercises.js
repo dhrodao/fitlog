@@ -42,7 +42,7 @@ export async function render(container, ctx) {
 
       <div class="search-box">
         ${icon('search', 18)}
-        <input class="input" type="search" data-search placeholder="Buscar ejercicio..." autocomplete="off" />
+        <input class="input" type="search" data-search placeholder="Buscar ejercicio..." autocomplete="off" enterkeyhint="search" />
       </div>
 
       <div class="chip-row" data-categories>

@@ -385,7 +385,8 @@
   border-radius: var(--radius-md);
   padding: 13px 14px;
   color: var(--text);
-  font-size: 15px;
+  /* 16px prevents iOS Safari from auto-zooming when the field is focused. */
+  font-size: 16px;
   transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
   -webkit-appearance: none;
   appearance: none;
@@ -1289,6 +1290,8 @@ dialog::backdrop {
   text-align: center;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  /* 16px prevents iOS Safari from auto-zooming on focus. */
+  font-size: 16px;
   padding: 7px 4px;
   border-radius: 9px;
   background: transparent;

@@ -377,6 +377,7 @@ export function attachLineChart(root) {
 
   const clear = () => {
     tooltip.hidden = true;
+    tooltip.classList.remove('ct-above', 'ct-below');
     if (marker) marker.setAttribute('opacity', '0');
     if (activeDot) activeDot.setAttribute('opacity', '0');
     wrap.querySelectorAll('.chart-hit.active').forEach((el) => el.classList.remove('active'));
@@ -389,8 +390,23 @@ export function attachLineChart(root) {
     tooltip.hidden = false;
 
     const rect = wrap.getBoundingClientRect();
-    const ratio = cx / 340; // viewBox width used by lineChart
-    tooltip.style.left = `${ratio * rect.width}px`;
+    // The viewBox is "0 0 <vbW> <vbH>"; map chart coords to pixels.
+    const vb = (svg.getAttribute('viewBox') || '0 0 340 160').split(/\s+/).map(Number);
+    const vbW = vb[2] || 340;
+    const vbH = vb[3] || 160;
+    const px = (cx / vbW) * rect.width;
+    const py = (cy / vbH) * rect.height;
+    // Keep the (center-anchored) tooltip within the chart horizontally.
+    const half = Math.min(tooltip.offsetWidth, 190) / 2 + 4;
+    const clampedX = Math.max(half, Math.min(rect.width - half, px));
+    tooltip.style.left = `${clampedX}px`;
+    tooltip.style.top = `${py}px`;
+
+    // Prefer showing the tooltip above the point; flip below when the point
+    // sits in the upper part of the chart and there isn't room above.
+    const relY = cy / vbH;
+    tooltip.classList.toggle('ct-below', relY < 0.4);
+    tooltip.classList.toggle('ct-above', relY >= 0.4);
 
     if (marker) {
       marker.setAttribute('x1', String(cx));

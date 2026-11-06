@@ -658,6 +658,19 @@
   display: none;
 }
 
+/* Line chart: the tooltip is positioned relative to the selected point
+   (top set from JS). Place it above the point by default, or below when
+   there isn't enough room, so it never covers the data. */
+.chart-tooltip.ct-above {
+  top: auto;
+  transform: translate(-50%, calc(-100% - 10px));
+}
+
+.chart-tooltip.ct-below {
+  top: auto;
+  transform: translate(-50%, 10px);
+}
+
 .chart-tooltip .ct-row {
   display: flex;
   align-items: baseline;

@@ -83,6 +83,27 @@ export class HevyClient {
   async *workouts({ pageSize = 10 } = {}) {
     yield* this.paginate('/workouts', 'workouts', { pageSize });
   }
+
+  /**
+   * Incremental sync feed. Yields event objects of the form
+   * { type: 'updated'|'deleted', workout?: {...}, id?: string }.
+   * `since` is an ISO timestamp; only events after it are returned.
+   */
+  async *workoutEvents({ since, pageSize = 10 } = {}) {
+    let page = 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const params = { page, pageSize };
+      if (since) params.since = since;
+      const data = await this.request('/workouts/events', params);
+      const events = Array.isArray(data.events) ? data.events : [];
+      for (const event of events) yield event;
+
+      const pageCount = Number(data.page_count ?? data.pageCount ?? 1);
+      if (!events.length || page >= pageCount) break;
+      page += 1;
+    }
+  }
 }
 
 /**

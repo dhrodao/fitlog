@@ -144,6 +144,18 @@ CREATE TABLE IF NOT EXISTS measurements (
   UNIQUE(user_id, date)
 );
 CREATE INDEX IF NOT EXISTS idx_measurements_user ON measurements(user_id, date);
+
+CREATE TABLE IF NOT EXISTS hevy_sync (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  api_key TEXT NOT NULL,
+  auto_sync INTEGER NOT NULL DEFAULT 1,
+  last_sync_at TEXT,
+  last_cursor TEXT,
+  last_status TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `;
 
 db.exec(schema);

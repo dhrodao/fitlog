@@ -146,6 +146,19 @@ export const api = {
     hevyApi: (apiKey, write = false) =>
       request('/import/hevy/api', { method: 'POST', body: { apiKey, write } }),
   },
+  hevySync: {
+    status: () => request('/import/hevy/sync'),
+    connect: (apiKey, autoSync = true) =>
+      request('/import/hevy/sync/connect', {
+        method: 'POST',
+        body: { apiKey, autoSync },
+      }),
+    setAuto: (autoSync) =>
+      request('/import/hevy/sync', { method: 'PATCH', body: { autoSync } }),
+    run: (full = false) =>
+      request('/import/hevy/sync/run', { method: 'POST', body: { full } }),
+    disconnect: () => request('/import/hevy/sync', { method: 'DELETE' }),
+  },
 };
 
 export function errorMessage(error) {

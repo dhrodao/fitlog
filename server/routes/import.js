@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db.js';
-import { HttpError } from '../http.js';
+import { HttpError, asyncHandler } from '../http.js';
 import { linkUserExercises, normalizeExerciseName } from '../catalog.js';
 import {
   parseCsvObjects,
@@ -8,6 +8,13 @@ import {
   importWorkout,
 } from '../hevy-import.js';
 import { HevyClient, hevyApiWorkoutToNormalized } from '../hevy-client.js';
+import {
+  getSyncStatus,
+  connect as connectHevy,
+  setAutoSync,
+  disconnect as disconnectHevy,
+  syncUser,
+} from '../hevy-sync.js';
 
 const router = Router();
 
@@ -112,46 +119,102 @@ function buildTemplateMap(templates) {
  * Import workouts from the Hevy public API.
  * Body: { apiKey: string, write?: boolean }
  */
-router.post('/hevy/api', async (req, res) => {
-  const apiKey = String(req.body?.apiKey || '').trim();
-  const write = req.body?.write === true;
-  if (!apiKey) throw new HttpError(400, 'Debes indicar tu API key de Hevy');
+router.post(
+  '/hevy/api',
+  asyncHandler(async (req, res) => {
+    const apiKey = String(req.body?.apiKey || '').trim();
+    const write = req.body?.write === true;
+    if (!apiKey) throw new HttpError(400, 'Debes indicar tu API key de Hevy');
 
-  const client = new HevyClient(apiKey);
+    const client = new HevyClient(apiKey);
 
-  try {
-    await client.workoutCount();
-  } catch (err) {
-    if (err.status === 401) {
-      throw new HttpError(401, 'La API key de Hevy no es válida');
+    try {
+      await client.workoutCount();
+    } catch (err) {
+      if (err.status === 401) {
+        throw new HttpError(401, 'La API key de Hevy no es válida');
+      }
+      throw new HttpError(502, `No se pudo conectar con Hevy: ${err.message}`);
     }
-    throw new HttpError(502, `No se pudo conectar con Hevy: ${err.message}`);
-  }
 
-  const templates = [];
-  try {
-    for await (const t of client.exerciseTemplates()) templates.push(t);
-  } catch {
-    // Non-fatal: without templates we still resolve by catalog name.
-  }
-  const templateMap = buildTemplateMap(templates);
-
-  const workouts = [];
-  try {
-    for await (const w of client.workouts()) {
-      workouts.push(hevyApiWorkoutToNormalized(w));
+    const templates = [];
+    try {
+      for await (const t of client.exerciseTemplates()) templates.push(t);
+    } catch {
+      // Non-fatal: without templates we still resolve by catalog name.
     }
+    const templateMap = buildTemplateMap(templates);
+
+    const workouts = [];
+    try {
+      for await (const w of client.workouts()) {
+        workouts.push(hevyApiWorkoutToNormalized(w));
+      }
+    } catch (err) {
+      throw new HttpError(502, `Error leyendo entrenos de Hevy: ${err.message}`);
+    }
+    workouts.sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+
+    if (!workouts.length) {
+      throw new HttpError(400, 'No se encontraron entrenamientos en tu cuenta de Hevy');
+    }
+
+    const totals = runImport(req.user.id, workouts, { write, templateMap });
+    res.json({ ok: true, write, totals });
+  })
+);
+
+// ── Hevy sync (persistent connection via API key) ───────────────────────────
+
+/** Current sync connection status for the user. */
+router.get('/hevy/sync', (req, res) => {
+  res.json(getSyncStatus(req.user.id));
+});
+
+/** Connect / update the Hevy API key. Body: { apiKey, autoSync? } */
+router.post(
+  '/hevy/sync/connect',
+  asyncHandler(async (req, res) => {
+    const apiKey = String(req.body?.apiKey || '').trim();
+    const autoSync = req.body?.autoSync !== false;
+    if (!apiKey) throw new HttpError(400, 'Debes indicar tu API key de Hevy');
+    try {
+      const status = await connectHevy(req.user.id, apiKey, { autoSync });
+      res.json({ ok: true, status });
+    } catch (err) {
+      throw new HttpError(err.status || 502, err.message);
+    }
+  })
+);
+
+/** Toggle automatic background sync. Body: { autoSync: boolean } */
+router.patch('/hevy/sync', (req, res) => {
+  const autoSync = req.body?.autoSync === true;
+  try {
+    const status = setAutoSync(req.user.id, autoSync);
+    res.json({ ok: true, status });
   } catch (err) {
-    throw new HttpError(502, `Error leyendo entrenos de Hevy: ${err.message}`);
+    throw new HttpError(err.status || 400, err.message);
   }
-  workouts.sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+});
 
-  if (!workouts.length) {
-    throw new HttpError(400, 'No se encontraron entrenamientos en tu cuenta de Hevy');
-  }
+/** Run a sync now. Body: { full?: boolean } */
+router.post(
+  '/hevy/sync/run',
+  asyncHandler(async (req, res) => {
+    const full = req.body?.full === true;
+    try {
+      const result = await syncUser(req.user.id, { full });
+      res.json({ ok: true, ...result, status: getSyncStatus(req.user.id) });
+    } catch (err) {
+      throw new HttpError(err.status || 502, err.message);
+    }
+  })
+);
 
-  const totals = runImport(req.user.id, workouts, { write, templateMap });
-  res.json({ ok: true, write, totals });
+/** Disconnect and remove the stored key. */
+router.delete('/hevy/sync', (req, res) => {
+  res.json({ ok: true, status: disconnectHevy(req.user.id) });
 });
 
 export default router;

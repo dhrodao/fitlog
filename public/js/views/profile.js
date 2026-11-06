@@ -56,6 +56,58 @@ function totalsSummary(totals, write) {
     </div>`;
 }
 
+function hevySyncSection(status) {
+  if (status.connected) {
+    const last = status.lastSyncAt
+      ? formatDate(status.lastSyncAt)
+      : 'nunca';
+    const errorLine =
+      status.lastStatus === 'error' && status.lastError
+        ? `<div class="import-error" style="margin-top:10px">${esc(status.lastError)}</div>`
+        : '';
+    return `
+      <div class="card sync-card" data-sync-connected>
+        <div class="sync-row">
+          <div class="grow">
+            <div class="sync-title">${icon('check', 15)} Conectado a Hevy</div>
+            <div class="sync-sub">Clave ${esc(status.keyMasked || '••••')} · última sync: ${esc(last)}</div>
+          </div>
+        </div>
+        <label class="sync-toggle">
+          <input type="checkbox" data-sync-auto ${status.autoSync ? 'checked' : ''}>
+          <span>Sincronización automática (cada 6 h)</span>
+        </label>
+        ${errorLine}
+        <div class="sync-actions">
+          <button type="button" class="btn btn-primary btn-sm" data-sync-now>
+            ${icon('refresh', 15)} Sincronizar ahora
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" data-sync-disconnect>
+            Desconectar
+          </button>
+        </div>
+        <div data-sync-result style="margin-top:12px"></div>
+      </div>`;
+  }
+
+  return `
+    <div class="card sync-card" data-sync-disconnected>
+      <p class="text-muted" style="font-size:13px;line-height:1.5;margin:0 0 10px">
+        Conecta tu cuenta de Hevy con una API key (Hevy Pro: Ajustes → API) para
+        sincronizar tus entrenamientos automáticamente.
+      </p>
+      <input type="password" class="input" data-sync-key placeholder="API key de Hevy" autocomplete="off" style="width:100%">
+      <label class="sync-toggle">
+        <input type="checkbox" data-sync-auto-new checked>
+        <span>Activar sincronización automática</span>
+      </label>
+      <button type="button" class="btn btn-primary btn-block" data-sync-connect style="margin-top:10px">
+        ${icon('layers', 16)} Conectar con Hevy
+      </button>
+      <div data-sync-result style="margin-top:12px"></div>
+    </div>`;
+}
+
 function openHevyImport(ctx) {
   const modal = openModal({
     title: 'Importar de Hevy',
@@ -207,6 +259,13 @@ export async function render(container, ctx) {
   const recent = data.recent || [];
   let metric = 'duration';
 
+  let syncStatus = { connected: false };
+  try {
+    syncStatus = await api.hevySync.status();
+  } catch {
+    // Non-fatal: show the connect form by default.
+  }
+
   const chartHtml = (key) => {
     const config = METRICS[key];
     return barChart({
@@ -292,6 +351,11 @@ export async function render(container, ctx) {
       </section>
 
       <section>
+        <div class="section-head"><h2>Sincronización con Hevy</h2></div>
+        <div data-sync-section>${hevySyncSection(syncStatus)}</div>
+      </section>
+
+      <section>
         <div class="section-head">
           <h2>Entrenamientos</h2>
           <a class="link-btn" href="#/workouts" data-link="/workouts">Ver todo</a>
@@ -343,6 +407,98 @@ export async function render(container, ctx) {
 
   container.querySelector('[data-import-hevy]')?.addEventListener('click', () => {
     openHevyImport(ctx);
+  });
+
+  const syncSection = container.querySelector('[data-sync-section]');
+  const rerenderSync = (status) => {
+    syncStatus = status;
+    syncSection.innerHTML = hevySyncSection(status);
+  };
+
+  syncSection?.addEventListener('click', async (event) => {
+    const result = syncSection.querySelector('[data-sync-result]');
+    const setBusy = (busy, msg = '') => {
+      syncSection
+        .querySelectorAll('button')
+        .forEach((b) => (b.disabled = busy));
+      if (result) {
+        result.innerHTML = busy
+          ? `<div class="text-muted" style="font-size:13px">${esc(msg)}</div>`
+          : '';
+      }
+    };
+
+    if (event.target.closest('[data-sync-connect]')) {
+      const key = syncSection.querySelector('[data-sync-key]')?.value.trim();
+      const autoSync =
+        syncSection.querySelector('[data-sync-auto-new]')?.checked !== false;
+      if (!key) {
+        toast('Introduce tu API key', 'error');
+        return;
+      }
+      setBusy(true, 'Conectando…');
+      try {
+        const { status } = await api.hevySync.connect(key, autoSync);
+        toast('Cuenta de Hevy conectada', 'success');
+        rerenderSync(status);
+      } catch (error) {
+        setBusy(false);
+        if (result) result.innerHTML = `<div class="import-error">${esc(errorMessage(error))}</div>`;
+      }
+      return;
+    }
+
+    if (event.target.closest('[data-sync-now]')) {
+      setBusy(true, 'Sincronizando…');
+      try {
+        const response = await api.hevySync.run(false);
+        rerenderSync(response.status);
+        const after = syncSection.querySelector('[data-sync-result]');
+        if (after) after.innerHTML = totalsSummary(response.totals, true);
+        toast(`Sincronizado: +${response.totals.imported} entrenos`, 'success');
+        if (response.totals.imported > 0) setTimeout(() => ctx.refresh(), 1400);
+      } catch (error) {
+        setBusy(false);
+        if (result) result.innerHTML = `<div class="import-error">${esc(errorMessage(error))}</div>`;
+      }
+      return;
+    }
+
+    if (event.target.closest('[data-sync-disconnect]')) {
+      const confirmed = await confirmDialog({
+        title: 'Desconectar Hevy',
+        message: 'Se eliminará tu API key guardada. Los entrenos ya importados se conservan.',
+        confirmLabel: 'Desconectar',
+        danger: true,
+      });
+      if (!confirmed) return;
+      setBusy(true, 'Desconectando…');
+      try {
+        const { status } = await api.hevySync.disconnect();
+        toast('Cuenta de Hevy desconectada', 'success');
+        rerenderSync(status);
+      } catch (error) {
+        setBusy(false);
+        if (result) result.innerHTML = `<div class="import-error">${esc(errorMessage(error))}</div>`;
+      }
+    }
+  });
+
+  syncSection?.addEventListener('change', async (event) => {
+    const toggle = event.target.closest('[data-sync-auto]');
+    if (!toggle) return;
+    try {
+      await api.hevySync.setAuto(toggle.checked);
+      toast(
+        toggle.checked
+          ? 'Sincronización automática activada'
+          : 'Sincronización automática desactivada',
+        'success'
+      );
+    } catch (error) {
+      toggle.checked = !toggle.checked;
+      toast(errorMessage(error), 'error');
+    }
   });
 
   container.querySelector('[data-metrics]')?.addEventListener('click', (event) => {

@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import config from './config.js';
 import { syncCatalog, getCatalogStatus } from './catalog.js';
+import { startSyncScheduler } from './hevy-sync.js';
 
 const app = createApp();
 
@@ -26,4 +27,7 @@ app.listen(config.port, () => {
   } else {
     console.log(`[catálogo] en caché: ${status.count} ejercicios`);
   }
+
+  startSyncScheduler({ intervalHours: 6 });
+  console.log('[hevy-sync] programador activo (cada 6 h para usuarios con auto-sync)');
 });

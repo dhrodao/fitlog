@@ -156,6 +156,36 @@ the browser obtains an ID token and the server verifies it with the official
 library. Without `GOOGLE_CLIENT_ID`, development falls back to the "demo mode"
 button.
 
+## Import from Hevy
+
+You can bring your [Hevy](https://www.hevy.com/) workout history into Fitlog.
+
+From the **Profile** view:
+
+- **Importar de Hevy**: upload a Hevy CSV export (Hevy → Settings → Export
+  Data → `workouts.csv`) or paste an API key for a one-off import. A preview
+  (dry-run) shows what would be imported before writing.
+- **Sincronización con Hevy**: connect your Hevy account with an API key
+  (Hevy Pro → Settings → API). The key is stored encrypted at rest
+  (AES-256-GCM derived from `SESSION_SECRET`). You can trigger a manual sync or
+  enable automatic background sync (every 6 h). Syncs are incremental via the
+  Hevy `/v1/workouts/events` feed and idempotent, so re-running never
+  duplicates workouts.
+
+Exercise names from Hevy are matched to the free-exercise-db catalog (directly
+or after stripping the trailing `(Equipment)` suffix); unmatched names are kept
+as custom exercises. Deletions in Hevy are detected but not propagated: already
+imported workouts are preserved.
+
+CLI equivalents are also available (dry-run by default; pass `--write`):
+
+```bash
+node server/import-hevy-csv.js <file.csv> --user <id> [--write]
+node server/import-hevy-api.js --user <id> --api-key <KEY> [--write]
+```
+
+> Rotating `SESSION_SECRET` invalidates stored Hevy keys; just reconnect.
+
 ## Production
 
 - `NODE_ENV=production`, `COOKIE_SECURE=true` (with HTTPS) and

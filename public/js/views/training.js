@@ -314,7 +314,7 @@ export async function render(container, ctx) {
     ]);
   };
 
-  container.addEventListener('click', (event) => {
+  const onClick = (event) => {
     if (event.target.closest('[data-start-empty]')) {
       startEmpty();
       return;
@@ -373,7 +373,8 @@ export async function render(container, ctx) {
       }
       setCollapsed(collapsedSet);
     }
-  });
+  };
+  container.addEventListener('click', onClick);
 
   const elapsed = container.querySelector('[data-active-elapsed]');
   const timer = active && elapsed
@@ -384,6 +385,7 @@ export async function render(container, ctx) {
     : null;
 
   return () => {
+    container.removeEventListener('click', onClick);
     if (timer) clearInterval(timer);
   };
 }

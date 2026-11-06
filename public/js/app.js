@@ -23,6 +23,38 @@ nav.className = 'bottom-nav';
 nav.setAttribute('aria-label', 'Navegación principal');
 shell.append(viewRoot, nav);
 
+// Shrink the bottom nav while scrolling down, expand it when scrolling up
+// or near the top of the page.
+let lastScrollY = window.scrollY;
+let navScrollTicking = false;
+
+function syncNavScrollState() {
+  navScrollTicking = false;
+  const y = window.scrollY;
+  const goingDown = y > lastScrollY;
+  lastScrollY = y;
+
+  if (nav.classList.contains('hidden')) return;
+
+  if (y <= 24) {
+    nav.classList.remove('scrolled');
+  } else if (goingDown && y > 64) {
+    nav.classList.add('scrolled');
+  } else if (!goingDown) {
+    nav.classList.remove('scrolled');
+  }
+}
+
+window.addEventListener(
+  'scroll',
+  () => {
+    if (navScrollTicking) return;
+    navScrollTicking = true;
+    window.requestAnimationFrame(syncNavScrollState);
+  },
+  { passive: true },
+);
+
 const routes = [
   { name: 'login', pattern: /^\/login\/?$/, view: LoginView },
   { name: 'home', pattern: /^\/?$/, view: HomeView },
@@ -249,6 +281,8 @@ async function handleRoute() {
     if (typeof cleanup === 'function') state.cleanup = cleanup;
     updateNav(route.name);
     window.scrollTo({ top: 0, behavior: 'auto' });
+    lastScrollY = 0;
+    nav.classList.remove('scrolled');
   } catch (error) {
     if (error?.status === 401) {
       handleUnauthorized();

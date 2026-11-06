@@ -675,10 +675,44 @@
   backdrop-filter: blur(24px) saturate(160%);
   -webkit-backdrop-filter: blur(24px) saturate(160%);
   box-shadow: var(--shadow-lg);
+  transition:
+    height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    bottom 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-theme="light"] .bottom-nav {
   background: rgba(255, 255, 255, 0.86);
+}
+
+/* Compact state while scrolling down */
+.bottom-nav.scrolled {
+  height: var(--nav-height-compact);
+  padding: 4px 8px;
+  border-radius: 22px;
+  width: min(calc(100% - 44px), 460px);
+  bottom: calc(10px + var(--safe-bottom));
+}
+
+.bottom-nav.scrolled .nav-item {
+  height: 40px;
+  gap: 0;
+  font-size: 0;
+}
+
+.bottom-nav.scrolled .nav-item span:not(.nav-dot) {
+  max-height: 0;
+  opacity: 0;
+}
+
+.bottom-nav.scrolled .nav-item svg {
+  transform: scale(0.92);
+}
+
+.bottom-nav.scrolled .nav-item.active svg {
+  transform: translateY(0) scale(0.98);
 }
 
 .nav-item {
@@ -694,8 +728,22 @@
   font-size: 10.5px;
   font-weight: 650;
   letter-spacing: 0.01em;
-  transition: color 0.18s ease, background 0.18s ease, transform 0.15s ease;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease,
+    transform 0.15s ease,
+    height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    gap 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    font-size 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
+}
+
+.nav-item span:not(.nav-dot) {
+  overflow: hidden;
+  max-height: 16px;
+  transition:
+    max-height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease;
 }
 
 .nav-item svg {

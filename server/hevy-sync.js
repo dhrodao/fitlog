@@ -122,12 +122,26 @@ function webhookUrl() {
 export function userByWebhookToken(token) {
   const clean = String(token || '').trim();
   if (!clean) return null;
-  const row = db
+  const candidate = Buffer.from(clean);
+  // Compare against every enabled token in constant time to avoid leaking
+  // which bytes matched via response timing. The set of active webhook tokens
+  // is tiny (one per connected user), so scanning them is cheap.
+  const rows = db
     .prepare(
-      'SELECT user_id FROM hevy_sync WHERE webhook_token = ? AND webhook_enabled = 1'
+      'SELECT user_id, webhook_token FROM hevy_sync WHERE webhook_enabled = 1 AND webhook_token IS NOT NULL'
     )
-    .get(clean);
-  return row ? row.user_id : null;
+    .all();
+  let match = null;
+  for (const row of rows) {
+    const stored = Buffer.from(String(row.webhook_token));
+    if (
+      stored.length === candidate.length &&
+      crypto.timingSafeEqual(stored, candidate)
+    ) {
+      match = row.user_id;
+    }
+  }
+  return match;
 }
 
 /** Register the Hevy webhook for a user. Requires a connected account + PUBLIC_URL. */

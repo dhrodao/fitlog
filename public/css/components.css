@@ -1275,3 +1275,39 @@ dialog::backdrop {
   background: var(--surface-2);
   border-color: rgba(10, 132, 255, 0.5);
 }
+
+/* Hevy import modal */
+.import-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 6px 12px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.03));
+}
+
+.import-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 13.5px;
+}
+
+.import-summary-row + .import-summary-row {
+  border-top: 1px solid var(--border);
+}
+
+.import-summary-row span {
+  color: var(--muted);
+}
+
+.import-error {
+  border: 1px solid var(--danger, #e5484d);
+  color: var(--danger, #e5484d);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+}

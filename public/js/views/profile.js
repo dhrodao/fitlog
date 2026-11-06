@@ -10,6 +10,7 @@ import {
   formatNumber,
   formatVolume,
   icon,
+  openModal,
   toast,
 } from '../ui.js';
 
@@ -30,6 +31,155 @@ const METRICS = {
     formatValue: (value) => formatNumber(value),
   },
 };
+
+function totalsSummary(totals, write) {
+  const rows = write
+    ? [
+        ['Entrenos importados', totals.imported],
+        ['Omitidos (duplicados)', `${totals.skipped} (${totals.duplicates})`],
+        ['Ejercicios', totals.exercises],
+        ['Series', totals.sets],
+      ]
+    : [
+        ['Entrenos a importar', totals.imported],
+        ['Ejercicios', totals.exercises],
+        ['Series', totals.sets],
+      ];
+  return `
+    <div class="import-summary">
+      ${rows
+        .map(
+          ([label, value]) =>
+            `<div class="import-summary-row"><span>${esc(label)}</span><strong>${esc(String(value))}</strong></div>`
+        )
+        .join('')}
+    </div>`;
+}
+
+function openHevyImport(ctx) {
+  const modal = openModal({
+    title: 'Importar de Hevy',
+    subtitle: 'Sube el CSV exportado o conecta con la API',
+    content: `
+      <div class="segmented" data-hevy-tabs style="margin-bottom:14px">
+        <button type="button" class="active" data-tab="csv">Archivo CSV</button>
+        <button type="button" data-tab="api">API de Hevy</button>
+      </div>
+
+      <div data-panel="csv">
+        <p class="text-muted" style="font-size:13px;line-height:1.5;margin:0 0 10px">
+          En Hevy: Ajustes → Exportar datos. Sube aquí el archivo <code>workouts.csv</code>.
+        </p>
+        <label class="btn btn-secondary btn-block" style="cursor:pointer">
+          ${icon('layers', 16)} Elegir archivo CSV
+          <input type="file" accept=".csv,text/csv" data-csv-file hidden>
+        </label>
+        <div class="text-muted" data-csv-name style="font-size:12.5px;margin-top:8px"></div>
+      </div>
+
+      <div data-panel="api" hidden>
+        <p class="text-muted" style="font-size:13px;line-height:1.5;margin:0 0 10px">
+          Pega tu API key de Hevy (requiere Hevy Pro: Ajustes → API).
+        </p>
+        <input type="password" class="input" data-api-key placeholder="API key de Hevy" autocomplete="off" style="width:100%">
+      </div>
+
+      <div data-import-result style="margin-top:14px"></div>
+    `,
+    actions: [
+      {
+        label: 'Previsualizar',
+        variant: 'btn-secondary',
+        close: false,
+        onClick: () => runHevy(false),
+      },
+      {
+        label: 'Importar',
+        variant: 'btn-primary',
+        close: false,
+        onClick: () => runHevy(true),
+      },
+    ],
+  });
+
+  const body = modal.body;
+  let activeTab = 'csv';
+  let csvText = '';
+
+  const setTab = (tab) => {
+    activeTab = tab;
+    body
+      .querySelectorAll('[data-tab]')
+      .forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+    body.querySelector('[data-panel="csv"]').hidden = tab !== 'csv';
+    body.querySelector('[data-panel="api"]').hidden = tab !== 'api';
+  };
+
+  body.querySelector('[data-hevy-tabs]').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-tab]');
+    if (button) setTab(button.dataset.tab);
+  });
+
+  const fileInput = body.querySelector('[data-csv-file]');
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    csvText = await file.text();
+    body.querySelector('[data-csv-name]').textContent =
+      `${file.name} (${Math.round(file.size / 1024)} KB)`;
+  });
+
+  const result = body.querySelector('[data-import-result]');
+
+  async function runHevy(write) {
+    const buttons = modal.el.querySelectorAll('[data-action-index]');
+    try {
+      if (activeTab === 'csv' && !csvText) {
+        toast('Elige primero el archivo CSV', 'error');
+        return;
+      }
+      let apiKey = '';
+      if (activeTab === 'api') {
+        apiKey = body.querySelector('[data-api-key]').value.trim();
+        if (!apiKey) {
+          toast('Introduce tu API key', 'error');
+          return;
+        }
+      }
+
+      buttons.forEach((b) => {
+        b.disabled = true;
+      });
+      result.innerHTML = `<div class="text-muted" style="font-size:13px">${write ? 'Importando…' : 'Analizando…'}</div>`;
+
+      const response =
+        activeTab === 'csv'
+          ? await api.import.hevyCsv(csvText, write)
+          : await api.import.hevyApi(apiKey, write);
+
+      result.innerHTML = totalsSummary(response.totals, write);
+
+      if (write) {
+        toast(`Importados ${response.totals.imported} entrenos`, 'success');
+        setTimeout(() => {
+          modal.close();
+          ctx.refresh();
+        }, 1200);
+      }
+    } catch (error) {
+      if (error.status === 401 && activeTab === 'csv') {
+        modal.close();
+        ctx.handleUnauthorized();
+        return;
+      }
+      result.innerHTML = `<div class="import-error">${esc(errorMessage(error))}</div>`;
+    } finally {
+      buttons.forEach((b) => {
+        b.disabled = false;
+      });
+    }
+  }
+}
 
 export async function render(container, ctx) {
   let data;
@@ -135,6 +285,9 @@ export async function render(container, ctx) {
           <a class="quick-tile" href="#/routines" data-link="/routines">
             <span class="q-icon">${icon('list', 18)}</span><span>Rutinas</span>
           </a>
+          <button type="button" class="quick-tile" data-import-hevy>
+            <span class="q-icon">${icon('layers', 18)}</span><span>Importar de Hevy</span>
+          </button>
         </div>
       </section>
 
@@ -187,6 +340,10 @@ export async function render(container, ctx) {
   window.addEventListener('themechange', themeListener);
 
   container.querySelector('[data-theme-toggle]')?.addEventListener('click', () => toggleTheme());
+
+  container.querySelector('[data-import-hevy]')?.addEventListener('click', () => {
+    openHevyImport(ctx);
+  });
 
   container.querySelector('[data-metrics]')?.addEventListener('click', (event) => {
     const button = event.target.closest('[data-metric]');

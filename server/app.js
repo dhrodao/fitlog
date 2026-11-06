@@ -11,6 +11,7 @@ import routinesRoutes from './routes/routines.js';
 import workoutsRoutes from './routes/workouts.js';
 import measurementsRoutes from './routes/measurements.js';
 import statsRoutes from './routes/stats.js';
+import importRoutes from './routes/import.js';
 
 export function createApp() {
   const app = express();
@@ -48,7 +49,7 @@ export function createApp() {
     })
   );
 
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '5mb' }));
   app.use(cookieParser());
   app.use(attachUser);
 
@@ -62,6 +63,7 @@ export function createApp() {
   app.use('/api/workouts', requireAuth, workoutsRoutes);
   app.use('/api/measurements', requireAuth, measurementsRoutes);
   app.use('/api/stats', requireAuth, statsRoutes);
+  app.use('/api/import', requireAuth, importRoutes);
 
   const publicDir = path.join(config.root, 'public');
   app.use(

@@ -140,6 +140,12 @@ export const api = {
     overview: (period = '3m') => request(`/stats/overview?period=${period}`),
     exercise: (id) => request(`/stats/exercise/${id}`),
   },
+  import: {
+    hevyCsv: (csv, write = false) =>
+      request('/import/hevy/csv', { method: 'POST', body: { csv, write } }),
+    hevyApi: (apiKey, write = false) =>
+      request('/import/hevy/api', { method: 'POST', body: { apiKey, write } }),
+  },
 };
 
 export function errorMessage(error) {

@@ -1,0 +1,157 @@
+import { Router } from 'express';
+import { db } from '../db.js';
+import { HttpError } from '../http.js';
+import { linkUserExercises, normalizeExerciseName } from '../catalog.js';
+import {
+  parseCsvObjects,
+  csvRowsToWorkouts,
+  importWorkout,
+} from '../hevy-import.js';
+import { HevyClient, hevyApiWorkoutToNormalized } from '../hevy-client.js';
+
+const router = Router();
+
+const REQUIRED_CSV_COLUMNS = [
+  'title',
+  'start_time',
+  'exercise_title',
+  'weight_kg',
+  'reps',
+];
+
+/** Run the import loop (or a dry-run) and return aggregate totals. */
+function runImport(userId, workouts, { write, templateMap = null }) {
+  const totals = {
+    workouts: workouts.length,
+    imported: 0,
+    skipped: 0,
+    duplicates: 0,
+    exercises: 0,
+    sets: 0,
+    matched: 0,
+    custom: 0,
+  };
+
+  if (!write) {
+    for (const workout of workouts) {
+      totals.imported += 1;
+      totals.exercises += workout.exercises.length;
+      totals.sets += workout.exercises.reduce((n, e) => n + e.sets.length, 0);
+    }
+    return totals;
+  }
+
+  const apply = db.transaction(() => {
+    for (const workout of workouts) {
+      const res = importWorkout(userId, workout, { templateMap });
+      if (res.skipped) {
+        totals.skipped += 1;
+        if (res.reason === 'duplicate') totals.duplicates += 1;
+      } else {
+        totals.imported += 1;
+        totals.exercises += res.exercises;
+        totals.sets += res.sets;
+        totals.matched += res.matched;
+        totals.custom += res.custom;
+      }
+    }
+  });
+  apply();
+  linkUserExercises();
+  return totals;
+}
+
+/**
+ * Import workouts from a Hevy CSV export.
+ * Body: { csv: string, write?: boolean }
+ */
+router.post('/hevy/csv', (req, res) => {
+  const csv = req.body?.csv;
+  const write = req.body?.write === true;
+  if (typeof csv !== 'string' || !csv.trim()) {
+    throw new HttpError(400, 'Debes adjuntar el contenido del CSV');
+  }
+
+  const rows = parseCsvObjects(csv);
+  if (!rows.length) throw new HttpError(400, 'El CSV no tiene filas de datos');
+
+  const missing = REQUIRED_CSV_COLUMNS.filter((c) => !(c in rows[0]));
+  if (missing.length) {
+    throw new HttpError(
+      400,
+      `El CSV no parece de Hevy. Faltan columnas: ${missing.join(', ')}`
+    );
+  }
+
+  const workouts = csvRowsToWorkouts(rows);
+  if (!workouts.length) {
+    throw new HttpError(400, 'No se detectaron entrenamientos en el CSV');
+  }
+
+  const totals = runImport(req.user.id, workouts, { write });
+  res.json({ ok: true, write, totals });
+});
+
+/** Build a map Hevy template title -> catalog id for confident matches. */
+function buildTemplateMap(templates) {
+  const byNorm = new Map();
+  for (const row of db.prepare('SELECT id, name FROM exercise_catalog').all()) {
+    const norm = normalizeExerciseName(row.name);
+    if (!byNorm.has(norm)) byNorm.set(norm, row.id);
+  }
+  const map = new Map();
+  for (const t of templates) {
+    if (!t.title) continue;
+    const id = byNorm.get(normalizeExerciseName(t.title));
+    if (id) map.set(t.title, id);
+  }
+  return map;
+}
+
+/**
+ * Import workouts from the Hevy public API.
+ * Body: { apiKey: string, write?: boolean }
+ */
+router.post('/hevy/api', async (req, res) => {
+  const apiKey = String(req.body?.apiKey || '').trim();
+  const write = req.body?.write === true;
+  if (!apiKey) throw new HttpError(400, 'Debes indicar tu API key de Hevy');
+
+  const client = new HevyClient(apiKey);
+
+  try {
+    await client.workoutCount();
+  } catch (err) {
+    if (err.status === 401) {
+      throw new HttpError(401, 'La API key de Hevy no es válida');
+    }
+    throw new HttpError(502, `No se pudo conectar con Hevy: ${err.message}`);
+  }
+
+  const templates = [];
+  try {
+    for await (const t of client.exerciseTemplates()) templates.push(t);
+  } catch {
+    // Non-fatal: without templates we still resolve by catalog name.
+  }
+  const templateMap = buildTemplateMap(templates);
+
+  const workouts = [];
+  try {
+    for await (const w of client.workouts()) {
+      workouts.push(hevyApiWorkoutToNormalized(w));
+    }
+  } catch (err) {
+    throw new HttpError(502, `Error leyendo entrenos de Hevy: ${err.message}`);
+  }
+  workouts.sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+
+  if (!workouts.length) {
+    throw new HttpError(400, 'No se encontraron entrenamientos en tu cuenta de Hevy');
+  }
+
+  const totals = runImport(req.user.id, workouts, { write, templateMap });
+  res.json({ ok: true, write, totals });
+});
+
+export default router;

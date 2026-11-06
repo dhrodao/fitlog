@@ -8,6 +8,7 @@ import {
   importWorkout,
 } from '../hevy-import.js';
 import { HevyClient, hevyApiWorkoutToNormalized } from '../hevy-client.js';
+import { storeTemplates } from '../hevy-templates.js';
 import {
   getSyncStatus,
   connect as connectHevy,
@@ -145,6 +146,7 @@ router.post(
     } catch {
       // Non-fatal: without templates we still resolve by catalog name.
     }
+    if (write && templates.length) storeTemplates(req.user.id, templates);
     const templateMap = buildTemplateMap(templates);
 
     const workouts = [];

@@ -158,6 +158,21 @@ CREATE TABLE IF NOT EXISTS hevy_sync (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS hevy_templates (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  template_id TEXT NOT NULL,
+  title TEXT,
+  type TEXT,
+  primary_muscle TEXT,
+  secondary_muscles TEXT,
+  equipment TEXT,
+  thumbnail_url TEXT,
+  is_custom INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, template_id)
+);
+CREATE INDEX IF NOT EXISTS idx_hevy_templates_user ON hevy_templates(user_id);
 `;
 
 db.exec(schema);

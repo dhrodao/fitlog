@@ -81,7 +81,17 @@ export function getOrCreateByName(userId, name, { category = 'Personalizado', im
   const existing = db
     .prepare('SELECT * FROM exercises WHERE user_id = ? AND name = ?')
     .get(userId, clean);
-  if (existing) return existing;
+  if (existing) {
+    // Backfill an image if we now have one and the exercise lacked it.
+    if (imageUrl && !existing.image_url) {
+      db.prepare('UPDATE exercises SET image_url = ? WHERE id = ?').run(
+        imageUrl,
+        existing.id
+      );
+      return db.prepare('SELECT * FROM exercises WHERE id = ?').get(existing.id);
+    }
+    return existing;
+  }
 
   const info = db
     .prepare(

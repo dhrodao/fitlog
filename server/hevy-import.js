@@ -1,6 +1,7 @@
 import { db, nowIso } from './db.js';
 import { normalizeExerciseName } from './catalog.js';
 import { getOrCreateFromCatalog, getOrCreateByName } from './services/exercises.js';
+import { resolveByTemplateId } from './hevy-templates.js';
 
 /**
  * Shared helpers to import workouts coming from Hevy (CSV export or public API)
@@ -106,17 +107,29 @@ function catalogByNorm() {
 }
 
 /**
- * Resolve a Hevy exercise name to a Fitlog exercise row for the given user.
+ * Resolve a Hevy exercise to a Fitlog exercise row for the given user.
  * Tries, in order:
- *   1. an explicit Hevy->catalog id override (templateMap),
- *   2. exact normalized catalog name,
- *   3. catalog name after stripping the trailing "(Equipment)" suffix,
- *   4. equipment moved to the front ("Bench Press (Barbell)" ->
+ *   1. the cached Hevy template id (reliable; keeps/links catalog image or
+ *      falls back to Hevy's thumbnail for custom exercises),
+ *   2. an explicit Hevy->catalog id override (templateMap),
+ *   3. exact normalized catalog name,
+ *   4. catalog name after stripping the trailing "(Equipment)" suffix,
+ *   5. equipment moved to the front ("Bench Press (Barbell)" ->
  *      "Barbell Bench Press"), matching free-exercise-db's naming,
- *   5. otherwise create a custom exercise keeping the original Hevy name.
+ *   6. otherwise create a custom exercise keeping the original Hevy name.
  */
-export function resolveHevyExercise(userId, hevyName, { templateMap = null } = {}) {
+export function resolveHevyExercise(
+  userId,
+  hevyName,
+  { templateMap = null, templateId = null } = {}
+) {
   const name = String(hevyName || '').trim();
+
+  if (templateId) {
+    const byTemplate = resolveByTemplateId(userId, templateId);
+    if (byTemplate) return byTemplate;
+  }
+
   if (!name) return null;
 
   if (templateMap && templateMap.has(name)) {
@@ -240,9 +253,13 @@ export function importWorkout(userId, workout, { templateMap = null } = {}) {
     let nextGroup = 1;
 
     workout.exercises.forEach((ex, position) => {
-      const resolved = resolveHevyExercise(userId, ex.name, { templateMap });
+      const resolved = resolveHevyExercise(userId, ex.name, {
+        templateMap,
+        templateId: ex.templateId || null,
+      });
       if (!resolved) return;
-      if (resolved.source === 'custom') stats.custom += 1;
+      if (resolved.source === 'custom' || resolved.source === 'template-custom')
+        stats.custom += 1;
       else stats.matched += 1;
 
       let supersetGroup = null;

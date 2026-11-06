@@ -39,6 +39,10 @@ export function createApp() {
             'blob:',
             'https://cdn.jsdelivr.net',
             'https://*.googleusercontent.com',
+            // Hevy exercise thumbnails (used as a fallback image for exercises
+            // imported from Hevy that don't match the free-exercise-db catalog).
+            'https://*.hevy.com',
+            'https://*.hevyapp.com',
           ],
           'font-src': ["'self'", 'data:'],
           'object-src': ["'none'"],

@@ -4,6 +4,7 @@ import config from './config.js';
 import { linkUserExercises, normalizeExerciseName } from './catalog.js';
 import { encryptSecret, decryptSecret, maskSecret } from './crypto-box.js';
 import { importWorkout } from './hevy-import.js';
+import { storeTemplates } from './hevy-templates.js';
 import {
   HevyClient,
   HevyApiError,
@@ -253,6 +254,8 @@ export async function syncUser(userId, { full = false } = {}) {
     } catch {
       // Non-fatal: resolution falls back to catalog name matching.
     }
+    // Cache templates so we can resolve exercises by Hevy template id.
+    if (templates.length) storeTemplates(userId, templates);
     const templateMap = buildTemplateMap(templates);
 
     const normalizedWorkouts = [];

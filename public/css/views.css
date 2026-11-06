@@ -398,7 +398,6 @@
 .folder {
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .folder-head {
@@ -424,18 +423,35 @@
   transition: transform 0.2s ease;
 }
 
-.folder.closed .folder-head svg.chev {
+.folder.closed .folder-head svg {
   transform: rotate(-90deg);
 }
 
-.folder.closed .folder-body {
-  display: none;
+/* Animated collapse: grid 1fr -> 0fr works with unknown heights. */
+.folder-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.24s ease;
 }
 
-.folder-body {
+.folder-body > .folder-body-inner {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding-top: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.folder.closed .folder-body {
+  grid-template-rows: 0fr;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .folder-head svg,
+  .folder-body {
+    transition: none;
+  }
 }
 
 .routine-card {

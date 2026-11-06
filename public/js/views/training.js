@@ -162,7 +162,9 @@ export async function render(container, ctx) {
                           <span class="folder-count">(${group.routines.length})</span>
                         </button>
                         <div class="folder-body">
-                          ${group.routines.map(routineCard).join('')}
+                          <div class="folder-body-inner">
+                            ${group.routines.map(routineCard).join('')}
+                          </div>
                         </div>
                       </div>
                     `;
@@ -372,6 +374,7 @@ export async function render(container, ctx) {
         collapsedSet.add(name);
         folder.classList.add('closed');
       }
+      haptic(8);
       setCollapsed(collapsedSet);
     }
   };

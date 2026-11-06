@@ -629,6 +629,14 @@
   overflow: visible;
 }
 
+/* Allow vertical page scroll but let the chart capture horizontal drags for
+   touch scrubbing (overrides the global touch-action: manipulation). */
+.chart-interactive svg {
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .chart-interactive .chart-hit {
   cursor: pointer;
 }

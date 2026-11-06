@@ -322,6 +322,77 @@ function positionTooltip(wrap, svg, tooltip, cx, cy) {
   tooltip.classList.toggle('ct-above', relY >= 0.4);
 }
 
+// Shared interaction wiring for the interactive line and bar charts. Handles,
+// via a single code path: mouse hover, click-to-toggle (desktop), touch
+// scrubbing (drag a finger across the chart to sweep through points), and
+// auto-dismissing the tooltip on scroll so it never lingers detached from the
+// chart. `select(hit)` and `clear()` encapsulate the chart-specific visuals.
+function wireChart(wrap, svg, { select, clear }) {
+  const hitAt = (clientX, clientY) => {
+    const el = document.elementFromPoint(clientX, clientY);
+    return el && el.closest ? el.closest('.chart-hit') : null;
+  };
+
+  // Desktop: hover to preview, click to pin/unpin.
+  svg.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'touch') return; // touch uses scrubbing below
+    const hit = event.target.closest('.chart-hit');
+    if (hit) select(hit);
+  });
+  svg.addEventListener('pointerleave', (event) => {
+    if (event.pointerType === 'touch') return;
+    clear();
+  });
+  svg.addEventListener('click', (event) => {
+    const hit = event.target.closest('.chart-hit');
+    if (!hit) {
+      clear();
+      return;
+    }
+    if (hit.classList.contains('active')) clear();
+    else select(hit);
+  });
+
+  // Touch: scrub. On drag the pointer events keep firing on the original
+  // target, so resolve the hit under the finger with elementFromPoint.
+  let scrubbing = false;
+  svg.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (event.pointerType !== 'touch') return;
+      scrubbing = true;
+      const hit = hitAt(event.clientX, event.clientY);
+      if (hit) select(hit);
+    },
+    { passive: true }
+  );
+  svg.addEventListener(
+    'pointermove',
+    (event) => {
+      if (event.pointerType !== 'touch' || !scrubbing) return;
+      const hit = hitAt(event.clientX, event.clientY);
+      if (hit) select(hit);
+    },
+    { passive: true }
+  );
+  const endScrub = () => {
+    scrubbing = false;
+  };
+  svg.addEventListener('pointerup', endScrub, { passive: true });
+  svg.addEventListener('pointercancel', endScrub, { passive: true });
+
+  // Dismiss the tooltip on scroll; it is absolutely positioned so it would
+  // otherwise float away from the chart. Self-detaches once the chart is gone.
+  const onScroll = () => {
+    if (!wrap.isConnected) {
+      window.removeEventListener('scroll', onScroll, true);
+      return;
+    }
+    clear();
+  };
+  window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+}
+
 // Wires tap/hover interaction for an interactive barChart rendered inside
 // `root`. Shows a tooltip with the bar's detail (Hevy-style) and highlights
 // the selected column. Safe to call on containers without an interactive chart.
@@ -364,28 +435,7 @@ export function attachBarChart(root) {
     });
   };
 
-  svg.addEventListener('click', (event) => {
-    const hit = event.target.closest('.chart-hit');
-    if (!hit) {
-      clear();
-      return;
-    }
-    if (hit.classList.contains('active')) {
-      clear();
-    } else {
-      select(hit);
-    }
-  });
-
-  svg.addEventListener('pointermove', (event) => {
-    if (event.pointerType === 'touch') return; // touch uses tap/click
-    const hit = event.target.closest('.chart-hit');
-    if (hit) select(hit);
-  });
-  svg.addEventListener('pointerleave', (event) => {
-    if (event.pointerType === 'touch') return;
-    clear();
-  });
+  wireChart(wrap, svg, { select, clear });
 }
 
 // Wires tap/hover interaction for an interactive lineChart rendered inside
@@ -432,25 +482,7 @@ export function attachLineChart(root) {
     hit.classList.add('active');
   };
 
-  svg.addEventListener('click', (event) => {
-    const hit = event.target.closest('.chart-hit');
-    if (!hit) {
-      clear();
-      return;
-    }
-    if (hit.classList.contains('active')) clear();
-    else select(hit);
-  });
-
-  svg.addEventListener('pointermove', (event) => {
-    if (event.pointerType === 'touch') return;
-    const hit = event.target.closest('.chart-hit');
-    if (hit) select(hit);
-  });
-  svg.addEventListener('pointerleave', (event) => {
-    if (event.pointerType === 'touch') return;
-    clear();
-  });
+  wireChart(wrap, svg, { select, clear });
 }
 
 export function sparkline(values, { width = 64, height = 24, color = '#0a84ff' } = {}) {

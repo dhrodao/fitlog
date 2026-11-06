@@ -89,6 +89,7 @@ export async function render(container, ctx, params) {
         <h1>${esc(data.name)}</h1>
         ${data.description ? `<p class="text-muted text-sm">${esc(data.description)}</p>` : ''}
         ${data.folder ? `<span class="chip" style="align-self:flex-start">${icon('folder', 13)} ${esc(data.folder)}</span>` : ''}
+        ${data.source === 'hevy' ? `<span class="chip-hevy" style="align-self:flex-start">${icon('repeat', 13)} Importada de Hevy</span>` : ''}
       </div>
 
       <button type="button" class="btn btn-primary btn-block" data-start>

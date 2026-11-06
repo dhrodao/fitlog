@@ -123,6 +123,14 @@ export class HevyClient {
     yield* this.paginate('/workouts', 'workouts', { pageSize });
   }
 
+  async *routines({ pageSize = 10 } = {}) {
+    yield* this.paginate('/routines', 'routines', { pageSize });
+  }
+
+  async *routineFolders({ pageSize = 10 } = {}) {
+    yield* this.paginate('/routine_folders', 'routine_folders', { pageSize });
+  }
+
   /**
    * Incremental sync feed. Yields event objects of the form
    * { type: 'updated'|'deleted', workout?: {...}, id?: string }.
@@ -176,6 +184,48 @@ export function hevyApiWorkoutToNormalized(w) {
     startedAt: w.start_time ? new Date(w.start_time).toISOString() : null,
     finishedAt: w.end_time ? new Date(w.end_time).toISOString() : null,
     notes: w.description || null,
+    exercises,
+  };
+}
+
+/** Derive a target-reps string ("8-12", "10", or null) from a routine set. */
+function setTargetReps(set) {
+  if (!set) return null;
+  const range = set.rep_range;
+  if (range && (range.start != null || range.end != null)) {
+    if (range.start != null && range.end != null) return `${range.start}-${range.end}`;
+    return String(range.start ?? range.end);
+  }
+  if (set.reps != null) return String(set.reps);
+  return null;
+}
+
+/**
+ * Convert a Hevy API routine object into the shape consumed by the routine
+ * importer. Target sets = number of sets; target reps are derived from the
+ * first set that declares reps or a rep range.
+ */
+export function hevyApiRoutineToNormalized(r) {
+  const exercises = (r.exercises || [])
+    .slice()
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+    .map((ex) => {
+      const sets = ex.sets || [];
+      const repsSet = sets.find((s) => setTargetReps(s) != null);
+      return {
+        name: ex.title,
+        templateId: ex.exercise_template_id || null,
+        notes: ex.notes || null,
+        targetSets: sets.length || 1,
+        targetReps: setTargetReps(repsSet) || null,
+      };
+    });
+
+  return {
+    hevyRoutineId: r.id != null ? String(r.id) : null,
+    name: r.title || 'Rutina',
+    folderId: r.folder_id == null ? null : r.folder_id,
+    updatedAt: r.updated_at || null,
     exercises,
   };
 }

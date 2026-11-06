@@ -9,6 +9,10 @@ import {
   countImportedWorkouts,
   deleteImportedWorkouts,
 } from '../hevy-import.js';
+import {
+  countImportedRoutines,
+  deleteImportedRoutines,
+} from '../hevy-routines-import.js';
 import { HevyClient, hevyApiWorkoutToNormalized } from '../hevy-client.js';
 import { storeTemplates } from '../hevy-templates.js';
 import {
@@ -253,15 +257,19 @@ router.delete(
   })
 );
 
-/** How many workouts were imported from Hevy (for the confirm dialog). */
+/** How much was imported from Hevy (for the confirm dialog). */
 router.get('/hevy/data', (req, res) => {
-  res.json({ count: countImportedWorkouts(req.user.id) });
+  res.json({
+    count: countImportedWorkouts(req.user.id),
+    routines: countImportedRoutines(req.user.id),
+  });
 });
 
-/** Delete every workout imported from Hevy (exercises are preserved). */
+/** Delete every workout and routine imported from Hevy (exercises preserved). */
 router.delete('/hevy/data', (req, res) => {
   const deleted = deleteImportedWorkouts(req.user.id);
-  res.json({ ok: true, deleted });
+  const routines = deleteImportedRoutines(req.user.id);
+  res.json({ ok: true, deleted, routines });
 });
 
 export default router;

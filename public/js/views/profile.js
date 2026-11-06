@@ -32,6 +32,14 @@ const METRICS = {
   },
 };
 
+// "12 entrenos y 5 rutinas" / "12 entrenos" / "5 rutinas".
+function hevyFlushLabel(workouts, routines) {
+  const parts = [];
+  if (workouts > 0) parts.push(`${workouts} ${workouts === 1 ? 'entreno' : 'entrenos'}`);
+  if (routines > 0) parts.push(`${routines} ${routines === 1 ? 'rutina' : 'rutinas'}`);
+  return parts.join(' y ');
+}
+
 // Human-friendly label for a week bucket: "14 – 20 nov".
 function weekRangeLabel(weekStart) {
   const start = new Date(weekStart);
@@ -291,9 +299,11 @@ export async function render(container, ctx) {
   }
 
   let importedCount = 0;
+  let importedRoutines = 0;
   try {
-    const { count } = await api.import.importedCount();
+    const { count, routines } = await api.import.importedCount();
     importedCount = count || 0;
+    importedRoutines = routines || 0;
   } catch {
     // Non-fatal.
   }
@@ -394,9 +404,9 @@ export async function render(container, ctx) {
         <div class="section-head"><h2>Sincronización con Hevy</h2></div>
         <div data-sync-section>${hevySyncSection(syncStatus)}</div>
         <div data-hevy-flush>${
-          importedCount > 0
+          importedCount > 0 || importedRoutines > 0
             ? `<button type="button" class="btn btn-danger btn-block btn-sm" data-flush-hevy style="margin-top:10px">
-                 ${icon('trash', 15)} Eliminar ${importedCount} entrenos importados de Hevy
+                 ${icon('trash', 15)} Eliminar datos importados de Hevy (${esc(hevyFlushLabel(importedCount, importedRoutines))})
                </button>`
             : ''
         }</div>
@@ -469,15 +479,18 @@ export async function render(container, ctx) {
 
   container.querySelector('[data-flush-hevy]')?.addEventListener('click', async () => {
     const confirmed = await confirmDialog({
-      title: 'Eliminar entrenos de Hevy',
-      message: `Se eliminarán ${importedCount} entrenos importados de Hevy (con sus series). Los ejercicios de tu catálogo se conservan. Esta acción no se puede deshacer.`,
+      title: 'Eliminar datos de Hevy',
+      message: `Se eliminarán ${hevyFlushLabel(importedCount, importedRoutines)} importados de Hevy (con sus series). Los ejercicios de tu catálogo se conservan. Esta acción no se puede deshacer.`,
       confirmLabel: 'Eliminar',
       danger: true,
     });
     if (!confirmed) return;
     try {
-      const { deleted } = await api.import.flushImported();
-      toast(`Eliminados ${deleted} entrenos de Hevy`, 'success');
+      const { deleted, routines } = await api.import.flushImported();
+      toast(
+        `Eliminados ${hevyFlushLabel(deleted || 0, routines || 0) || 'datos'} de Hevy`,
+        'success'
+      );
       ctx.refresh();
     } catch (error) {
       toast(errorMessage(error), 'error');

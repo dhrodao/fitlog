@@ -60,6 +60,7 @@ function routineCard(routine) {
       <div class="routine-meta">
         <span>${icon('list', 13)} ${routine.exerciseCount} ejercicios</span>
         ${routine.folder ? `<span>${icon('folder', 13)} ${esc(routine.folder)}</span>` : ''}
+        ${routine.source === 'hevy' ? `<span class="chip-hevy">${icon('repeat', 12)} Hevy</span>` : ''}
       </div>
       <button type="button" class="btn btn-primary btn-block" data-start-routine="${routine.id}">
         ${icon('play', 16)} Empezar Rutina

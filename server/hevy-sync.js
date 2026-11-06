@@ -4,11 +4,16 @@ import config from './config.js';
 import { linkUserExercises, normalizeExerciseName } from './catalog.js';
 import { encryptSecret, decryptSecret, maskSecret } from './crypto-box.js';
 import { importWorkout } from './hevy-import.js';
+import {
+  importRoutine,
+  foldersToMap,
+} from './hevy-routines-import.js';
 import { storeTemplates } from './hevy-templates.js';
 import {
   HevyClient,
   HevyApiError,
   hevyApiWorkoutToNormalized,
+  hevyApiRoutineToNormalized,
 } from './hevy-client.js';
 
 /**
@@ -258,6 +263,8 @@ export async function syncUser(userId, { full = false } = {}) {
     matched: 0,
     custom: 0,
     deletedSeen: 0,
+    routinesImported: 0,
+    routinesUpdated: 0,
   };
 
   try {
@@ -309,6 +316,33 @@ export async function syncUser(userId, { full = false } = {}) {
     });
     apply();
     linkUserExercises();
+
+    // Routines: Hevy has no incremental "events" feed for routines, so we
+    // always pull the full list and upsert by hevy_routine_id (idempotent).
+    try {
+      const folders = [];
+      for await (const f of client.routineFolders()) folders.push(f);
+      const folderMap = foldersToMap(folders);
+
+      const routines = [];
+      for await (const r of client.routines()) {
+        routines.push(hevyApiRoutineToNormalized(r));
+      }
+
+      const applyRoutines = db.transaction(() => {
+        for (const routine of routines) {
+          const res = importRoutine(userId, routine, { templateMap, folderMap });
+          if (res.updated) totals.routinesUpdated += 1;
+          else if (res.imported) totals.routinesImported += 1;
+        }
+      });
+      applyRoutines();
+    } catch (err) {
+      // Non-fatal: workouts already imported. Surface via console only.
+      console.warn(
+        `[hevy-sync] usuario ${userId}: no se pudieron importar rutinas: ${err.message}`
+      );
+    }
 
     db.prepare(
       `UPDATE hevy_sync

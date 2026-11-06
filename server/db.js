@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS routines (
   name TEXT NOT NULL,
   description TEXT,
   folder TEXT,
+  source TEXT,
+  hevy_routine_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -240,11 +242,18 @@ function ensureColumn(table, column, definition) {
 
 ensureColumn('workout_exercises', 'superset_group', 'INTEGER');
 ensureColumn('workouts', 'source', 'TEXT');
+ensureColumn('routines', 'source', 'TEXT');
+ensureColumn('routines', 'hevy_routine_id', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_token', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_enabled', 'INTEGER NOT NULL DEFAULT 0');
 db.exec(
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_hevy_webhook_token
      ON hevy_sync(webhook_token) WHERE webhook_token IS NOT NULL`
+);
+// One imported routine per Hevy routine id, per user (enables idempotent upsert).
+db.exec(
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_routines_hevy
+     ON routines(user_id, hevy_routine_id) WHERE hevy_routine_id IS NOT NULL`
 );
 
 export const nowIso = () => new Date().toISOString();

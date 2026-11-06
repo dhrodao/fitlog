@@ -2,6 +2,14 @@ import { esc, formatNumber, formatVolume } from './ui.js';
 
 let gradientCounter = 0;
 
+// Timestamp of the most recent touch end across ALL chart instances. The
+// browser fires a synthetic "ghost" click ~300ms after a touch tap; when you
+// tap a chart and immediately navigate to another view, that ghost click can
+// land on the *new* chart. A per-instance flag misses it because the new
+// instance never saw the touch. Sharing the timestamp at module scope lets any
+// freshly mounted chart ignore a ghost click that trails a recent touch.
+let lastTouchEndGlobal = 0;
+
 function niceBounds(values, { fromZero = false } = {}) {
   const clean = values.filter((value) => Number.isFinite(value));
   if (!clean.length) return { min: 0, max: 1 };
@@ -333,10 +341,8 @@ function wireChart(wrap, svg, { select, clear }) {
     return el && el.closest ? el.closest('.chart-hit') : null;
   };
 
-  // Touch interaction state (declared up front so the click handler can read
-  // suppressClick regardless of listener registration order).
+  // Per-instance touch interaction state.
   let scrubbing = false;
-  let lastTouchEnd = 0;
   let movedDuringTouch = false;
   let downHit = null;
   let downWasActive = false;
@@ -355,8 +361,10 @@ function wireChart(wrap, svg, { select, clear }) {
   });
   svg.addEventListener('click', (event) => {
     // Swallow the synthetic click that the browser fires right after a touch
-    // tap; the touch pointer cycle already handled the selection.
-    if (Date.now() - lastTouchEnd < 700) return;
+    // tap — including a ghost click that trails a tap in a previous view and
+    // lands on this freshly mounted chart. The touch pointer cycle already
+    // handled any real selection.
+    if (Date.now() - lastTouchEndGlobal < 700) return;
     const hit = event.target.closest('.chart-hit');
     if (!hit) {
       clear();
@@ -397,7 +405,7 @@ function wireChart(wrap, svg, { select, clear }) {
     if (event && event.pointerType && event.pointerType !== 'touch') return;
     if (!scrubbing) return;
     scrubbing = false;
-    lastTouchEnd = Date.now(); // the synthetic click that follows is ignored
+    lastTouchEndGlobal = Date.now(); // ghost click that follows is ignored
     // A stationary tap on a point that was already selected toggles it off.
     const upHit = event ? hitAt(event.clientX, event.clientY) : downHit;
     if (!movedDuringTouch && downWasActive && upHit && upHit === downHit) {

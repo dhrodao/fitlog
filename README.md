@@ -147,6 +147,60 @@ If you do not use the tunnel, leave `TUNNEL_TOKEN` empty; the `cloudflared`
 service will just keep retrying and the app still works locally. To skip it
 entirely, start only the app: `docker compose up -d app`.
 
+## Automatic deploy on push (optional)
+
+Production can redeploy itself on every push to `main` using a **self-hosted
+GitHub Actions runner** installed on the production machine. Because the app
+sits behind the Cloudflare Tunnel with no inbound ports, the deploy is
+pull-based: GitHub cannot reach the host, so a runner living on the host picks
+up the job and rebuilds the container locally.
+
+The workflow is [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+On push to `main` (or via the **Run workflow** button — `workflow_dispatch`) it:
+
+1. Fast-forwards the production checkout at `PROD_DIR` (`/opt/fitlog`) to
+   `origin/main` (`git reset --hard`).
+2. Rebuilds and recreates only the `app` service
+   (`docker compose up -d --build app`); the `cloudflared` service and the
+   `./data` bind mount are left untouched.
+3. Probes `GET /api/health` until it responds (up to 60 s); if it never does,
+   the job fails and dumps the last 60 lines of the container logs.
+
+A `concurrency` group prevents two deploys from overlapping.
+
+### One-time setup on the production host
+
+1. Register a self-hosted runner for the repo
+   (**Settings → Actions → Runners → New self-hosted runner**, Linux x64).
+   Do **not** run it as `root`; create a dedicated user, e.g.:
+   ```bash
+   useradd -m -s /bin/bash gh-runner
+   usermod -aG docker gh-runner          # docker without sudo
+   chown -R gh-runner:gh-runner /opt/actions-runner /opt/fitlog
+   su - gh-runner
+   cd /opt/actions-runner
+   ./config.sh --url https://github.com/<owner>/<repo> --token <TOKEN>
+   ```
+2. Install it as a service so it survives reboots:
+   ```bash
+   cd /opt/actions-runner
+   sudo ./svc.sh install gh-runner
+   sudo ./svc.sh start
+   ```
+3. Make sure the runner user can fetch the repo at `/opt/fitlog` without
+   prompting for credentials (SSH deploy key or an HTTPS credential helper) and
+   can run Docker:
+   ```bash
+   sudo -u gh-runner git -C /opt/fitlog fetch --dry-run origin
+   sudo -u gh-runner docker ps
+   ```
+
+> The deploy runs `git reset --hard origin/main` inside `/opt/fitlog`, so do
+> not keep local edits to tracked files there — they are overwritten on the
+> next deploy. The `.env` file and the `./data` directory (the SQLite database)
+> are **not** tracked by git, so they are always preserved. Schema migrations
+> are idempotent and applied on boot.
+
 ## Google login (optional)
 
 1. In [Google Cloud Console](https://console.cloud.google.com/) create a

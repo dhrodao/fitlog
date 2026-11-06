@@ -243,7 +243,10 @@ export function barChart({
     ? data
         .map((item, index) => {
           const cx = padLeft + slot * index + slot / 2;
-          const defaultRows = [[shortLabel(item[labelKey], labelFn), formatValue(Number(item[valueKey]) || 0)]];
+          const value = Number(item[valueKey]) || 0;
+          const barHeight = ((value - min) / range) * innerH;
+          const cy = padTop + innerH - Math.max(barHeight, value > 0 ? 2 : 0);
+          const defaultRows = [[shortLabel(item[labelKey], labelFn), formatValue(value)]];
           const rows = typeof tooltipRows === 'function' ? tooltipRows(item) : defaultRows;
           const tipHtml = rows
             .map(
@@ -251,7 +254,7 @@ export function barChart({
                 `<div class="ct-row"><span>${esc(String(label))}</span><strong>${esc(String(value))}</strong></div>`
             )
             .join('');
-          return `<rect class="chart-hit" data-hit="${index}" x="${(padLeft + slot * index).toFixed(1)}" y="${padTop.toFixed(1)}" width="${slot.toFixed(1)}" height="${innerH.toFixed(1)}" fill="transparent" data-cx="${cx.toFixed(1)}" data-tip="${esc(tipHtml)}" />`;
+          return `<rect class="chart-hit" data-hit="${index}" x="${(padLeft + slot * index).toFixed(1)}" y="${padTop.toFixed(1)}" width="${slot.toFixed(1)}" height="${innerH.toFixed(1)}" fill="transparent" data-cx="${cx.toFixed(1)}" data-cy="${cy.toFixed(1)}" data-tip="${esc(tipHtml)}" />`;
         })
         .join('')
     : '';
@@ -294,6 +297,31 @@ export function barChart({
   `;
 }
 
+// Positions a chart tooltip near the selected point/bar tip: maps the chart
+// coords (cx, cy from the SVG viewBox) to pixels, places the tooltip above the
+// point by default and flips it below when the point sits high in the chart,
+// and clamps it horizontally so it never overflows the chart edges. Shared by
+// the interactive line and bar charts.
+function positionTooltip(wrap, svg, tooltip, cx, cy) {
+  const rect = wrap.getBoundingClientRect();
+  const vb = (svg.getAttribute('viewBox') || '0 0 340 160').split(/\s+/).map(Number);
+  const vbW = vb[2] || 340;
+  const vbH = vb[3] || 160;
+  const px = (cx / vbW) * rect.width;
+  const py = (cy / vbH) * rect.height;
+
+  // Keep the (center-anchored) tooltip within the chart horizontally.
+  const half = Math.min(tooltip.offsetWidth || 160, 190) / 2 + 4;
+  const clampedX = Math.max(half, Math.min(rect.width - half, px));
+  tooltip.style.left = `${clampedX}px`;
+  tooltip.style.top = `${py}px`;
+
+  // Prefer above the point; flip below when it's near the top.
+  const relY = cy / vbH;
+  tooltip.classList.toggle('ct-below', relY < 0.4);
+  tooltip.classList.toggle('ct-above', relY >= 0.4);
+}
+
 // Wires tap/hover interaction for an interactive barChart rendered inside
 // `root`. Shows a tooltip with the bar's detail (Hevy-style) and highlights
 // the selected column. Safe to call on containers without an interactive chart.
@@ -308,6 +336,7 @@ export function attachBarChart(root) {
 
   const clear = () => {
     tooltip.hidden = true;
+    tooltip.classList.remove('ct-above', 'ct-below');
     if (marker) marker.setAttribute('opacity', '0');
     wrap.querySelectorAll('.chart-hit.active').forEach((el) => el.classList.remove('active'));
     wrap.querySelectorAll('rect[data-bar].dim').forEach((el) => el.classList.remove('dim'));
@@ -316,14 +345,12 @@ export function attachBarChart(root) {
   const select = (hit) => {
     const index = hit.dataset.hit;
     const cx = Number(hit.dataset.cx);
+    const cy = Number(hit.dataset.cy);
     tooltip.innerHTML = hit.dataset.tip || '';
     tooltip.hidden = false;
 
-    // Position the tooltip horizontally over the bar, clamped to the wrap.
-    const rect = wrap.getBoundingClientRect();
-    const ratio = cx / 340; // viewBox width used by barChart
-    const px = ratio * rect.width;
-    tooltip.style.left = `${px}px`;
+    // Position the tooltip near the bar tip, clamped to the wrap.
+    positionTooltip(wrap, svg, tooltip, cx, cy);
 
     if (marker) {
       marker.setAttribute('x1', String(cx));
@@ -389,24 +416,7 @@ export function attachLineChart(root) {
     tooltip.innerHTML = hit.dataset.tip || '';
     tooltip.hidden = false;
 
-    const rect = wrap.getBoundingClientRect();
-    // The viewBox is "0 0 <vbW> <vbH>"; map chart coords to pixels.
-    const vb = (svg.getAttribute('viewBox') || '0 0 340 160').split(/\s+/).map(Number);
-    const vbW = vb[2] || 340;
-    const vbH = vb[3] || 160;
-    const px = (cx / vbW) * rect.width;
-    const py = (cy / vbH) * rect.height;
-    // Keep the (center-anchored) tooltip within the chart horizontally.
-    const half = Math.min(tooltip.offsetWidth, 190) / 2 + 4;
-    const clampedX = Math.max(half, Math.min(rect.width - half, px));
-    tooltip.style.left = `${clampedX}px`;
-    tooltip.style.top = `${py}px`;
-
-    // Prefer showing the tooltip above the point; flip below when the point
-    // sits in the upper part of the chart and there isn't room above.
-    const relY = cy / vbH;
-    tooltip.classList.toggle('ct-below', relY < 0.4);
-    tooltip.classList.toggle('ct-above', relY >= 0.4);
+    positionTooltip(wrap, svg, tooltip, cx, cy);
 
     if (marker) {
       marker.setAttribute('x1', String(cx));

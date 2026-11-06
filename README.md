@@ -258,6 +258,29 @@ node server/import-hevy-api.js --user <id> --api-key <KEY> [--write]
 
 > Rotating `SESSION_SECRET` invalidates stored Hevy keys; just reconnect.
 
+## Progressive Web App (PWA)
+
+Fitlog is installable and works offline for its shell. On a phone, open the
+site over HTTPS and use the browser's **Add to Home Screen**; it then launches
+full-screen like a native app. The pieces live in `public/`:
+
+- `manifest.webmanifest` — name, theme/background colours and icons
+  (`assets/icon*.svg` / `assets/icon-*.png`).
+- `sw.js` — the service worker. It precaches the app shell, serves navigations
+  network-first (falling back to the cached shell when offline) and static
+  assets stale-while-revalidate. **API traffic (`/api/…`) is never cached**, so
+  user data is always fresh and never shared between sessions.
+
+### Updating the service worker on deploy
+
+The shell assets are not content-hashed, so after a deploy that changes the CSS
+or JS of the shell, **bump `CACHE_VERSION` in `public/sw.js`** (e.g.
+`fitlog-v1` → `fitlog-v2`). On the next load the worker wipes the old cache and
+re-precaches the shell, guaranteeing installed clients pick up the new assets
+instead of a stale cached copy. (The worker already revalidates over the
+network, so this is a safety net for fully offline launches and for forcing an
+immediate refresh.)
+
 ## Production
 
 - `NODE_ENV=production`, `COOKIE_SECURE=true` (with HTTPS) and

@@ -41,6 +41,9 @@ export function createApp() {
             'https://*.googleusercontent.com',
             // Hevy exercise thumbnails (used as a fallback image for exercises
             // imported from Hevy that don't match the free-exercise-db catalog).
+            // Hevy serves these from its S3 bucket (e.g.
+            // https://pump-app.s3.eu-west-2.amazonaws.com/exercise-thumbnails/...).
+            'https://pump-app.s3.eu-west-2.amazonaws.com',
             'https://*.hevy.com',
             'https://*.hevyapp.com',
           ],

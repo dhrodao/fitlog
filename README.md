@@ -185,6 +185,11 @@ or after stripping the trailing `(Equipment)` suffix); unmatched names are kept
 as custom exercises. Deletions in Hevy are detected but not propagated: already
 imported workouts are preserved.
 
+Imported workouts are tagged with their origin, so from the **Profile** view
+you can **delete all workouts imported from Hevy** in one click. Exercises in
+your personal catalogue are kept; only the imported workouts (and their sets)
+are removed. Workouts you created manually are never touched.
+
 CLI equivalents are also available (dry-run by default; pass `--write`):
 
 ```bash

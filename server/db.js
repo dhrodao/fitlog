@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS workouts (
   started_at TEXT NOT NULL,
   finished_at TEXT,
   duration_seconds INTEGER,
+  source TEXT,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_workouts_user ON workouts(user_id, started_at DESC);
@@ -238,6 +239,7 @@ function ensureColumn(table, column, definition) {
 }
 
 ensureColumn('workout_exercises', 'superset_group', 'INTEGER');
+ensureColumn('workouts', 'source', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_token', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_enabled', 'INTEGER NOT NULL DEFAULT 0');
 db.exec(

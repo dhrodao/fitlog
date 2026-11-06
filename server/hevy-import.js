@@ -171,6 +171,28 @@ export function resolveHevyExercise(
   };
 }
 
+/** Number of workouts imported from Hevy for a user. */
+export function countImportedWorkouts(userId) {
+  const row = db
+    .prepare(
+      "SELECT COUNT(*) AS c FROM workouts WHERE user_id = ? AND source = 'hevy'"
+    )
+    .get(userId);
+  return row ? row.c : 0;
+}
+
+/**
+ * Delete every workout imported from Hevy for a user (exercise and set rows
+ * cascade via foreign keys). Exercises in the personal catalogue are
+ * preserved. Returns the number of workouts removed.
+ */
+export function deleteImportedWorkouts(userId) {
+  const info = db
+    .prepare("DELETE FROM workouts WHERE user_id = ? AND source = 'hevy'")
+    .run(userId);
+  return info.changes;
+}
+
 /** True if a workout with the same (user, name, startedAt) already exists. */
 export function workoutExists(userId, name, startedAt) {
   const row = db
@@ -214,8 +236,8 @@ export function importWorkout(userId, workout, { templateMap = null } = {}) {
     const info = db
       .prepare(
         `INSERT INTO workouts
-           (user_id, routine_id, name, location, notes, started_at, finished_at, duration_seconds, created_at)
-         VALUES (?, NULL, ?, NULL, ?, ?, ?, ?, ?)`
+           (user_id, routine_id, name, location, notes, started_at, finished_at, duration_seconds, source, created_at)
+         VALUES (?, NULL, ?, NULL, ?, ?, ?, ?, 'hevy', ?)`
       )
       .run(
         userId,

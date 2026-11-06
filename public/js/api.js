@@ -145,6 +145,8 @@ export const api = {
       request('/import/hevy/csv', { method: 'POST', body: { csv, write } }),
     hevyApi: (apiKey, write = false) =>
       request('/import/hevy/api', { method: 'POST', body: { apiKey, write } }),
+    importedCount: () => request('/import/hevy/data'),
+    flushImported: () => request('/import/hevy/data', { method: 'DELETE' }),
   },
   hevySync: {
     status: () => request('/import/hevy/sync'),

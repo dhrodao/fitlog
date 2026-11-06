@@ -274,6 +274,14 @@ export async function render(container, ctx) {
     // Non-fatal: show the connect form by default.
   }
 
+  let importedCount = 0;
+  try {
+    const { count } = await api.import.importedCount();
+    importedCount = count || 0;
+  } catch {
+    // Non-fatal.
+  }
+
   const chartHtml = (key) => {
     const config = METRICS[key];
     return barChart({
@@ -361,6 +369,13 @@ export async function render(container, ctx) {
       <section>
         <div class="section-head"><h2>Sincronización con Hevy</h2></div>
         <div data-sync-section>${hevySyncSection(syncStatus)}</div>
+        <div data-hevy-flush>${
+          importedCount > 0
+            ? `<button type="button" class="btn btn-danger btn-block btn-sm" data-flush-hevy style="margin-top:10px">
+                 ${icon('trash', 15)} Eliminar ${importedCount} entrenos importados de Hevy
+               </button>`
+            : ''
+        }</div>
       </section>
 
       <section>
@@ -422,6 +437,23 @@ export async function render(container, ctx) {
     syncStatus = status;
     syncSection.innerHTML = hevySyncSection(status);
   };
+
+  container.querySelector('[data-flush-hevy]')?.addEventListener('click', async () => {
+    const confirmed = await confirmDialog({
+      title: 'Eliminar entrenos de Hevy',
+      message: `Se eliminarán ${importedCount} entrenos importados de Hevy (con sus series). Los ejercicios de tu catálogo se conservan. Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      const { deleted } = await api.import.flushImported();
+      toast(`Eliminados ${deleted} entrenos de Hevy`, 'success');
+      ctx.refresh();
+    } catch (error) {
+      toast(errorMessage(error), 'error');
+    }
+  });
 
   syncSection?.addEventListener('click', async (event) => {
     const result = syncSection.querySelector('[data-sync-result]');

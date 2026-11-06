@@ -6,6 +6,8 @@ import {
   parseCsvObjects,
   csvRowsToWorkouts,
   importWorkout,
+  countImportedWorkouts,
+  deleteImportedWorkouts,
 } from '../hevy-import.js';
 import { HevyClient, hevyApiWorkoutToNormalized } from '../hevy-client.js';
 import { storeTemplates } from '../hevy-templates.js';
@@ -250,5 +252,16 @@ router.delete(
     }
   })
 );
+
+/** How many workouts were imported from Hevy (for the confirm dialog). */
+router.get('/hevy/data', (req, res) => {
+  res.json({ count: countImportedWorkouts(req.user.id) });
+});
+
+/** Delete every workout imported from Hevy (exercises are preserved). */
+router.delete('/hevy/data', (req, res) => {
+  const deleted = deleteImportedWorkouts(req.user.id);
+  res.json({ ok: true, deleted });
+});
 
 export default router;

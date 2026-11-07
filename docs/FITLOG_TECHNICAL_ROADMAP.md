@@ -1041,30 +1041,42 @@ needs a way to prove it did not break authentication, isolation or sync.
 
 ### 7.1 Backlog summary
 
-| Order | ID | Title | Priority | Complexity | Depends on |
-|---:|---|---|---|---|---|
-| 1 | P0-01 | Fix active-workout set persistence | P0 | M | — |
-| 2 | P1-01 | Add critical-flow test harness and CI gate | P1 | M | — |
-| 3 | P0-02 | Automated backups with restore validation | P0 | M | P1-01 |
-| 4 | P0-03 | Stable Hevy workout identity and idempotent upsert | P0 | L | P1-01 |
-| 5 | P0-04 | Restrict account creation and harden dev login | P0 | S | — |
-| 6 | P0-05 | Make measurement upserts non-destructive | P0 | S | P1-01 |
-| 7 | P1-02 | Harden Hevy sync execution and error surfacing | P1 | M | P0-03 |
-| 8 | P1-03 | Allow editing completed workouts | P1 | M | P0-01 |
-| 9 | P1-04 | Locale-safe numeric input | P1 | S | — |
-| 10 | P1-05 | Surface exercise progression and correct e1RM/PRs | P1 | M | P1-03 |
-| 11 | P1-06 | Security hardening pass | P1 | M | P0-04 |
-| 12 | P1-07 | Versioned transactional migrations and integrity constraints | P1 | M | P0-03 |
-| 13 | P1-08 | Operational readiness: health, shutdown, logs | P1 | S | P1-07 |
-| 14 | P1-09 | Deploy safety: versioned images and rollback | P1 | M | P0-02, P1-01 |
-| 15 | P1-10 | Complete and version the PWA shell cache | P1 | S | — |
-| 16 | P1-11 | Invalidate catalog caches after sync | P1 | XS | — |
-| 17 | P1-12 | Shared frontend helpers and unsaved-change guard | P1 | S | P1-03 |
-| 18 | P2-01 | Offline workout logging (conditional) | P2 | XL | Product decision, P1-10, P0-03 |
-| 19 | P2-02 | Apple Health integration spike / companion (conditional) | P2 | L–XL | Product decision |
-| 20 | P2-03 | Rest timer and set-level UX | P2 | M | P1-03 |
-| 21 | P2-04 | Richer PR and statistics definitions | P2 | M | P1-05 |
-| 22 | P2-05 | Remove dead schema and unused API surface | P2 | S | P1-07 |
+| Order | ID | Title | Priority | Complexity | Depends on | Status |
+|---:|---|---|---|---|---|---|
+| 1 | P0-01 | Fix active-workout set persistence | P0 | M | — | ✅ Done |
+| 2 | P1-01 | Add critical-flow test harness and CI gate | P1 | M | — | ✅ Done |
+| 3 | P0-02 | Automated backups with restore validation | P0 | M | P1-01 | ✅ Done |
+| 4 | P0-03 | Stable Hevy workout identity and idempotent upsert | P0 | L | P1-01 | ✅ Done |
+| 5 | P0-04 | Restrict account creation and harden dev login | P0 | S | — | ✅ Done |
+| 6 | P0-05 | Make measurement upserts non-destructive | P0 | S | P1-01 | ✅ Done |
+| 7 | P1-02 | Harden Hevy sync execution and error surfacing | P1 | M | P0-03 | ✅ Done |
+| 8 | P1-03 | Allow editing completed workouts | P1 | M | P0-01 | ✅ Done |
+| 9 | P1-04 | Locale-safe numeric input | P1 | S | — | ✅ Done |
+| 10 | P1-05 | Surface exercise progression and correct e1RM/PRs | P1 | M | P1-03 | ✅ Done |
+| 11 | P1-06 | Security hardening pass | P1 | M | P0-04 | ✅ Done |
+| 12 | P1-07 | Versioned transactional migrations and integrity constraints | P1 | M | P0-03 | ✅ Done |
+| 13 | P1-08 | Operational readiness: health, shutdown, logs | P1 | S | P1-07 | ✅ Done |
+| 14 | P1-09 | Deploy safety: versioned images and rollback | P1 | M | P0-02, P1-01 | ◻ Partial |
+| 15 | P1-10 | Complete and version the PWA shell cache | P1 | S | — | ✅ Done |
+| 16 | P1-11 | Invalidate catalog caches after sync | P1 | XS | — | ☐ Pending |
+| 17 | P1-12 | Shared frontend helpers and unsaved-change guard | P1 | S | P1-03 | ☐ Pending |
+| 18 | P2-01 | Offline workout logging (conditional) | P2 | XL | Product decision, P1-10, P0-03 | ✅ Done |
+| 19 | P2-02 | Apple Health integration spike / companion (conditional) | P2 | L–XL | Product decision | ☐ Pending |
+| 20 | P2-03 | Rest timer and set-level UX | P2 | M | P1-03 | ☐ Pending |
+| 21 | P2-04 | Richer PR and statistics definitions | P2 | M | P1-05 | ☐ Pending |
+| 22 | P2-05 | Remove dead schema and unused API surface | P2 | S | P1-07 | ☐ Pending |
+
+> **Progress (updated 2026-11-07).** All P0 tasks and all P1 tasks except P1-11
+> and P1-12 are complete; P1-09 is partially complete (test gate, pre-deploy
+> backup and migration, and a health-gated deploy are in place; SHA-tagged
+> images and automatic rollback are not). Offline workout logging (P2-01) was
+> implemented as a product priority — the active workout and a cached exercise
+> catalog and routine list live in IndexedDB, an empty workout or a cached
+> routine can be started with no connectivity, and the whole workout is uploaded
+> idempotently through `POST /api/workouts/sync` keyed by a per-user client id.
+> Creating or editing routines offline is intentionally **not** supported.
+> Remaining: P1-11, P1-12 and the P2 items P2-02 (Apple Health), P2-03 (rest
+> timer), P2-04 (richer PRs) and P2-05 (dead-schema cleanup).
 
 P0-04 is the only task that may reasonably jump the queue: if the instance is
 publicly reachable today, apply the allowlist as an immediate hotfix. It is
@@ -1079,6 +1091,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P0-01 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Fix active-workout set persistence |
 | **Priority** | P0 |
 | **Problem** | A single shared 500 ms debounce is used for every set. Two different sets edited within the window persist only the last one, and navigating away cancels the pending write. A failed save is only toasted; the value is lost on reload. |
@@ -1097,6 +1110,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-01 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Add critical-flow test harness and CI gate |
 | **Priority** | P1 |
 | **Problem** | Critical invariants (isolation, session expiry, Hevy idempotency, autosave) have no tests, and the deploy workflow does not run the existing suite. |
@@ -1115,6 +1129,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P0-02 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Automated backups with restore validation |
 | **Priority** | P0 |
 | **Problem** | There is no scheduled backup, retention policy, off-host copy or restore test. SQLite runs in WAL mode, so a naive copy of `fitness.db` while the server runs can be inconsistent. |
@@ -1133,6 +1148,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P0-03 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Stable Hevy workout identity and idempotent upsert |
 | **Priority** | P0 |
 | **Problem** | Imported workouts have no Hevy workout id. Duplicate detection uses `(user_id, name, started_at)`: a renamed workout creates a duplicate, while an updated workout with the same name/time is skipped and never receives changed sets/notes. Deleted events are ignored. There is no unique constraint behind the check. |
@@ -1151,6 +1167,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P0-04 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Restrict account creation and harden dev login |
 | **Priority** | P0 |
 | **Problem** | Any verified Google account creates a FitLog user. The app is exposed through a Cloudflare Tunnel, so the personal training log is effectively open to anyone who obtains the URL. Dev login is enabled by default outside production and is a bodyless POST. |
@@ -1169,6 +1186,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P0-05 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Make measurement upserts non-destructive |
 | **Priority** | P0 |
 | **Problem** | A same-date save overwrites weight, body fat, waist and notes with the incoming values, including `null` for fields the user did not fill. Recording body fat on a date that already has weight erases the weight. |
@@ -1189,6 +1207,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-02 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Harden Hevy sync execution and error surfacing |
 | **Priority** | P1 |
 | **Problem** | Hevy HTTP calls have no timeout, retry or backoff. The scheduler and webhook can run overlapping syncs for the same user. Routine import failures are logged only to the console while the sync reports `ok`, so the UI says everything is up to date. |
@@ -1207,6 +1226,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-03 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Allow editing completed workouts |
 | **Priority** | P1 |
 | **Problem** | After finishing a workout, the UI offers no way to correct sets, notes, name or location, even though the API supports metadata updates and set edits. A mistyped weight is permanent. |
@@ -1225,6 +1245,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-04 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Locale-safe numeric input |
 | **Priority** | P1 |
 | **Problem** | Spanish users type `72,5`; `Number('72,5')` is `NaN`. The active view clamps the value to `0`, and measurement inputs become `null`. Data is silently wrong. |
@@ -1243,6 +1264,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-05 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Surface exercise progression and correct e1RM/PRs |
 | **Priority** | P1 |
 | **Problem** | The exercise-stats endpoint exists but no view uses it, so users cannot see progression. The e1RM calculation multiplies the maximum weight by an unrelated maximum rep count, overstating strength; PRs count only maximum weight. |
@@ -1261,6 +1283,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-06 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Security hardening pass |
 | **Priority** | P1 |
 | **Problem** | There is no rate limiting, no Origin check on state-changing requests, no production enforcement of secure cookies, and the dev-login endpoint is bodyless. |
@@ -1279,6 +1302,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-07 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Versioned transactional migrations and integrity constraints |
 | **Priority** | P1 |
 | **Problem** | Schema changes are ad-hoc `CREATE TABLE IF NOT EXISTS` plus `ensureColumn()` calls and one bespoke migration. There is no version table, no ordered runner, no checksum and no transaction around the bootstrap. Several uniqueness invariants exist only in application code. |
@@ -1297,6 +1321,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-08 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Operational readiness: health, shutdown, logs |
 | **Priority** | P1 |
 | **Problem** | The health check does not touch SQLite; there is no graceful shutdown or `db.close()`; logs are unstructured console output. |
@@ -1315,6 +1340,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-09 |
+| **Status** | ◻ Partial — test gate + pre-deploy backup + migrate + health-gated deploy done; SHA-tagged images and automatic rollback NOT done |
 | **Title** | Deploy safety: versioned images and rollback |
 | **Priority** | P1 |
 | **Problem** | The deploy resets the production checkout hard, rebuilds in place and overwrites the local image tag. There is no pre-deploy backup, no test gate and no rollback. |
@@ -1333,6 +1359,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-10 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Complete and version the PWA shell cache |
 | **Priority** | P1 |
 | **Problem** | Precache lists only `app.js` and the CSS, not the other shell modules. The cache version is manually bumped, so a deploy can leave clients with stale modules. |
@@ -1351,6 +1378,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-11 |
+| **Status** | ☐ Pending |
 | **Title** | Invalidate catalog caches after sync |
 | **Priority** | P1 |
 | **Problem** | Module-level name→catalog caches in `hevy-import.js` and `hevy-templates.js` are never cleared after a catalog re-sync. Hevy imports can resolve against stale catalog data until the process restarts. |
@@ -1369,6 +1397,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-12 |
+| **Status** | ☐ Pending |
 | **Title** | Shared frontend helpers and unsaved-change guard |
 | **Priority** | P1 |
 | **Problem** | Workout cards, date/week labels and exercise grouping are duplicated across views. The routine editor discards unsaved changes silently on cancel/navigation. |
@@ -1389,6 +1418,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P2-01 |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Offline workout logging |
 | **Priority** | P2 |
 | **Problem** | The app cannot record a workout without connectivity; a failed save loses the value on reload. |
@@ -1407,6 +1437,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P2-02 |
+| **Status** | ☐ Pending |
 | **Title** | Apple Health integration spike / companion |
 | **Priority** | P2 |
 | **Problem** | A PWA cannot access HealthKit; the current app has no path to Apple Health data. |
@@ -1425,6 +1456,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P2-03 |
+| **Status** | ☐ Pending |
 | **Title** | Rest timer and set-level UX |
 | **Priority** | P2 |
 | **Problem** | `rest_seconds` exists in the schema/API but there is no timer in the active view. Users must watch the clock. |
@@ -1443,6 +1475,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P2-04 |
+| **Status** | ☐ Pending |
 | **Title** | Richer PR and statistics definitions |
 | **Priority** | P2 |
 | **Problem** | PRs only count maximum weight; other meaningful records (reps at a weight, e1RM, volume) are not represented. |
@@ -1461,6 +1494,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P2-05 |
+| **Status** | ☐ Pending |
 | **Title** | Remove dead schema and unused API surface |
 | **Priority** | P2 |
 | **Problem** | `hevy_sync.last_cursor` is never used; `addExerciseToWorkout` accepts `prefill`/`targetReps` but ignores them; `hevy_templates` has unused fields; template cache survives disconnect. |
@@ -1488,6 +1522,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
+| **Status** | ✅ Done — P0-01 and P1-01 complete. |
 | **Objective** | Eliminate the confirmed data-loss path in the core workout flow and establish the test harness that protects it. |
 | **Included tasks** | P0-01, P1-01 (the test harness and active-set tests are part of this milestone) |
 | **Dependencies** | None |
@@ -1499,6 +1534,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
+| **Status** | ◻ Mostly done — P0-02 complete; P1-09 partial (test gate + pre-deploy backup/migrate + health-gated deploy done; SHA-tagged images and automatic rollback not done). |
 | **Objective** | Make the database recoverable and make deploys reversible. |
 | **Included tasks** | P0-02, P1-09 |
 | **Dependencies** | M1 (CI test gate) |
@@ -1510,6 +1546,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
+| **Status** | ◻ Mostly done — P0-03, P1-02 and P1-07 complete; P1-11 (catalog cache invalidation) still pending. |
 | **Objective** | Make Hevy sync genuinely idempotent, updatable and observable. |
 | **Included tasks** | P0-03, P1-02, P1-07, P1-11 |
 | **Dependencies** | M1 (test fixtures and CI) |
@@ -1521,6 +1558,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
+| **Status** | ✅ Done — P0-04 and P1-06 complete. |
 | **Objective** | Ensure only the intended user(s) can access the instance and reduce configuration/abuse risk. |
 | **Included tasks** | P0-04, P1-06 |
 | **Dependencies** | None (can run in parallel with M2/M3) |
@@ -1532,6 +1570,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
+| **Status** | ✅ Done — P0-05, P1-04 and P1-03 complete. |
 | **Objective** | Stop silent data corruption and allow users to fix mistakes. |
 | **Included tasks** | P0-05, P1-04, P1-03 |
 | **Dependencies** | M1 (tests); P1-03 benefits from P0-01 |
@@ -1543,6 +1582,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
+| **Status** | ◻ Partial — P1-05 (progression + per-set Epley e1RM) complete; P1-12 (shared helpers + unsaved-change guard) pending; P2-04 not started. |
 | **Objective** | Turn stored history into useful, trustworthy progression feedback and reduce frontend duplication. |
 | **Included tasks** | P1-05, P1-12 (P2-04 only if the product owner approves the PR definitions) |
 | **Dependencies** | M5 (editable/correct data) |
@@ -1554,6 +1594,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
+| **Status** | ✅ Done — P1-08 and P1-10 complete. |
 | **Objective** | Make failures diagnosable and the installed app reliable. |
 | **Included tasks** | P1-08, P1-10 |
 | **Dependencies** | M2 (deploy), M3 (migrations) |
@@ -1565,6 +1606,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
+| **Status** | ◻ Partial — P2-01 (offline workout logging) done; P2-02, P2-03, P2-05 pending (P2-03 next). |
 | **Objective** | Evaluate and, only if approved, deliver the larger product bets. |
 | **Included tasks** | P2-01, P2-02, P2-03, P2-05 |
 | **Dependencies** | Written product decisions in §10; P1-10 and P0-03 for offline; P1-07 for cleanup |

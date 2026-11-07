@@ -5,6 +5,8 @@ import cookieParser from 'cookie-parser';
 import config from './config.js';
 import { attachUser, requireAuth } from './auth.js';
 import { HttpError } from './http.js';
+import { rateLimit } from './rate-limit.js';
+import { originCheck } from './origin-check.js';
 import authRoutes from './routes/auth.js';
 import exercisesRoutes from './routes/exercises.js';
 import routinesRoutes from './routes/routines.js';
@@ -61,17 +63,35 @@ export function createApp() {
   app.use(cookieParser());
   app.use(attachUser);
 
+  // CSRF defence in depth: reject cross-site state-changing requests when we
+  // know our public origin. The Hevy webhook is server-to-server (no browser
+  // origin, authenticated by its own per-user token), so it is exempt.
+  app.use(originCheck(config.publicUrl, (path) => path.startsWith('/api/hevy')));
+
+  // Rate limiters. Generous windows so a legitimate owner import is never
+  // locked out, but enough to blunt brute force / abuse. Keyed by client IP.
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 40,
+    message: 'Demasiados intentos de inicio de sesión, espera unos minutos',
+  });
+  const importLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 60,
+    message: 'Demasiadas operaciones de importación/sincronización, espera un poco',
+  });
+
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, time: new Date().toISOString() });
   });
 
-  app.use('/api/auth', authRoutes);
+  app.use('/api/auth', authLimiter, authRoutes);
   app.use('/api/exercises', requireAuth, exercisesRoutes);
   app.use('/api/routines', requireAuth, routinesRoutes);
   app.use('/api/workouts', requireAuth, workoutsRoutes);
   app.use('/api/measurements', requireAuth, measurementsRoutes);
   app.use('/api/stats', requireAuth, statsRoutes);
-  app.use('/api/import', requireAuth, importRoutes);
+  app.use('/api/import', requireAuth, importLimiter, importRoutes);
   // Public: Hevy calls this; authenticated via the per-user webhook token.
   app.use('/api/hevy', hevyWebhookRoutes);
 

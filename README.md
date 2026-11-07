@@ -349,3 +349,17 @@ immediate refresh.)
   `ALLOW_DEV_LOGIN=false`.
 - Set your own strong `SESSION_SECRET`.
 - Add your real domain to the authorized origins in Google Cloud.
+
+Built-in hardening (no extra setup):
+
+- **Secure cookies** are forced on in production: even if `COOKIE_SECURE` is
+  left `false`, the session cookie is sent `Secure` (it already warns on boot).
+- **Rate limiting** (in-memory, per client IP): `/api/auth` allows 40 requests
+  per 15 min; `/api/import` (import + Hevy sync) allows 60 per hour. Over the
+  limit returns `429` with a `Retry-After` header. Generous enough for a normal
+  owner; enough to blunt brute force.
+- **Origin check** on state-changing requests (`POST`/`PUT`/`PATCH`/`DELETE`):
+  when `PUBLIC_URL` is set, a cross-site request (by `Sec-Fetch-Site` or a
+  mismatched `Origin`) is rejected with `403`. The Hevy webhook is exempt (it is
+  server-to-server and authenticated by its own per-user token). This is a
+  layer on top of the `SameSite=Lax` session cookie.

@@ -49,6 +49,18 @@ export const config = {
   },
 };
 
+// In production, session cookies must be Secure: a session token sent over
+// plain HTTP can be intercepted. We force it on rather than refusing to boot,
+// and warn if the environment asked otherwise (the deploy terminates TLS at the
+// Cloudflare edge, so cookies are HTTPS-only end to end).
+if (config.isProduction && !config.cookieSecure) {
+  console.warn(
+    '[config] COOKIE_SECURE no era true en producción: se fuerza a true para ' +
+      'proteger la cookie de sesión.'
+  );
+  config.cookieSecure = true;
+}
+
 if (config.isProduction && !config.googleClientId) {
   console.warn(
     '[config] GOOGLE_CLIENT_ID no está definido: el login con Google no funcionará.'

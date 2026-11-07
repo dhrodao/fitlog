@@ -14,7 +14,8 @@
     "backup:db": "node scripts/backup-db.js",
     "backup:verify": "node scripts/verify-backup.js",
     "migrate": "node server/migrate.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:e2e": "playwright test"
   },
   "engines": {
     "node": ">=18"
@@ -28,6 +29,7 @@
     "helmet": "8.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.0",
     "supertest": "7.0.0"
   }
 }

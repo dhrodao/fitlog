@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { listWorkouts } from '../services/workouts.js';
+import { bestE1rm, personalRecords } from '../services/strength.js';
 
 const router = Router();
 
@@ -130,41 +131,73 @@ router.get('/exercise/:exerciseId', (req, res) => {
     .get(exerciseId, req.user.id);
   if (!exercise) return res.status(404).json({ error: 'Ejercicio no encontrado' });
 
-  const rows = db
+  // Fetch the individual completed sets per finished session. We group them in
+  // JS so the e1RM is computed PER SET (Epley), not from a session's heaviest
+  // weight crossed with its highest reps — those can belong to different sets.
+  const setRows = db
     .prepare(
-      `SELECT w.id, w.started_at, w.duration_seconds,
-         MAX(CASE WHEN s.completed = 1 THEN s.weight_kg END) AS max_weight,
-         COALESCE(SUM(CASE WHEN s.completed = 1 THEN COALESCE(s.weight_kg, 0) * COALESCE(s.reps, 0) ELSE 0 END), 0) AS volume,
-         COALESCE(SUM(CASE WHEN s.completed = 1 THEN COALESCE(s.reps, 0) ELSE 0 END), 0) AS reps,
-         MAX(CASE WHEN s.completed = 1 THEN s.reps END) AS max_reps
+      `SELECT w.id AS workout_id, w.started_at, w.duration_seconds,
+         s.weight_kg, s.reps
        FROM workouts w
        JOIN workout_exercises we ON we.workout_id = w.id
        JOIN workout_sets s ON s.workout_exercise_id = we.id
-       WHERE w.user_id = ? AND we.exercise_id = ? AND w.finished_at IS NOT NULL
-       GROUP BY w.id
-       ORDER BY w.started_at ASC`
+       WHERE w.user_id = ? AND we.exercise_id = ?
+         AND w.finished_at IS NOT NULL AND s.completed = 1
+       ORDER BY w.started_at ASC, s.id ASC`
     )
-    .all(req.user.id, exerciseId)
-    .map((row) => ({
-      workoutId: row.id,
-      date: row.started_at,
-      durationSeconds: row.duration_seconds || 0,
-      maxWeight: row.max_weight,
-      volume: Number(row.volume) || 0,
-      reps: Number(row.reps) || 0,
-      maxReps: row.max_reps,
-    }));
+    .all(req.user.id, exerciseId);
 
-  const bestWeight = rows.reduce(
-    (max, row) => Math.max(max, Number(row.maxWeight) || 0),
-    0
-  );
-  const best1rm = rows.reduce((max, row) => {
-    const weight = Number(row.maxWeight) || 0;
-    const reps = Number(row.maxReps) || 0;
-    if (!weight || !reps) return max;
-    return Math.max(max, weight * (1 + reps / 30));
-  }, 0);
+  // Group completed sets by session, preserving session order.
+  const sessionsById = new Map();
+  for (const row of setRows) {
+    let session = sessionsById.get(row.workout_id);
+    if (!session) {
+      session = {
+        workoutId: row.workout_id,
+        date: row.started_at,
+        durationSeconds: row.duration_seconds || 0,
+        sets: [],
+      };
+      sessionsById.set(row.workout_id, session);
+    }
+    session.sets.push({
+      weightKg: row.weight_kg,
+      reps: row.reps,
+      completed: true,
+    });
+  }
+
+  const sessions = Array.from(sessionsById.values());
+  const round1 = (n) => Math.round(n * 10) / 10;
+
+  const history = sessions.map((session) => {
+    let maxWeight = 0;
+    let maxReps = 0;
+    let volume = 0;
+    let reps = 0;
+    for (const s of session.sets) {
+      const w = Number(s.weightKg) || 0;
+      const r = Number(s.reps) || 0;
+      if (w > maxWeight) maxWeight = w;
+      if (r > maxReps) maxReps = r;
+      volume += w * r;
+      reps += r;
+    }
+    const e1rm = bestE1rm(session.sets);
+    return {
+      workoutId: session.workoutId,
+      date: session.date,
+      durationSeconds: session.durationSeconds,
+      maxWeight: maxWeight > 0 ? maxWeight : null,
+      volume,
+      reps,
+      maxReps: maxReps > 0 ? maxReps : null,
+      e1rm: e1rm > 0 ? round1(e1rm) : null,
+    };
+  });
+
+  // Documented personal records across all sessions (see services/strength.js).
+  const prs = personalRecords(sessions);
 
   res.json({
     exercise: {
@@ -173,9 +206,10 @@ router.get('/exercise/:exerciseId', (req, res) => {
       category: exercise.category,
       imageUrl: exercise.image_url,
     },
-    history: rows,
-    bestWeight: bestWeight || null,
-    estimated1rm: best1rm ? Math.round(best1rm * 10) / 10 : null,
+    history,
+    bestWeight: prs.maxWeight,
+    estimated1rm: prs.bestE1rm,
+    prs,
   });
 });
 

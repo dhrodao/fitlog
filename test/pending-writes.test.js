@@ -109,6 +109,55 @@ test('active-set persistence scheduler', async (t) => {
     assert.equal(s.hasPending(), false, 'no pending work remains');
   });
 
+  await t.test('onSettled fires after each write settles, including after giving up', async () => {
+    // The previous code refreshed the "saving" indicator from inside write()'s
+    // finally, which does not run again when retries are exhausted (write() is
+    // not re-invoked on give-up), so the indicator could stay stuck. onSettled
+    // fires on the scheduler promise settling, after it leaves the in-flight
+    // set — each retry attempt is its own promise, so it fires per attempt, and
+    // crucially the LAST one runs after the final give-up with no pending work.
+    const settled = [];
+    const s = createWriteScheduler({
+      wait: 5,
+      baseBackoff: 2,
+      maxRetries: 1,
+      write: async () => {
+        throw new Error('boom');
+      },
+      onError: () => {},
+      onSettled: () => settled.push(s.hasPending()),
+    });
+
+    s.schedule(1);
+    await s.flush();
+    await tick(20); // allow the retry + give-up to run
+
+    assert.ok(settled.length >= 1, 'onSettled fires as writes settle');
+    assert.equal(
+      settled[settled.length - 1],
+      false,
+      'hasPending() is false after the write finally gives up'
+    );
+  });
+
+  await t.test('onSettled fires once per successful write', async () => {
+    let settledCount = 0;
+    const s = createWriteScheduler({
+      wait: 5,
+      write: async () => {},
+      onSettled: () => {
+        settledCount += 1;
+      },
+    });
+
+    s.schedule(1);
+    s.schedule(2);
+    await s.flush();
+
+    assert.equal(settledCount, 2, 'one onSettled per in-flight write');
+    assert.equal(s.hasPending(), false);
+  });
+
   await t.test('hasPending reflects outstanding work', async () => {
     const s = createWriteScheduler({
       wait: 5,

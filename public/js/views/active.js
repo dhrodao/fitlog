@@ -508,10 +508,9 @@ export async function render(container, ctx) {
       } catch (error) {
         if (error.status === 401) ctx.handleUnauthorized();
         throw error; // surface via onError, keep it visibly unsaved
-      } finally {
-        updateSaveState();
       }
     },
+    onSettled: updateSaveState,
     onError: (error) => {
       if (error.status !== 401) toast(errorMessage(error), 'error');
     },

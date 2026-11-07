@@ -26,6 +26,10 @@ const DEFAULT_BASE_BACKOFF = 1000;
  * @param {number} [options.baseBackoff] Base backoff in ms (exponential).
  * @param {(error: Error, key: string|number) => void} [options.onError]
  *        Called when a write fails after exhausting retries (value stays dirty).
+ * @param {() => void} [options.onSettled]
+ *        Called after each write promise settles (success, give-up, or after
+ *        all retries), once it has left the in-flight set. Use it to refresh
+ *        UI derived from hasPending().
  */
 export function createWriteScheduler({
   write,
@@ -33,6 +37,7 @@ export function createWriteScheduler({
   maxRetries = DEFAULT_MAX_RETRIES,
   baseBackoff = DEFAULT_BASE_BACKOFF,
   onError = null,
+  onSettled = null,
 } = {}) {
   if (typeof write !== 'function') {
     throw new TypeError('createWriteScheduler requires a write(key) function');
@@ -60,7 +65,10 @@ export function createWriteScheduler({
         onError?.(error, key); // give up; value remains dirty for next flush
       });
     pending.add(p);
-    p.finally(() => pending.delete(p));
+    p.finally(() => {
+      pending.delete(p);
+      onSettled?.();
+    });
     return p;
   }
 

@@ -1,6 +1,7 @@
 import { api, errorMessage } from '../api.js';
 import { barChart, attachBarChart } from '../charts.js';
 import { currentTheme, toggleTheme } from '../theme.js';
+import { workoutCard, weekRangeLabel } from '../view-helpers.js';
 import {
   avatar,
   confirmDialog,
@@ -39,22 +40,6 @@ function hevyFlushLabel(workouts, routines) {
   if (workouts > 0) parts.push(`${workouts} ${workouts === 1 ? 'entreno' : 'entrenos'}`);
   if (routines > 0) parts.push(`${routines} ${routines === 1 ? 'rutina' : 'rutinas'}`);
   return parts.join(' y ');
-}
-
-// Human-friendly label for a week bucket: "14 – 20 nov".
-function weekRangeLabel(weekStart) {
-  const start = new Date(weekStart);
-  if (Number.isNaN(start.getTime())) return '';
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 6);
-  const fmt = (d, withMonth) =>
-    d.toLocaleDateString('es-ES', {
-      day: 'numeric',
-      ...(withMonth ? { month: 'short' } : {}),
-      timeZone: 'UTC',
-    });
-  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
-  return `${fmt(start, !sameMonth)} – ${fmt(end, true)}`;
 }
 
 function totalsSummary(totals, write) {
@@ -472,21 +457,8 @@ export async function render(container, ctx) {
           ${
             recent.length
               ? recent
-                  .map(
-                    (workout) => `
-                    <button type="button" class="workout-card" data-link="/workouts/${workout.id}">
-                      <div class="workout-card-top">
-                        <div class="grow" style="min-width:0">
-                          <div class="name">${esc(workout.name)}</div>
-                          <div class="date">${esc(formatDate(workout.startedAt))} · ${esc(formatDuration(workout.durationSeconds))}</div>
-                        </div>
-                        ${icon('chevronRight', 17)}
-                      </div>
-                      <div class="stats">
-                        <span class="stat-mini">${icon('dumbbell', 13)} ${formatVolume(workout.summary?.volume)} kg</span>
-                        <span class="stat-mini">${icon('check', 13)} ${workout.summary?.sets || 0} series</span>
-                      </div>
-                    </button>`
+                  .map((workout) =>
+                    workoutCard(workout, { showRecords: false, showExerciseCount: false })
                   )
                   .join('')
               : `<div class="card"><div class="empty" style="padding:18px 8px">

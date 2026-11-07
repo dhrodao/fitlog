@@ -1,12 +1,10 @@
 import { api, errorMessage } from '../api.js';
 import { attachPullToRefresh } from '../pull-refresh.js';
+import { workoutCard } from '../view-helpers.js';
 import {
   connectionNeeded,
   esc,
-  formatDate,
-  formatDuration,
   formatMonth,
-  formatVolume,
   icon,
   monthKey,
   setLoading,
@@ -24,26 +22,6 @@ function groupByMonth(workouts) {
     groups.get(key).workouts.push(workout);
   }
   return Array.from(groups.values());
-}
-
-function workoutCard(workout) {
-  return `
-    <button type="button" class="workout-card" data-link="/workouts/${workout.id}">
-      <div class="workout-card-top">
-        <div class="grow" style="min-width:0">
-          <div class="name">${esc(workout.name)}</div>
-          <div class="date">${esc(formatDate(workout.startedAt, { withYear: true }))} · ${esc(formatDuration(workout.durationSeconds))}</div>
-        </div>
-        ${workout.summary?.records ? `<span class="badge badge-warning">${icon('trophy', 11)} ${workout.summary.records} PR</span>` : ''}
-        ${icon('chevronRight', 17)}
-      </div>
-      <div class="stats">
-        <span class="stat-mini">${icon('dumbbell', 13)} ${formatVolume(workout.summary?.volume)} kg</span>
-        <span class="stat-mini">${icon('check', 13)} ${workout.summary?.sets || 0} series</span>
-        <span class="stat-mini">${icon('layers', 13)} ${workout.exercises.length} ejercicios</span>
-      </div>
-    </button>
-  `;
 }
 
 export async function render(container, ctx) {
@@ -108,7 +86,7 @@ export async function render(container, ctx) {
           (group) => `
         <div class="history-month">
           <div class="history-month-title"><span>${esc(group.label)}</span><span>${group.workouts.length}</span></div>
-          <div class="stack-sm">${group.workouts.map(workoutCard).join('')}</div>
+          <div class="stack-sm">${group.workouts.map((w) => workoutCard(w, { withYear: true })).join('')}</div>
         </div>`
         )
         .join('')}

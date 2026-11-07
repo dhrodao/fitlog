@@ -1,10 +1,10 @@
 import { api, errorMessage } from '../api.js';
 import { attachPullToRefresh } from '../pull-refresh.js';
+import { workoutCard, weekRangeLabel } from '../view-helpers.js';
 import {
   avatar,
   connectionNeeded,
   esc,
-  formatDate,
   formatDuration,
   formatVolume,
   icon,
@@ -47,22 +47,6 @@ function weekLabel(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return `${date.getDate()}/${date.getMonth() + 1}`;
-}
-
-// "14 – 20 nov" range for a selected week.
-function weekRangeLabel(weekStart) {
-  const start = new Date(weekStart);
-  if (Number.isNaN(start.getTime())) return '';
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 6);
-  const fmt = (d, withMonth) =>
-    d.toLocaleDateString('es-ES', {
-      day: 'numeric',
-      ...(withMonth ? { month: 'short' } : {}),
-      timeZone: 'UTC',
-    });
-  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
-  return `${fmt(start, !sameMonth)} – ${fmt(end, true)}`;
 }
 
 export async function render(container, ctx) {
@@ -172,27 +156,7 @@ export async function render(container, ctx) {
         <div class="stack-sm">
           ${
             recent.length
-              ? recent
-                  .map(
-                    (workout) => `
-                    <button type="button" class="workout-card" data-link="/workouts/${workout.id}">
-                      <div class="workout-card-top">
-                        <div class="grow" style="min-width:0">
-                          <div class="name">${esc(workout.name)}</div>
-                          <div class="date">${esc(formatDate(workout.startedAt))} · ${esc(formatDuration(workout.durationSeconds))}</div>
-                        </div>
-                        ${workout.summary?.records ? `<span class="badge badge-warning">${icon('trophy', 11)} ${workout.summary.records} PR</span>` : ''}
-                        ${icon('chevronRight', 17)}
-                      </div>
-                      <div class="stats">
-                        <span class="stat-mini">${icon('dumbbell', 13)} ${formatVolume(workout.summary?.volume)} kg</span>
-                        <span class="stat-mini">${icon('check', 13)} ${workout.summary?.sets || 0} series</span>
-                        <span class="stat-mini">${icon('layers', 13)} ${workout.exercises.length} ejercicios</span>
-                      </div>
-                    </button>
-                  `
-                  )
-                  .join('')
+              ? recent.map((workout) => workoutCard(workout)).join('')
               : `<div class="card"><div class="empty" style="padding:18px 8px">
                    <div class="empty-icon">${icon('history', 22)}</div>
                    <h3>Sin entrenamientos aún</h3>

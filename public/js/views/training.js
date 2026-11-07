@@ -9,12 +9,11 @@ import {
   cachedRoutinesLocal,
   startRoutineLocal,
 } from '../offline/routines-cache.js';
+import { workoutCard } from '../view-helpers.js';
 import {
   confirmDialog,
   esc,
-  formatDate,
   formatDuration,
-  formatVolume,
   haptic,
   icon,
   openActionSheet,
@@ -222,27 +221,7 @@ export async function render(container, ctx) {
         <div class="stack-sm">
           ${
             data.workouts.length
-              ? data.workouts
-                  .map(
-                    (workout) => `
-                    <button type="button" class="workout-card" data-link="/workouts/${workout.id}">
-                      <div class="workout-card-top">
-                        <div class="grow" style="min-width:0">
-                          <div class="name">${esc(workout.name)}</div>
-                          <div class="date">${esc(formatDate(workout.startedAt))} · ${esc(formatDuration(workout.durationSeconds))}</div>
-                        </div>
-                        ${workout.summary?.records ? `<span class="badge badge-warning">${icon('trophy', 11)} ${workout.summary.records} PR</span>` : ''}
-                        ${icon('chevronRight', 17)}
-                      </div>
-                      <div class="stats">
-                        <span class="stat-mini">${icon('dumbbell', 13)} ${formatVolume(workout.summary?.volume)} kg</span>
-                        <span class="stat-mini">${icon('check', 13)} ${workout.summary?.sets || 0} series</span>
-                        <span class="stat-mini">${icon('layers', 13)} ${workout.exercises.length} ejercicios</span>
-                      </div>
-                    </button>
-                  `
-                  )
-                  .join('')
+              ? data.workouts.map((workout) => workoutCard(workout)).join('')
               : `<div class="card"><div class="empty" style="padding:18px 8px">
                    <div class="empty-icon">${icon('history', 22)}</div>
                    <h3>Sin entrenamientos</h3>

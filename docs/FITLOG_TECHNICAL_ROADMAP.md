@@ -1,7 +1,7 @@
 # FitLog — Technical Assessment and Implementation Roadmap
 
 > **Status of this document:** Completed
-> **Repository analyzed:** local checkout at `/Users/dhrodao/projects/fitlog` (commit `0cbd794`)
+> **Repository analyzed:** local checkout (commit `0cbd794`)
 > **Analysis date:** 2026-11-07
 > **Author role:** Senior software architect / technical lead
 > **Scope:** analysis and planning only. No application code, tests, configuration, database or deployment files were modified.

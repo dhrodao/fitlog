@@ -1059,26 +1059,21 @@ needs a way to prove it did not break authentication, isolation or sync.
 | 14 | P1-09 | Deploy safety: versioned images and rollback | P1 | M | P0-02, P1-01 | ◻ Partial |
 | 15 | P1-10 | Complete and version the PWA shell cache | P1 | S | — | ✅ Done |
 | 16 | P1-11 | Invalidate catalog caches after sync | P1 | XS | — | ✅ Done |
-| 17 | P1-12 | Shared frontend helpers and unsaved-change guard | P1 | S | P1-03 | ◻ Partial (dirty guard done; shared-helper extraction deferred) |
+| 17 | P1-12 | Shared frontend helpers and unsaved-change guard | P1 | S | P1-03 | ✅ Done |
 | 18 | P2-01 | Offline workout logging (conditional) | P2 | XL | Product decision, P1-10, P0-03 | ✅ Done |
-| 19 | P2-02 | Apple Health integration spike / companion (conditional) | P2 | L–XL | Product decision | ☐ Pending |
+| 19 | P2-02 | Apple Health integration spike / companion (conditional) | P2 | L–XL | Product decision | ❌ Won't do (PWA, not a native iOS app) |
 | 20 | P2-03 | Rest timer and set-level UX | P2 | M | P1-03 | ✅ Done |
-| 21 | P2-04 | Richer PR and statistics definitions | P2 | M | P1-05 | ☐ Pending |
-| 22 | P2-05 | Remove dead schema and unused API surface | P2 | S | P1-07 | ☐ Pending |
+| 21 | P2-04 | Richer PR and statistics definitions | P2 | M | P1-05 | ✅ Done |
+| 22 | P2-05 | Remove dead schema and unused API surface | P2 | S | P1-07 | ✅ Done |
 
-> **Progress (updated 2026-11-07).** All P0 tasks are complete. All P1 tasks are
-> complete except P1-09 (partial) and P1-12 (only the shared-helper extraction
-> is deferred — the unsaved-change guard is done); P1-09 is partially complete (test gate, pre-deploy
-> backup and migration, and a health-gated deploy are in place; SHA-tagged
-> images and automatic rollback are not). Offline workout logging (P2-01) was
-> implemented as a product priority — the active workout and a cached exercise
-> catalog and routine list live in IndexedDB, an empty workout or a cached
-> routine can be started with no connectivity, and the whole workout is uploaded
-> idempotently through `POST /api/workouts/sync` keyed by a per-user client id.
-> Creating or editing routines offline is intentionally **not** supported.
-> P1-11 (catalog cache invalidation) and P2-03 (rest timer) are now done.
-> Remaining: the deferred half of P1-12, and P2-02 (Apple Health), P2-04 (richer
-> PRs) and P2-05 (dead-schema cleanup).
+> **Progress (updated 2026-11-07).** All P0 and P1 tasks are complete except
+> P1-09, which is partial (test gate, pre-deploy backup and migration, and a
+> health-gated deploy are in place; SHA-tagged images and automatic rollback
+> are not). Of the P2 items, P2-01 (offline logging), P2-03 (rest timer),
+> P2-04 (richer PRs) and P2-05 (dead-schema cleanup) are done. P2-02 (Apple
+> Health) is a deliberate won't-do: FitLog stays a PWA and HealthKit would
+> require a separate native iOS companion. The only remaining open item is
+> the unfinished half of P1-09 (image versioning + automatic rollback).
 
 P0-04 is the only task that may reasonably jump the queue: if the instance is
 publicly reachable today, apply the allowlist as an immediate hotfix. It is
@@ -1399,7 +1394,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-12 |
-| **Status** | ◻ Partial — unsaved-change guard done; shared workout-card/helper extraction deferred (broad refactor, no user-facing benefit now) |
+| **Status** | ✅ Done (verified in code) — unsaved-change guard and shared workout-card/week-range helpers extracted |
 | **Title** | Shared frontend helpers and unsaved-change guard |
 | **Priority** | P1 |
 | **Problem** | Workout cards, date/week labels and exercise grouping are duplicated across views. The routine editor discards unsaved changes silently on cancel/navigation. |
@@ -1439,7 +1434,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P2-02 |
-| **Status** | ☐ Pending |
+| **Status** | ❌ Won't do — product decision: FitLog stays a PWA; HealthKit needs a native iOS companion, out of scope |
 | **Title** | Apple Health integration spike / companion |
 | **Priority** | P2 |
 | **Problem** | A PWA cannot access HealthKit; the current app has no path to Apple Health data. |
@@ -1477,7 +1472,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P2-04 |
-| **Status** | ☐ Pending |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Richer PR and statistics definitions |
 | **Priority** | P2 |
 | **Problem** | PRs only count maximum weight; other meaningful records (reps at a weight, e1RM, volume) are not represented. |
@@ -1496,7 +1491,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P2-05 |
-| **Status** | ☐ Pending |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Remove dead schema and unused API surface |
 | **Priority** | P2 |
 | **Problem** | `hevy_sync.last_cursor` is never used; `addExerciseToWorkout` accepts `prefill`/`targetReps` but ignores them; `hevy_templates` has unused fields; template cache survives disconnect. |
@@ -1584,7 +1579,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
-| **Status** | ◻ Mostly done — P1-05 complete; P1-12 unsaved-change guard done (shared-helper extraction deferred); P2-04 not started. |
+| **Status** | ✅ Done — P1-05, P1-12 and P2-04 complete. |
 | **Objective** | Turn stored history into useful, trustworthy progression feedback and reduce frontend duplication. |
 | **Included tasks** | P1-05, P1-12 (P2-04 only if the product owner approves the PR definitions) |
 | **Dependencies** | M5 (editable/correct data) |
@@ -1608,7 +1603,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
-| **Status** | ◻ Partial — P2-01 (offline logging) and P2-03 (rest timer) done; P2-02 and P2-05 pending. |
+| **Status** | ◻ Mostly done — P2-01, P2-03 and P2-05 done; P2-02 won't-do (PWA, not native iOS). |
 | **Objective** | Evaluate and, only if approved, deliver the larger product bets. |
 | **Included tasks** | P2-01, P2-02, P2-03, P2-05 |
 | **Dependencies** | Written product decisions in §10; P1-10 and P0-03 for offline; P1-07 for cleanup |

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import config from './config.js';
+import { runMigrations } from './migrations.js';
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 
@@ -231,6 +232,8 @@ function migrateLegacyCatalog() {
 }
 
 if (migrateLegacyCatalog()) {
+  // Recreate the baseline tables dropped/rebuilt by the legacy repair before
+  // the migration runner records the baseline as applied.
   db.exec(schema);
 }
 
@@ -240,6 +243,12 @@ function ensureColumn(table, column, definition) {
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
+// Column reconciliation for databases created before the migration system:
+// migration 001 only CREATEs missing tables, it does not add columns to an
+// already-existing table. These idempotent ALTERs backfill the columns that
+// were historically added via ensureColumn, so an old database reaches the
+// baseline shape before versioned migrations run. A fresh database already has
+// these columns (migration 001 creates them), so every check is a no-op.
 ensureColumn('workout_exercises', 'superset_group', 'INTEGER');
 ensureColumn('workouts', 'source', 'TEXT');
 ensureColumn('routines', 'source', 'TEXT');
@@ -247,25 +256,15 @@ ensureColumn('routines', 'hevy_routine_id', 'TEXT');
 ensureColumn('workouts', 'hevy_workout_id', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_token', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_enabled', 'INTEGER NOT NULL DEFAULT 0');
-// Non-fatal warning from the last sync (e.g. routines failed to import while
-// workouts succeeded). Kept separate from last_error so a partial success is
-// not reported as a failed sync.
 ensureColumn('hevy_sync', 'last_warning', 'TEXT');
-db.exec(
-  `CREATE UNIQUE INDEX IF NOT EXISTS idx_hevy_webhook_token
-     ON hevy_sync(webhook_token) WHERE webhook_token IS NOT NULL`
-);
-// One imported routine per Hevy routine id, per user (enables idempotent upsert).
-db.exec(
-  `CREATE UNIQUE INDEX IF NOT EXISTS idx_routines_hevy
-     ON routines(user_id, hevy_routine_id) WHERE hevy_routine_id IS NOT NULL`
-);
-// One imported workout per Hevy workout id, per user. Backs idempotent upsert:
-// re-syncing an updated workout updates it in place instead of duplicating.
-db.exec(
-  `CREATE UNIQUE INDEX IF NOT EXISTS idx_workouts_hevy
-     ON workouts(user_id, hevy_workout_id) WHERE hevy_workout_id IS NOT NULL`
-);
+
+// Versioned, transactional migrations. Baseline (001) is a no-op on an existing
+// database; later migrations add integrity constraints. See server/migrations.
+runMigrations(db, {
+  log: (msg) => {
+    if (process.env.NODE_ENV !== 'test') console.log(msg);
+  },
+});
 
 export const nowIso = () => new Date().toISOString();
 

@@ -425,10 +425,20 @@ function getOrderedWorkoutExercises(workoutId) {
 }
 
 function writeExerciseOrder(workoutId, orderedIds) {
+  // positions are unique per workout, so a one-by-one renumber can transiently
+  // collide (row A takes a position row B still holds). Offset every row out of
+  // range first, then assign the final dense sequence. Wrapped in a transaction.
+  const offset = db.prepare(
+    'UPDATE workout_exercises SET position = position + ? WHERE workout_id = ?'
+  );
   const renumber = db.prepare(
     'UPDATE workout_exercises SET position = ? WHERE id = ? AND workout_id = ?'
   );
-  orderedIds.forEach((id, index) => renumber.run(index, id, workoutId));
+  const OFFSET = 100000;
+  db.transaction(() => {
+    offset.run(OFFSET, workoutId);
+    orderedIds.forEach((id, index) => renumber.run(index, id, workoutId));
+  })();
 }
 
 export function setSuperset(userId, workoutId, workoutExerciseId, otherWorkoutExerciseId) {

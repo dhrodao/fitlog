@@ -13,6 +13,7 @@
     "import:hevy-api": "node server/import-hevy-api.js",
     "backup:db": "node scripts/backup-db.js",
     "backup:verify": "node scripts/verify-backup.js",
+    "migrate": "node server/migrate.js",
     "test": "node --test"
   },
   "engines": {

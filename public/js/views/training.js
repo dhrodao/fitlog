@@ -5,6 +5,11 @@ import { createLocalWorkout } from '../offline/local-workout.js';
 import { saveActiveWorkout } from '../offline/active-store.js';
 import { refreshCatalogCache } from '../offline/catalog-cache.js';
 import {
+  refreshRoutinesCache,
+  cachedRoutinesLocal,
+  startRoutineLocal,
+} from '../offline/routines-cache.js';
+import {
   confirmDialog,
   esc,
   formatDate,
@@ -48,7 +53,7 @@ function groupRoutines(routines) {
   return names.map((name) => ({ name, routines: groups.get(name) }));
 }
 
-function routineCard(routine) {
+function routineCard(routine, offline = false) {
   return `
     <article class="routine-card">
       <div class="routine-card-top">
@@ -58,9 +63,9 @@ function routineCard(routine) {
           </button>
           <div class="routine-preview clamp-2">${esc(routine.preview || 'Sin ejercicios todavía')}</div>
         </div>
-        <button type="button" class="icon-btn" data-routine-menu="${routine.id}" aria-label="Opciones de rutina">
+        ${offline ? '' : `<button type="button" class="icon-btn" data-routine-menu="${routine.id}" aria-label="Opciones de rutina">
           ${icon('more', 19)}
-        </button>
+        </button>`}
       </div>
       <div class="routine-meta">
         <span>${icon('list', 13)} ${routine.exerciseCount} ejercicios</span>
@@ -100,7 +105,10 @@ export async function render(container, ctx) {
     if (error.status === 0) {
       offline = true;
       await ctx.refreshActive();
-      data = { routines: [], workouts: [] };
+      // Routines cached while online stay available (read-only) and can be
+      // started offline; history is not cached so it stays empty.
+      const cachedRoutines = await cachedRoutinesLocal(ctx.user?.id ?? null);
+      data = { routines: cachedRoutines, workouts: [] };
     } else {
       container.innerHTML = `
         <div class="empty">
@@ -150,7 +158,9 @@ export async function render(container, ctx) {
       ${offline ? `
         <div class="notice">
           ${icon('info', 16)}
-          <span>Sin conexión. Puedes empezar un entreno vacío; las rutinas y el historial aparecerán cuando vuelvas a estar en línea.</span>
+          <span>${data.routines.length
+            ? 'Sin conexión. Puedes empezar un entreno vacío o una rutina guardada; el historial aparecerá cuando vuelvas a estar en línea.'
+            : 'Sin conexión. Puedes empezar un entreno vacío; las rutinas y el historial aparecerán cuando vuelvas a estar en línea.'}</span>
         </div>
       ` : ''}
 
@@ -185,7 +195,7 @@ export async function render(container, ctx) {
                         </button>
                         <div class="folder-body">
                           <div class="folder-body-inner">
-                            ${group.routines.map(routineCard).join('')}
+                            ${group.routines.map((r) => routineCard(r, offline)).join('')}
                           </div>
                         </div>
                       </div>
@@ -244,6 +254,12 @@ export async function render(container, ctx) {
     </div>
   `;
 
+  // While online, keep the offline routines cache warm so routines can be read
+  // and started on a later offline session. Fire-and-forget; never blocks.
+  if (!offline) {
+    refreshRoutinesCache(api, ctx.user?.id ?? null);
+  }
+
   const startEmpty = async () => {
     const buttons = container.querySelectorAll('[data-start-empty]');
     buttons.forEach((button) => setLoading(button, true, 'Empezando...'));
@@ -287,10 +303,25 @@ export async function render(container, ctx) {
   };
 
   const startRoutine = async (button, id) => {
-    // Routines cannot be resolved without the server (we do not cache them), so
-    // offline the user must use an empty workout instead.
+    // Start from a locally cached routine: materialize it into a local workout
+    // and persist it as the active snapshot. Shared by the explicit-offline
+    // path and the network-failure fallback.
+    const startLocal = async () => {
+      const workout = await startRoutineLocal(ctx.user?.id ?? null, id);
+      if (!workout) {
+        if (button) setLoading(button, false);
+        toast('Esta rutina no está disponible sin conexión', 'error');
+        return false;
+      }
+      await saveActiveWorkout(ctx.user?.id ?? null, workout);
+      haptic(10);
+      ctx.navigate('/workout/active');
+      return true;
+    };
+
+    // Explicitly offline: skip the request and start from the cache.
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      toast('No se puede empezar una rutina sin conexión; usa Entreno vacío', 'error');
+      await startLocal();
       return;
     }
     setLoading(button, true, 'Empezando...');
@@ -306,7 +337,8 @@ export async function render(container, ctx) {
       } else if (error.status === 401) {
         ctx.handleUnauthorized();
       } else if (error.status === 0) {
-        toast('No se puede empezar una rutina sin conexión; usa Entreno vacío', 'error');
+        // The request never reached the server: fall back to the cached routine.
+        await startLocal();
       } else {
         toast(errorMessage(error), 'error');
       }

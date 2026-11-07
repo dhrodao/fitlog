@@ -53,8 +53,10 @@ npm start                # run (node server/index.js)
 npm run dev              # auto-reload (node --watch)
 npm test                 # full suite (node --test). MUST stay green.
 npm run test:e2e         # browser E2E (Playwright, Chromium). Boots the app
-                         #   itself; run locally or via the Dockerfile `e2e`
-                         #   target (browsers baked into that image).
+                         #   itself. Run LOCALLY only (first time: `npx
+                         #   playwright install chromium`); it is not run in
+                         #   CI or in the Docker image (the self-hosted runner
+                         #   is the production host and lacks disk for it).
 npm run sync:exercises   # sync free-exercise-db catalog
 npm run seed:demo        # sample data
 npm run migrate          # apply schema migrations (also run on boot)

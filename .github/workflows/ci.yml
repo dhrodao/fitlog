@@ -53,24 +53,3 @@ jobs:
               npm ci
               npm test
             '
-
-  # Browser end-to-end tests. Heavier and slower than the unit/integration
-  # suite, so they run only on pull requests and manual dispatch — NOT on every
-  # push to main, and NOT as part of the deploy gate (which stays fast). They
-  # build the Dockerfile's `e2e` target (Playwright image with browsers baked
-  # in) and run the specs inside it. --network=host is required because this
-  # host's Docker bridge network has no Internet (same as the production build).
-  e2e:
-    runs-on: self-hosted
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build the e2e image and run the browser tests
-        run: |
-          set -euo pipefail
-          docker build --network=host --target e2e -t fitness-e2e:ci .
-          # The container runs Playwright, which boots the app server itself
-          # (see playwright.config.js webServer). CI=1 enables retries/reporters.
-          docker run --rm -e CI=1 fitness-e2e:ci

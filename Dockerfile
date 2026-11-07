@@ -50,34 +50,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "server/index.js"]
-
-# ---- E2E test stage (never shipped) ----
-# Built only as an explicit target (`docker build --target e2e`), never part of
-# the production `runner` image above. Starts from Playwright's official image,
-# which already bundles the browsers and their system libraries, so no browser
-# download happens at build time. The image tag is pinned to the same version
-# as the @playwright/test devDependency. @playwright/test 1.56 supports Node
-# >=18, so it respects engines (>=18, no >=22) wherever it runs.
-#
-# Note: on a host whose Docker bridge network has no Internet (this project's
-# setup), build this target with `--network=host` so `npm ci` can resolve the
-# registry — same reason the production build and compose use host networking.
-FROM mcr.microsoft.com/playwright:v1.56.0-noble AS e2e
-WORKDIR /app
-
-ENV NODE_ENV=test
-
-# Install all dependencies (including devDependencies: Playwright itself).
-COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
-
-# Application code plus the E2E specs and config.
-COPY server ./server
-COPY public ./public
-COPY e2e ./e2e
-COPY playwright.config.js ./
-
-# playwright.config.js boots the server (dev login, throwaway DB) via its
-# webServer option, so running the tests is a single command.
-CMD ["npx", "playwright", "test"]
-

@@ -11,6 +11,7 @@ import {
   setLoading,
   toast,
 } from '../ui.js';
+import { parseDecimalInput, INVALID } from '../format.js';
 
 function measurementRow(measurement) {
   const parts = [];
@@ -101,17 +102,17 @@ export async function render(container, ctx) {
           <div class="form-grid">
             <div class="field">
               <label>Peso (kg)</label>
-              <input class="input" type="number" inputmode="decimal" step="0.1" data-field="weightKg" placeholder="0.0" />
+              <input class="input" type="text" inputmode="decimal" data-field="weightKg" placeholder="0.0" />
             </div>
             <div class="field">
               <label>Grasa (%)</label>
-              <input class="input" type="number" inputmode="decimal" step="0.1" data-field="bodyFat" placeholder="0.0" />
+              <input class="input" type="text" inputmode="decimal" data-field="bodyFat" placeholder="0.0" />
             </div>
           </div>
           <div class="form-grid">
             <div class="field">
               <label>Cintura (cm)</label>
-              <input class="input" type="number" inputmode="decimal" step="0.1" data-field="waistCm" placeholder="0.0" />
+              <input class="input" type="text" inputmode="decimal" data-field="waistCm" placeholder="0.0" />
             </div>
             <div class="field">
               <label>Nota</label>
@@ -198,15 +199,29 @@ export async function render(container, ctx) {
     const payload = {
       date: field('date').value || formatDateInput(new Date()),
     };
+    let invalidField = false;
     const applyNumeric = (name) => {
-      const raw = field(name).value.trim();
+      const el = field(name);
+      const raw = el.value.trim();
+      el.classList.remove('input-error');
       if (raw === '') {
         if (editing) payload[name] = null;
-      } else {
-        payload[name] = Number(raw);
+        return;
       }
+      const parsed = parseDecimalInput(raw);
+      if (parsed === INVALID || parsed === null || parsed < 0) {
+        el.classList.add('input-error');
+        invalidField = true;
+        return;
+      }
+      payload[name] = parsed;
     };
     ['weightKg', 'bodyFat', 'waistCm'].forEach(applyNumeric);
+
+    if (invalidField) {
+      toast('Revisa los valores numéricos (usa coma o punto)', 'error');
+      return;
+    }
 
     const noteRaw = field('notes').value.trim();
     if (noteRaw !== '') payload.notes = noteRaw;

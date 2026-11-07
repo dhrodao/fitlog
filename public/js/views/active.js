@@ -15,6 +15,7 @@ import {
   setLoading,
   toast,
 } from '../ui.js';
+import { parseDecimalInput, INVALID } from '../format.js';
 
 function computeTotals(workout) {
   let volume = 0;
@@ -58,7 +59,7 @@ function setRow(exercise, set, index) {
           ${esc(prevLabel(exercise.previousSets, index))}
         </button>
         <div class="set-cell">
-          <input class="number-input" type="number" inputmode="decimal" step="0.5" min="0" placeholder="${esc(weightPlaceholder)}"
+          <input class="number-input" type="text" inputmode="decimal" placeholder="${esc(weightPlaceholder)}"
             enterkeyhint="next"
             value="${set.weightKg != null ? esc(String(set.weightKg)) : ''}" data-field="weightKg" aria-label="Peso en kg" />
         </div>
@@ -529,15 +530,28 @@ export async function render(container, ctx) {
     const set = getSet(weId, setId);
     if (!set) return;
     const raw = field.value;
-    let value = raw === '' ? null : Number(raw);
+    const parsed = parseDecimalInput(raw);
+
+    // Invalid input (e.g. "5kg", stray letters) must not silently become 0.
+    // Flag the field and leave the stored value untouched until it is fixed.
+    if (parsed === INVALID) {
+      field.classList.add('input-error');
+      return;
+    }
+    field.classList.remove('input-error');
+
+    let value = parsed;
     if (value != null) {
-      // Clamp negatives / invalid input to 0 and keep reps integer. Only
-      // overwrite the field when we actually changed it, so mid-typing values
-      // like "60." are not clobbered.
-      const invalid = !Number.isFinite(value) || value < 0;
-      if (invalid) value = 0;
+      // Clamp negatives to 0 and keep reps integer. Only overwrite the field
+      // when we actually changed it, so mid-typing values like "60." are not
+      // clobbered.
+      let corrected = false;
+      if (value < 0) {
+        value = 0;
+        corrected = true;
+      }
       if (field.dataset.field === 'reps') value = Math.round(value);
-      if (invalid) field.value = String(value);
+      if (corrected) field.value = String(value);
     }
     set[field.dataset.field] = value;
     renderStats();

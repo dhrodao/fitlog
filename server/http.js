@@ -12,6 +12,15 @@ export const asyncHandler = (fn) => (req, res, next) => {
 
 export function toNumber(value, fallback = null) {
   if (value === null || value === undefined || value === '') return fallback;
+  // Defence in depth: a client should normalise decimals before sending, but
+  // if a bare "72,5" arrives, accept a single comma as the decimal separator
+  // rather than silently turning it into the fallback. We do NOT try to guess
+  // thousands separators here; locale handling lives in the client.
+  if (typeof value === 'string' && value.includes(',') && !value.includes('.')) {
+    if ((value.match(/,/g) || []).length === 1) {
+      value = value.replace(',', '.');
+    }
+  }
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
 }

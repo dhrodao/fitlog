@@ -10,6 +10,7 @@ import {
   relinkAllImportedWorkouts,
 } from './hevy-routines-import.js';
 import { storeTemplates } from './hevy-templates.js';
+import { logger } from './logger.js';
 import {
   HevyClient,
   HevyApiError,
@@ -395,7 +396,7 @@ async function runSync(userId, { full = false } = {}) {
       // Non-fatal: workouts already imported. Record a warning so the status is
       // honest (partial success) without marking the whole sync as failed.
       warning = `No se pudieron importar las rutinas: ${err.message}`;
-      console.warn(`[hevy-sync] usuario ${userId}: ${warning}`);
+      logger.warn('hevy routines import failed', { userId, detail: err.message });
     }
 
     db.prepare(
@@ -455,13 +456,19 @@ export function startSyncScheduler({ intervalHours = 6 } = {}) {
   const tick = async () => {
     const users = usersWithAutoSync();
     if (!users.length) return;
-    console.log(`[hevy-sync] sincronizando ${users.length} usuario(s)…`);
+    logger.info('hevy scheduled sync starting', { users: users.length });
     const results = await syncAllAutoUsers();
     for (const r of results) {
       if (r.ok) {
-        console.log(`[hevy-sync] usuario ${r.userId}: +${r.imported} entrenos`);
+        logger.info('hevy scheduled sync user ok', {
+          userId: r.userId,
+          imported: r.imported,
+        });
       } else {
-        console.warn(`[hevy-sync] usuario ${r.userId} falló: ${r.error}`);
+        logger.warn('hevy scheduled sync user failed', {
+          userId: r.userId,
+          detail: r.error,
+        });
       }
     }
   };

@@ -7,6 +7,8 @@ import { attachUser, requireAuth } from './auth.js';
 import { HttpError } from './http.js';
 import { rateLimit } from './rate-limit.js';
 import { originCheck } from './origin-check.js';
+import { checkHealth } from './health.js';
+import { logger } from './logger.js';
 import authRoutes from './routes/auth.js';
 import exercisesRoutes from './routes/exercises.js';
 import routinesRoutes from './routes/routines.js';
@@ -82,7 +84,10 @@ export function createApp() {
   });
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, time: new Date().toISOString() });
+    const result = checkHealth();
+    // 503 on failure so the Docker healthcheck and the deploy probe (both read
+    // the HTTP status) treat a broken database as unhealthy.
+    res.status(result.ok ? 200 : 503).json(result);
   });
 
   app.use('/api/auth', authLimiter, authRoutes);
@@ -130,7 +135,11 @@ export function createApp() {
       return res.status(400).json({ error: 'JSON inválido' });
     }
 
-    console.error('[error]', error);
+    logger.error('unhandled request error', {
+      method: req.method,
+      path: req.path,
+      err: error,
+    });
     res.status(500).json({
       error: config.isProduction
         ? 'Error interno del servidor'

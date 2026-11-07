@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { userByWebhookToken, syncUser } from '../hevy-sync.js';
+import { logger } from '../logger.js';
 
 const router = Router();
 
@@ -27,13 +28,14 @@ router.post('/webhook', (req, res) => {
     .then(() => syncUser(userId))
     .then((result) => {
       if (result?.totals?.imported) {
-        console.log(
-          `[hevy-webhook] usuario ${userId}: +${result.totals.imported} entrenos`
-        );
+        logger.info('hevy webhook sync ok', {
+          userId,
+          imported: result.totals.imported,
+        });
       }
     })
     .catch((err) => {
-      console.warn(`[hevy-webhook] sync usuario ${userId} falló: ${err.message}`);
+      logger.warn('hevy webhook sync failed', { userId, detail: err.message });
     });
 });
 

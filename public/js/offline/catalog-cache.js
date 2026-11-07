@@ -34,6 +34,22 @@ async function getBlob(key) {
 }
 
 /**
+ * Fetch the entire catalog by paging through the server (which caps each
+ * response at 100). Returns { exercises: [...] } to match a single response.
+ */
+async function fetchAllCatalog(api) {
+  const pageSize = 100;
+  const exercises = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const res = await api.exercises.search('', '', { limit: pageSize, offset });
+    const page = res.exercises || [];
+    exercises.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return { exercises };
+}
+
+/**
  * Refresh the cache from the server (call while online). Pulls the full catalog
  * (empty query, high limit), the categories and the user's own exercises, and
  * stores only id/name/category. Best-effort: failures are swallowed.
@@ -42,7 +58,10 @@ export async function refreshCatalogCache(api, userId) {
   if (userId == null) return;
   try {
     const [catalogRes, categoriesRes, mineRes] = await Promise.all([
-      api.exercises.search('', ''),
+      // Pull the whole catalog for offline use, page by page, since the server
+      // caps a single response (limit 100). Without this we would only cache
+      // the first page and the offline picker could not see every exercise.
+      fetchAllCatalog(api),
       api.exercises.categories(),
       api.exercises.mine(''),
     ]);
@@ -62,14 +81,14 @@ const norm = (s) =>
     .replace(/[\u0300-\u036f]/g, '');
 
 /** Local equivalent of GET /exercises/search. Returns [{id,name,category}]. */
-export async function searchCatalogLocal(userId, query = '', category = '') {
+export async function searchCatalogLocal(userId, query = '', category = '', { limit = 40, offset = 0 } = {}) {
   const all = (await getBlob(keyCatalog(userId))) || [];
   const q = norm(query.trim());
-  return all
+  const filtered = all
     .filter((row) => (category ? row.category === category : true))
     .filter((row) => (q ? norm(row.name).includes(q) : true))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, 100);
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return filtered.slice(offset, offset + limit);
 }
 
 /** Local equivalent of GET /exercises/categories. */
@@ -78,12 +97,14 @@ export async function categoriesLocal(userId) {
 }
 
 /** Local equivalent of GET /exercises/mine. */
-export async function mineLocal(userId, query = '') {
+export async function mineLocal(userId, query = '', { limit, offset = 0 } = {}) {
   const all = (await getBlob(keyMine(userId))) || [];
   const q = norm(query.trim());
-  return all
+  const filtered = all
     .filter((row) => (q ? norm(row.name).includes(q) : true))
     .sort((a, b) => a.name.localeCompare(b.name));
+  if (limit == null) return filtered;
+  return filtered.slice(offset, offset + limit);
 }
 
 /** True if there is a usable cached catalog for this user. */

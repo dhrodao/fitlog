@@ -100,81 +100,145 @@ export function openExercisePicker({ onPick, title = 'Añadir ejercicio', userId
     muscleFilterBtn.classList.toggle('active', Boolean(category));
   };
 
-  const renderResults = (items) => {
-    resultsEl.innerHTML = items.length
-      ? items
-          .map(
-            (item) => `
-        <button type="button" class="picker-item" data-pick='${esc(JSON.stringify(item))}'>
-          <span class="exercise-thumb ${item.imageUrl ? '' : 'gray'}" style="width:44px;height:44px;border-radius:11px">
-            ${item.imageUrl ? `<img src="${esc(item.imageUrl)}" alt="" referrerpolicy="no-referrer" />` : icon('dumbbell', 18)}
-          </span>
-          <span class="grow" style="min-width:0">
-            <span class="n">${esc(item.name)}</span>
-            <span class="c">${esc(item.category || '')}</span>
-          </span>
-          ${icon('plus', 18)}
-        </button>`
-          )
-          .join('')
-      : `<div class="empty" style="padding:24px 8px">
-          <div class="empty-icon">${icon('search', 20)}</div>
-          <p>Sin resultados</p>
-        </div>`;
+  const PAGE_SIZE = 40;
+  // Paging state for the current query/category/tab, mirroring the browse view
+  // (public/js/views/exercises.js): loadMore(reset) handles both the first page
+  // and subsequent ones, and an IntersectionObserver on a sentinel at the end
+  // of the list triggers the next page. This lets the user reach every exercise
+  // instead of being capped at a single response.
+  let offset = 0;
+  let hasMore = true;
+  let loading = false;
+  let loadToken = 0; // invalidates in-flight loads when filters change
+  let observer = null;
+
+  const mapCatalogRow = (row) => ({
+    catalogId: row.id,
+    name: row.name,
+    category: row.category,
+    imageUrl: row.thumbnailUrl || row.imageUrl || null,
+  });
+  const mapMineRow = (row) => ({
+    exerciseId: row.id,
+    name: row.name,
+    category: row.category,
+    imageUrl: row.imageUrl || null,
+  });
+
+  const itemHtml = (item) => `
+    <button type="button" class="picker-item" data-pick='${esc(JSON.stringify(item))}'>
+      <span class="exercise-thumb ${item.imageUrl ? '' : 'gray'}" style="width:44px;height:44px;border-radius:11px">
+        ${item.imageUrl ? `<img src="${esc(item.imageUrl)}" alt="" referrerpolicy="no-referrer" />` : icon('dumbbell', 18)}
+      </span>
+      <span class="grow" style="min-width:0">
+        <span class="n">${esc(item.name)}</span>
+        <span class="c">${esc(item.category || '')}</span>
+      </span>
+      ${icon('plus', 18)}
+    </button>`;
+
+  const emptyHtml = `<div class="empty" style="padding:24px 8px">
+      <div class="empty-icon">${icon('search', 20)}</div>
+      <p>Sin resultados</p>
+    </div>`;
+
+  const sentinelMarkup = () =>
+    `<div data-sentinel style="padding:16px 8px;display:flex;justify-content:center">
+      <div class="spinner"></div>
+    </div>`;
+
+  /**
+   * Fetch one page of results for the current tab/query/category at `offset`.
+   * Mirrors the online/offline fallback logic for both tabs.
+   */
+  const fetchPage = async (query, pageOffset) => {
+    if (tab === 'catalog') {
+      const exercises = offline()
+        ? await searchCatalogLocal(userId, query, category, { limit: PAGE_SIZE, offset: pageOffset })
+        : await api.exercises
+            .search(query, category, { limit: PAGE_SIZE, offset: pageOffset })
+            .then((r) => r.exercises);
+      return exercises.map(mapCatalogRow);
+    }
+    // "Mis ejercicios" has no server paging (one full response); slice it here
+    // so the same offset/PAGE_SIZE contract applies and paging terminates.
+    const exercises = offline()
+      ? await mineLocal(userId, query, { limit: PAGE_SIZE, offset: pageOffset })
+      : await api.exercises
+          .mine(query)
+          .then((r) => (r.exercises || []).slice(pageOffset, pageOffset + PAGE_SIZE));
+    return exercises.map(mapMineRow);
   };
 
-  const load = async () => {
-    resultsEl.innerHTML = `<div class="empty" style="padding:24px 8px"><div class="spinner"></div></div>`;
+  // Load the next page. `reset` restarts from offset 0 (new query/category/tab).
+  const load = async (reset = false) => {
+    if (loading) return;
+    if (!reset && !hasMore) return;
+    loading = true;
+
+    if (reset) {
+      offset = 0;
+      hasMore = true;
+      loadToken += 1;
+      resultsEl.innerHTML = `<div class="empty" style="padding:24px 8px"><div class="spinner"></div></div>`;
+    }
+
+    const token = loadToken;
     const query = searchEl.value.trim();
+
     try {
-      if (tab === 'catalog') {
-        // Offline (or on a network failure) read from the cached catalog so a
-        // workout can still be built from scratch; images are not cached.
-        const exercises = offline()
-          ? await searchCatalogLocal(userId, query, category)
-          : await api.exercises.search(query, category).then((r) => r.exercises);
-        renderResults(
-          exercises.map((row) => ({
-            catalogId: row.id,
-            name: row.name,
-            category: row.category,
-            imageUrl: row.thumbnailUrl || row.imageUrl || null,
-          }))
-        );
-      } else {
-        const exercises = offline()
-          ? await mineLocal(userId, query)
-          : await api.exercises.mine(query).then((r) => r.exercises);
-        renderResults(
-          exercises.map((row) => ({
-            exerciseId: row.id,
-            name: row.name,
-            category: row.category,
-            imageUrl: row.imageUrl || null,
-          }))
-        );
-      }
-    } catch (error) {
-      // A network failure while "online" (flaky link): fall back to the cache.
-      if (isNetworkError(error)) {
-        const exercises =
+      let items;
+      try {
+        items = await fetchPage(query, offset);
+      } catch (error) {
+        // A network failure while "online" (flaky link): fall back to cache.
+        if (!isNetworkError(error)) throw error;
+        items =
           tab === 'catalog'
-            ? await searchCatalogLocal(userId, query, category)
-            : await mineLocal(userId, query);
-        renderResults(
-          exercises.map((row) =>
-            tab === 'catalog'
-              ? { catalogId: row.id, name: row.name, category: row.category, imageUrl: null }
-              : { exerciseId: row.id, name: row.name, category: row.category, imageUrl: null }
-          )
-        );
+            ? (await searchCatalogLocal(userId, query, category, { limit: PAGE_SIZE, offset })).map(mapCatalogRow)
+            : (await mineLocal(userId, query, { limit: PAGE_SIZE, offset })).map(mapMineRow);
+      }
+      // A newer load started while this request was in flight: drop it.
+      if (token !== loadToken) return;
+
+      if (reset) resultsEl.innerHTML = '';
+      // Remove the previous sentinel before appending the new page.
+      resultsEl.querySelector('[data-sentinel]')?.remove();
+
+      offset += items.length;
+      hasMore = items.length === PAGE_SIZE;
+
+      if (!resultsEl.children.length && !items.length) {
+        resultsEl.innerHTML = emptyHtml;
         return;
       }
-      resultsEl.innerHTML = `<div class="notice danger">${icon('info', 16)} ${esc(errorMessage(error))}</div>`;
+
+      for (const item of items) resultsEl.insertAdjacentHTML('beforeend', itemHtml(item));
+      if (hasMore) {
+        resultsEl.insertAdjacentHTML('beforeend', sentinelMarkup());
+        observer?.observe(resultsEl.querySelector('[data-sentinel]'));
+      }
+    } catch (error) {
+      if (token !== loadToken) return;
+      // Only replace the whole area with an error on the first page.
+      if (offset === 0) {
+        resultsEl.innerHTML = `<div class="notice danger">${icon('info', 16)} ${esc(errorMessage(error))}</div>`;
+      }
+    } finally {
+      if (token === loadToken) loading = false;
     }
   };
 
-  const debouncedLoad = debounce(load, 280);
+  // Infinite scroll via a sentinel at the end of the list, same as the browse
+  // view. rootMargin preloads the next page shortly before it is visible.
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) load(false);
+    },
+    { root: modal.body, rootMargin: '300px' }
+  );
+
+  const debouncedLoad = debounce(() => load(true), 280);
   searchEl.addEventListener('input', () => debouncedLoad());
 
   modal.body.querySelector('[data-tabs]').addEventListener('click', (event) => {
@@ -186,7 +250,7 @@ export function openExercisePicker({ onPick, title = 'Añadir ejercicio', userId
     });
     // The muscle filter only applies to the shared catalog.
     muscleFilterBtn.style.display = tab === 'catalog' ? '' : 'none';
-    load();
+    load(true);
   });
 
   // --- muscle-group sheet ---
@@ -255,7 +319,7 @@ export function openExercisePicker({ onPick, title = 'Añadir ejercicio', userId
       category = pick.dataset.pickCategory;
       updateMuscleButton();
       sheet.close();
-      load();
+      load(true);
     });
   };
 
@@ -270,8 +334,11 @@ export function openExercisePicker({ onPick, title = 'Añadir ejercicio', userId
     onPick?.(item);
   });
 
+  // Stop observing the sentinel once the sheet is dismissed.
+  modal.el.addEventListener('close', () => observer?.disconnect());
+
   updateMuscleButton();
-  load();
+  load(true);
 
   return modal;
 }

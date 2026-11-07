@@ -34,6 +34,20 @@ jobs:
           git checkout main
           git reset --hard origin/main
 
+      - name: Run tests (gate the deploy)
+        run: |
+          set -euo pipefail
+          cd "$PROD_DIR"
+          # Run the suite in an ephemeral Node container so we depend only on
+          # Docker (already required on this host), never on a host Node install
+          # or the production node_modules. Tests use a throwaway SQLite DB in
+          # the container's tmp dir, so the ./data bind mount is never touched.
+          docker run --rm \
+            -v "$PROD_DIR:/app" \
+            -w /app \
+            node:20-bookworm-slim \
+            sh -c "npm ci && npm test"
+
       - name: Build and (re)start the stack
         run: |
           set -euo pipefail

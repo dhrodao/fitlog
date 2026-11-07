@@ -1,9 +1,9 @@
 import { api, errorMessage } from '../api.js';
 import { openExercisePicker } from '../exercise-picker.js';
 import { attachSwipeToDelete } from '../swipe.js';
+import { createWriteScheduler } from '../pending-writes.js';
 import {
   confirmDialog,
-  debounce,
   esc,
   formatClock,
   formatNumber,
@@ -243,6 +243,7 @@ export async function render(container, ctx) {
           <div class="active-title">
             <div class="t" data-title>${esc(workout.name)}</div>
             <div class="s" data-timer>${formatClock(workout.durationSeconds)}</div>
+            <div class="s save-state" data-save-state hidden aria-live="polite">Guardando…</div>
           </div>
           <button type="button" class="finish-check" data-finish aria-label="Terminar entrenamiento">
             ${icon('check', 20)}
@@ -298,20 +299,49 @@ export async function render(container, ctx) {
     return exercise?.sets.find((set) => set.id === setId);
   };
 
-  const persistSet = debounce(async (weId, setId) => {
-    const set = getSet(weId, setId);
-    if (!set) return;
-    try {
-      await api.workouts.updateSet(workout.id, setId, {
-        weightKg: set.weightKg,
-        reps: set.reps,
-        completed: set.completed,
-      });
-    } catch (error) {
-      if (error.status === 401) ctx.handleUnauthorized();
-      else toast(errorMessage(error), 'error');
+  // Map a set id back to its exercise so the scheduler can read live values.
+  const findSetById = (setId) => {
+    for (const exercise of workout.exercises) {
+      const set = exercise.sets.find((s) => s.id === setId);
+      if (set) return set;
     }
-  }, 500);
+    return null;
+  };
+
+  const updateSaveState = () => {
+    const el = container.querySelector('[data-save-state]');
+    if (el) el.hidden = !setWrites.hasPending();
+  };
+
+  // Per-set write scheduler (roadmap P0-01): one debounce per set, and flush()
+  // persists pending edits instead of cancelling them. Absolute values are
+  // sent, so flushing or re-running is idempotent (last write wins).
+  const setWrites = createWriteScheduler({
+    wait: 500,
+    write: async (setId) => {
+      const set = findSetById(setId);
+      if (!set) return; // the set was deleted; nothing to persist
+      try {
+        await api.workouts.updateSet(workout.id, setId, {
+          weightKg: set.weightKg,
+          reps: set.reps,
+          completed: set.completed,
+        });
+      } catch (error) {
+        if (error.status === 401) ctx.handleUnauthorized();
+        throw error; // surface via onError, keep it visibly unsaved
+      } finally {
+        updateSaveState();
+      }
+    },
+    onError: (error) => {
+      if (error.status !== 401) toast(errorMessage(error), 'error');
+    },
+  });
+  const persistSet = (_weId, setId) => {
+    setWrites.schedule(setId);
+    updateSaveState();
+  };
 
   const applyWorkout = (fresh) => {
     workout = fresh;
@@ -554,16 +584,11 @@ export async function render(container, ctx) {
       toggle.classList.toggle('checked', set.completed);
       if (set.completed) haptic(12);
       renderStats();
-      try {
-        await api.workouts.updateSet(workout.id, setId, {
-          weightKg: set.weightKg,
-          reps: set.reps,
-          completed: set.completed,
-        });
-      } catch (error) {
-        if (error.status === 401) ctx.handleUnauthorized();
-        else toast(errorMessage(error), 'error');
-      }
+      // Route through the scheduler and flush immediately: this serialises the
+      // completion write against any in-flight weight/reps write for the same
+      // set, so they can't clobber each other, and keeps it dirty on failure.
+      setWrites.schedule(setId);
+      setWrites.flushKey(setId);
       return;
     }
 
@@ -681,6 +706,9 @@ export async function render(container, ctx) {
     }
     setLoading(button, true, '');
     try {
+      // Persist any pending set edits before finishing so the last change is
+      // never lost in the debounce window.
+      await setWrites.flush();
       const { workout: finished } = await api.workouts.finish(workout.id, {});
       ctx.setActiveWorkout(null);
       haptic([12, 40, 24]);
@@ -714,8 +742,25 @@ export async function render(container, ctx) {
     }
   });
 
+  // Flush pending set writes when the tab is hidden or the page is being
+  // unloaded (backgrounding on mobile, closing the PWA, hard reload). This is
+  // best-effort: the requests use keepalive-friendly absolute values so a later
+  // retry is harmless. Without this, a pending debounce would be lost.
+  const flushOnHide = () => {
+    if (setWrites.hasPending()) setWrites.flush();
+  };
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') flushOnHide();
+  };
+  window.addEventListener('pagehide', flushOnHide);
+  document.addEventListener('visibilitychange', onVisibility);
+
   return () => {
     clearInterval(timerId);
-    persistSet.cancel?.();
+    window.removeEventListener('pagehide', flushOnHide);
+    document.removeEventListener('visibilitychange', onVisibility);
+    // Flush (do NOT cancel) pending set writes on navigation so edits made
+    // right before leaving the view are persisted instead of dropped.
+    setWrites.flush();
   };
 }

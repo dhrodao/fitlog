@@ -40,13 +40,21 @@ jobs:
           cd "$PROD_DIR"
           # Run the suite in an ephemeral Node container so we depend only on
           # Docker (already required on this host), never on a host Node install
-          # or the production node_modules. Tests use a throwaway SQLite DB in
-          # the container's tmp dir, so the ./data bind mount is never touched.
+          # or the production node_modules. The checkout is mounted READ-ONLY
+          # and copied inside the container before installing, so npm never
+          # writes root-owned node_modules into /opt/fitlog. Tests use a
+          # throwaway SQLite DB in the container's tmp dir, so the ./data bind
+          # mount is never touched.
           docker run --rm \
-            -v "$PROD_DIR:/app" \
-            -w /app \
+            -v "$PROD_DIR:/src:ro" \
             node:20-bookworm-slim \
-            sh -c "npm ci && npm test"
+            sh -eu -c '
+              cp -r /src /build
+              cd /build
+              rm -rf node_modules
+              npm ci
+              npm test
+            '
 
       - name: Build and (re)start the stack
         run: |

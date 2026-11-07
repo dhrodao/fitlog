@@ -33,13 +33,18 @@ jobs:
         run: |
           set -euo pipefail
           # Run in an ephemeral Node container (Docker is the only host
-          # dependency). Tests use a throwaway SQLite DB in the container's tmp
-          # dir, so nothing on the host is touched.
+          # dependency). The workspace is mounted READ-ONLY and copied to a
+          # path inside the container before installing, so npm never writes
+          # node_modules (owned by the container's root) back into the runner
+          # workspace — otherwise the next checkout can't clean it (EACCES).
+          # Tests use a throwaway SQLite DB in the container's tmp dir.
           docker run --rm \
-            -v "$GITHUB_WORKSPACE:/app" \
-            -w /app \
+            -v "$GITHUB_WORKSPACE:/src:ro" \
             node:20-bookworm-slim \
             sh -eu -c '
+              cp -r /src /build
+              cd /build
+              rm -rf node_modules
               find server public test -name "*.js" -print0 | xargs -0 -n1 node --check
               npm ci
               npm test

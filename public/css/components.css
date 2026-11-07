@@ -1361,6 +1361,14 @@ dialog::backdrop {
   font-size: 13px;
 }
 
+.import-warning {
+  border: 1px solid var(--warning, #f5a623);
+  color: var(--warning, #f5a623);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
 /* Hevy sync card */
 .sync-card {
   display: flex;

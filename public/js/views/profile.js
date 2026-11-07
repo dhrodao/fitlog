@@ -122,6 +122,8 @@ function hevySyncSection(status) {
     const errorLine =
       status.lastStatus === 'error' && status.lastError
         ? `<div class="import-error" style="margin-top:10px">${esc(status.lastError)}</div>`
+        : status.lastStatus === 'warning' && status.lastWarning
+        ? `<div class="import-warning" style="margin-top:10px">${esc(status.lastWarning)}</div>`
         : '';
     return `
       <div class="card sync-card" data-sync-connected>

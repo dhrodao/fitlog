@@ -37,6 +37,16 @@ export const config = {
   publicUrl: (process.env.PUBLIC_URL || '').trim().replace(/\/$/, ''),
   sessionDays: Number(process.env.SESSION_DAYS || 30),
   catalogSyncDays: Number(process.env.CATALOG_SYNC_DAYS || 14),
+  hevy: {
+    // Per-request timeout (ms) for every Hevy HTTP call. A hung request must
+    // never block the scheduler indefinitely.
+    requestTimeoutMs: Number(process.env.HEVY_REQUEST_TIMEOUT_MS || 20000),
+    // How many times to retry a retriable read (429/5xx/network). The first
+    // attempt is not a retry, so N retries means up to N+1 total attempts.
+    maxRetries: Number(process.env.HEVY_MAX_RETRIES || 3),
+    // Base backoff (ms) for the exponential schedule (base, 2x, 4x…) + jitter.
+    retryBackoffMs: Number(process.env.HEVY_RETRY_BACKOFF_MS || 500),
+  },
 };
 
 if (config.isProduction && !config.googleClientId) {

@@ -12,6 +12,12 @@
 
 const DEFAULT_BASE_URL = 'https://api.hevyapp.com/v1';
 
+// Defaults used when the client is constructed without explicit options (e.g.
+// in tests). The server passes values derived from config.hevy.
+const DEFAULT_TIMEOUT_MS = 20000;
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_BACKOFF_MS = 500;
+
 export class HevyApiError extends Error {
   constructor(status, body, url) {
     super(`Hevy API ${status} for ${url}: ${body}`);
@@ -21,12 +27,65 @@ export class HevyApiError extends Error {
   }
 }
 
+/** A read is worth retrying on 429, any 5xx, or a network/timeout failure. */
+function isRetriableStatus(status) {
+  return status === 429 || (status >= 500 && status <= 599);
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export class HevyClient {
-  constructor(apiKey, { baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch } = {}) {
+  constructor(
+    apiKey,
+    {
+      baseUrl = DEFAULT_BASE_URL,
+      fetchImpl = fetch,
+      timeoutMs = DEFAULT_TIMEOUT_MS,
+      maxRetries = DEFAULT_MAX_RETRIES,
+      backoffMs = DEFAULT_BACKOFF_MS,
+    } = {}
+  ) {
     if (!apiKey) throw new Error('Falta la API key de Hevy.');
     this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.fetch = fetchImpl;
+    this.timeoutMs = timeoutMs;
+    this.maxRetries = Math.max(0, maxRetries);
+    this.backoffMs = backoffMs;
+  }
+
+  /** Backoff for retry attempt `n` (0-based): base * 2^n + random jitter. */
+  retryDelay(attempt) {
+    const expo = this.backoffMs * 2 ** attempt;
+    const jitter = Math.floor(Math.random() * this.backoffMs);
+    return expo + jitter;
+  }
+
+  /** fetch wrapped with a per-request timeout via AbortSignal. */
+  async fetchWithTimeout(url, options = {}) {
+    // A manual controller + cleared timer, rather than AbortSignal.timeout, so
+    // the timer never outlives the request (an uncleared timer would keep the
+    // event loop busy after the call settles).
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      return await this.fetch(url, { ...options, signal: controller.signal });
+    } catch (err) {
+      // Normalize an abort into a clear, retriable timeout error.
+      if (controller.signal.aborted || err?.name === 'AbortError' || err?.name === 'TimeoutError') {
+        const e = new Error(
+          `La petición a Hevy superó el tiempo límite (${this.timeoutMs} ms)`
+        );
+        e.name = 'HevyTimeoutError';
+        e.retriable = true;
+        throw e;
+      }
+      // A network failure (fetch rejects) is also retriable.
+      if (err && !(err instanceof HevyApiError)) err.retriable = true;
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async request(pathname, params = {}) {
@@ -34,27 +93,53 @@ export class HevyClient {
     for (const [key, value] of Object.entries(params)) {
       if (value != null) url.searchParams.set(key, String(value));
     }
-    const res = await this.fetch(url.toString(), {
-      headers: {
-        'api-key': this.apiKey,
-        Accept: 'application/json',
-      },
-    });
-    const text = await res.text();
-    if (!res.ok) {
-      throw new HevyApiError(res.status, text.slice(0, 300), url.toString());
-    }
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw new HevyApiError(res.status, 'Respuesta no JSON', url.toString());
+    const target = url.toString();
+
+    let attempt = 0;
+    // One initial try + up to maxRetries retries. Only reads go through here,
+    // so retrying is safe (idempotent).
+    for (;;) {
+      try {
+        const res = await this.fetchWithTimeout(target, {
+          headers: {
+            'api-key': this.apiKey,
+            Accept: 'application/json',
+          },
+        });
+        const text = await res.text();
+        if (!res.ok) {
+          if (isRetriableStatus(res.status) && attempt < this.maxRetries) {
+            await sleep(this.retryDelay(attempt));
+            attempt += 1;
+            continue;
+          }
+          throw new HevyApiError(res.status, text.slice(0, 300), target);
+        }
+        try {
+          return JSON.parse(text);
+        } catch {
+          throw new HevyApiError(res.status, 'Respuesta no JSON', target);
+        }
+      } catch (err) {
+        // Retry network/timeout failures; never retry a definitive API error.
+        if (err?.retriable && attempt < this.maxRetries) {
+          await sleep(this.retryDelay(attempt));
+          attempt += 1;
+          continue;
+        }
+        throw err;
+      }
     }
   }
 
-  /** Perform a write request (POST/DELETE) with a JSON body. */
+  /**
+   * Perform a write request (POST/DELETE) with a JSON body. Writes are NOT
+   * retried: a retry could duplicate a non-idempotent mutation. They still get
+   * a timeout so they cannot hang.
+   */
   async send(pathname, method, body) {
     const url = `${this.baseUrl}${pathname}`;
-    const res = await this.fetch(url, {
+    const res = await this.fetchWithTimeout(url, {
       method,
       headers: {
         'api-key': this.apiKey,

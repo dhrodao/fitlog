@@ -247,6 +247,10 @@ ensureColumn('routines', 'hevy_routine_id', 'TEXT');
 ensureColumn('workouts', 'hevy_workout_id', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_token', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_enabled', 'INTEGER NOT NULL DEFAULT 0');
+// Non-fatal warning from the last sync (e.g. routines failed to import while
+// workouts succeeded). Kept separate from last_error so a partial success is
+// not reported as a failed sync.
+ensureColumn('hevy_sync', 'last_warning', 'TEXT');
 db.exec(
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_hevy_webhook_token
      ON hevy_sync(webhook_token) WHERE webhook_token IS NOT NULL`

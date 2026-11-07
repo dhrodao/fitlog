@@ -23,6 +23,22 @@ import {
  * /v1/workouts/events feed and idempotent (duplicate workouts are skipped).
  */
 
+// Build a Hevy client wired with the configured timeout/retry policy. Every
+// place that talks to Hevy goes through here so the policy is applied uniformly.
+function createClient(key) {
+  return new HevyClient(key, {
+    timeoutMs: config.hevy.requestTimeoutMs,
+    maxRetries: config.hevy.maxRetries,
+    backoffMs: config.hevy.retryBackoffMs,
+  });
+}
+
+// In-process lock: at most one sync per user at a time. Shared by the manual
+// sync endpoint, the scheduler and the webhook. A concurrent request for a user
+// already syncing is coalesced onto the in-flight promise instead of starting a
+// second overlapping run. The entry is always cleared in a finally block.
+const inFlightSyncs = new Map();
+
 export function getSyncRow(userId) {
   return db.prepare('SELECT * FROM hevy_sync WHERE user_id = ?').get(userId);
 }
@@ -39,6 +55,8 @@ export function getSyncStatus(userId) {
     lastSyncAt: row.last_sync_at,
     lastStatus: row.last_status,
     lastError: row.last_error,
+    lastWarning: row.last_warning,
+    syncing: inFlightSyncs.has(userId),
     webhookEnabled: Boolean(row.webhook_enabled),
     webhookAvailable: Boolean(config.publicUrl),
   };
@@ -55,7 +73,7 @@ export async function connect(userId, apiKey, { autoSync = true } = {}) {
   const key = String(apiKey || '').trim();
   if (!key) throw new Error('Falta la API key de Hevy');
 
-  const client = new HevyClient(key);
+  const client = createClient(key);
   try {
     await client.workoutCount();
   } catch (err) {
@@ -108,7 +126,7 @@ export async function disconnect(userId) {
     const key = decryptSecret(row.api_key);
     if (key) {
       try {
-        await new HevyClient(key).deleteWebhookSubscription();
+        await createClient(key).deleteWebhookSubscription();
       } catch {
         /* ignore */
       }
@@ -174,7 +192,7 @@ export async function enableWebhook(userId) {
   }
 
   const token = row.webhook_token || crypto.randomBytes(24).toString('hex');
-  const client = new HevyClient(key);
+  const client = createClient(key);
   try {
     await client.createWebhookSubscription({
       url,
@@ -205,7 +223,7 @@ export async function disableWebhook(userId) {
   const key = decryptSecret(row.api_key);
   if (key) {
     try {
-      await new HevyClient(key).deleteWebhookSubscription();
+      await createClient(key).deleteWebhookSubscription();
     } catch {
       // Non-fatal: still disable locally.
     }
@@ -232,11 +250,30 @@ function buildTemplateMap(templates) {
 }
 
 /**
- * Run an incremental sync for a user. Returns aggregate totals.
- * Uses the events feed when a previous sync timestamp exists; otherwise falls
- * back to a full workouts pull (first sync).
+ * Run an incremental sync for a user, serialized by a per-user lock. A second
+ * request while a sync is in flight is coalesced onto the running promise, so a
+ * user never has two overlapping syncs (manual + scheduler + webhook).
+ * Returns aggregate totals.
  */
-export async function syncUser(userId, { full = false } = {}) {
+export function syncUser(userId, { full = false } = {}) {
+  const existing = inFlightSyncs.get(userId);
+  // Coalesce: a plain (incremental) request joins an in-flight sync. A `full`
+  // request still coalesces to avoid overlap; it will be picked up next run.
+  if (existing) return existing;
+
+  const promise = (async () => runSync(userId, { full }))().finally(() => {
+    inFlightSyncs.delete(userId);
+  });
+  inFlightSyncs.set(userId, promise);
+  return promise;
+}
+
+/**
+ * Perform the actual incremental sync. Uses the events feed when a previous
+ * sync timestamp exists; otherwise falls back to a full workouts pull (first
+ * sync). Not exported: callers go through syncUser so the lock always applies.
+ */
+async function runSync(userId, { full = false } = {}) {
   const row = getSyncRow(userId);
   if (!row) {
     const e = new Error('No hay ninguna cuenta de Hevy conectada');
@@ -251,9 +288,10 @@ export async function syncUser(userId, { full = false } = {}) {
     throw e;
   }
 
-  const client = new HevyClient(key);
+  const client = createClient(key);
   const since = full ? null : row.last_sync_at;
   const syncStartedAt = nowIso();
+  let warning = null;
 
   const totals = {
     imported: 0,
@@ -354,23 +392,31 @@ export async function syncUser(userId, { full = false } = {}) {
       });
       applyRoutines();
     } catch (err) {
-      // Non-fatal: workouts already imported. Surface via console only.
-      console.warn(
-        `[hevy-sync] usuario ${userId}: no se pudieron importar rutinas: ${err.message}`
-      );
+      // Non-fatal: workouts already imported. Record a warning so the status is
+      // honest (partial success) without marking the whole sync as failed.
+      warning = `No se pudieron importar las rutinas: ${err.message}`;
+      console.warn(`[hevy-sync] usuario ${userId}: ${warning}`);
     }
 
     db.prepare(
       `UPDATE hevy_sync
-         SET last_sync_at = ?, last_status = 'ok', last_error = NULL, updated_at = ?
+         SET last_sync_at = ?, last_status = ?, last_error = NULL,
+             last_warning = ?, updated_at = ?
        WHERE user_id = ?`
-    ).run(syncStartedAt, nowIso(), userId);
+    ).run(
+      syncStartedAt,
+      warning ? 'warning' : 'ok',
+      warning ? warning.slice(0, 500) : null,
+      nowIso(),
+      userId
+    );
 
-    return { ok: true, totals, syncedAt: syncStartedAt };
+    return { ok: true, totals, warning, syncedAt: syncStartedAt };
   } catch (err) {
     db.prepare(
       `UPDATE hevy_sync
-         SET last_status = 'error', last_error = ?, updated_at = ?
+         SET last_status = 'error', last_error = ?, last_warning = NULL,
+             updated_at = ?
        WHERE user_id = ?`
     ).run(String(err.message || err).slice(0, 500), nowIso(), userId);
     throw err;

@@ -32,6 +32,9 @@ cp .env.example .env
 | `SESSION_SECRET` | Internal session secret. |
 | `CATALOG_SYNC_DAYS` | Days before the catalog is re-synced in the background (default `14`). |
 | `PUBLIC_URL` | Public HTTPS base URL (no trailing slash). Required for Hevy real-time webhooks. |
+| `HEVY_REQUEST_TIMEOUT_MS` | Per-request timeout for Hevy API calls (default `20000`). |
+| `HEVY_MAX_RETRIES` | Retries for a retriable Hevy read — 429/5xx/network (default `3`). |
+| `HEVY_RETRY_BACKOFF_MS` | Base backoff for the retry schedule, with jitter (default `500`). |
 
 ## Run locally (Node)
 

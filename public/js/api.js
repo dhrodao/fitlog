@@ -84,6 +84,8 @@ export const api = {
     detail: (id) => request(`/workouts/${id}`),
     create: (payload = {}) =>
       request('/workouts', { method: 'POST', body: payload }),
+    sync: (payload) =>
+      request('/workouts/sync', { method: 'POST', body: payload }),
     update: (id, payload) =>
       request(`/workouts/${id}`, { method: 'PATCH', body: payload }),
     finish: (id, payload = {}) =>

@@ -5,7 +5,10 @@ services:
       # Docker's bridge network has no Internet access on this host, so the
       # build (npm ci) uses the host network to be able to download packages.
       network: host
-    image: fitness-app
+    # Image tag is parameterised so the deploy can build and run a specific
+    # per-commit tag (e.g. fitness-app:<sha>) and roll back to the previous tag
+    # if the new one is unhealthy. Defaults to the plain tag for local use.
+    image: ${APP_IMAGE:-fitness-app:local}
     container_name: fitness-app
     restart: unless-stopped
 

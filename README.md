@@ -225,13 +225,22 @@ On push to `main` (or via the **Run workflow** button — `workflow_dispatch`) i
    migration stops the deploy while the old container keeps running. (The app
    also migrates on boot, so this step is a safety net plus a pre-migration
    backup, not the only path.)
-4. Rebuilds and recreates only the `app` service
-   (`docker compose up -d --build app`); the `cloudflared` service and the
-   `./data` bind mount are left untouched.
-5. Probes `GET /api/health` until it responds (up to 60 s); if it never does,
-   the job fails and dumps the last 60 lines of the container logs.
+4. Builds the `app` image tagged with the commit SHA (`fitness-app:<sha>`),
+   recording the image the container is currently running so it can be restored
+   if the new one fails. Only the `app` service is recreated; the `cloudflared`
+   service and the `./data` bind mount are left untouched.
+5. Probes `GET /api/health` on the new image (up to 60 s). If it becomes
+   healthy, the deploy succeeds. If it does not, the job dumps the last 60 lines
+   of logs and **rolls back** to the previous image (then fails the job so the
+   failure is visible). A final step prunes old per-commit image tags, keeping
+   the three most recent so a rollback target is always available.
 
 A `concurrency` group prevents two deploys from overlapping.
+
+The `app` image tag is parameterised through the `APP_IMAGE` variable in
+`docker-compose.yml` (defaults to `fitness-app:local` for local use); the
+workflow sets it to the per-commit tag so build, run and rollback all target an
+explicit image rather than overwriting a single floating tag.
 
 ### One-time setup on the production host
 

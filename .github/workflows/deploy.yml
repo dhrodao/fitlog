@@ -96,30 +96,88 @@ jobs:
               npm run migrate
             '
 
-      - name: Build and (re)start the stack
+      - name: Build the app image tagged with the commit SHA
         run: |
           set -euo pipefail
           cd "$PROD_DIR"
-          # Rebuild only the app image and recreate the container. The
-          # cloudflared service and the ./data bind mount are left untouched.
-          docker compose up -d --build app
+          SHA="$(git rev-parse --short HEAD)"
+          NEW_IMAGE="fitness-app:${SHA}"
+          echo "NEW_IMAGE=${NEW_IMAGE}" >> "$GITHUB_ENV"
 
-      - name: Wait for the app to become healthy
+          # Record the image the app container is currently running, so we can
+          # roll back to it if the new one turns out unhealthy. Empty on the
+          # very first deploy (nothing to roll back to).
+          PREV_IMAGE="$(docker inspect --format '{{.Config.Image}}' fitness-app 2>/dev/null || true)"
+          echo "PREV_IMAGE=${PREV_IMAGE}" >> "$GITHUB_ENV"
+          echo "Current image: ${PREV_IMAGE:-<none>}; building ${NEW_IMAGE}"
+
+          # Build the new tag explicitly (host network: the bridge network has
+          # no Internet on this host, same reason as the compose build.network).
+          docker build --network=host -t "$NEW_IMAGE" .
+
+      - name: Start the new image and roll back if it is unhealthy
         run: |
           set -euo pipefail
           cd "$PROD_DIR"
           PORT="$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2)"
           PORT="${PORT:-3000}"
           url="http://127.0.0.1:${PORT}/api/health"
+
+          # Recreate only the app container from the freshly built tag. The
+          # cloudflared service and the ./data bind mount are left untouched.
+          APP_IMAGE="$NEW_IMAGE" docker compose up -d --no-build app
+
           echo "Probing ${url} ..."
+          healthy=0
           for i in $(seq 1 30); do
             if curl -fsS --max-time 3 "$url" >/dev/null 2>&1; then
-              echo "App is healthy."
-              exit 0
+              echo "App is healthy on ${NEW_IMAGE}."
+              healthy=1
+              break
             fi
             echo "  attempt ${i}/30 not ready yet; retrying in 2s"
             sleep 2
           done
-          echo "::error::App did not become healthy in time; dumping recent logs" >&2
+
+          if [ "$healthy" = "1" ]; then
+            exit 0
+          fi
+
+          echo "::error::${NEW_IMAGE} did not become healthy; dumping recent logs" >&2
+          docker compose logs --tail 60 app >&2 || true
+
+          if [ -z "${PREV_IMAGE:-}" ]; then
+            echo "::error::No previous image to roll back to (first deploy)." >&2
+            exit 1
+          fi
+
+          echo "::warning::Rolling back to ${PREV_IMAGE}" >&2
+          APP_IMAGE="$PREV_IMAGE" docker compose up -d --no-build app
+
+          # Confirm the rollback is actually serving before reporting failure.
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 3 "$url" >/dev/null 2>&1; then
+              echo "::warning::Rolled back to ${PREV_IMAGE}; it is healthy. Deploy failed." >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "::error::Rollback to ${PREV_IMAGE} did not become healthy either." >&2
           docker compose logs --tail 60 app >&2 || true
           exit 1
+
+      - name: Prune old app images (keep the last few)
+        if: always()
+        run: |
+          set -euo pipefail
+          # Keep the 3 most recent fitness-app tags (current + a couple to roll
+          # back to); remove older ones so per-commit tags do not fill the disk.
+          # docker already lists newest first; skip the plain :local tag and any
+          # image currently in use (docker rmi refuses those, hence `|| true`).
+          docker images 'fitness-app' --format '{{.Repository}}:{{.Tag}}' \
+            | { grep -v ':local$' || true; } \
+            | tail -n +4 \
+            | while read -r img; do
+                [ -n "$img" ] || continue
+                docker rmi "$img" 2>/dev/null || true
+              done

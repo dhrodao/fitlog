@@ -57,12 +57,72 @@ function exerciseBlock(exercise, { inSuperset = false } = {}) {
   `;
 }
 
+// --- editable mode markup (mirrors the active-workout set editing) ---
+
+function editSetRow(set, index) {
+  return `
+    <div class="set-row ${set.completed ? 'completed' : ''}" data-set-id="${set.id}">
+      <div class="set-num">${index + 1}</div>
+      <div class="set-cell">
+        <input class="number-input" type="number" inputmode="decimal" step="0.5" min="0" placeholder="0"
+          value="${set.weightKg != null ? esc(String(set.weightKg)) : ''}" data-field="weightKg" aria-label="Peso en kg" />
+      </div>
+      <div class="set-cell">
+        <input class="number-input" type="number" inputmode="numeric" min="0" placeholder="0"
+          value="${set.reps != null ? esc(String(set.reps)) : ''}" data-field="reps" aria-label="Repeticiones" />
+      </div>
+      <button type="button" class="check-btn ${set.completed ? 'checked' : ''}" data-toggle aria-label="Completar serie">
+        ${icon('check', 18)}
+      </button>
+      <button type="button" class="icon-btn" data-delete-set aria-label="Eliminar serie ${index + 1}">
+        ${icon('trash', 16)}
+      </button>
+    </div>
+  `;
+}
+
+function editExerciseBlock(exercise, { inSuperset = false } = {}) {
+  return `
+    <div class="exercise-block ${inSuperset ? 'in-superset' : ''}" data-we-id="${exercise.id}">
+      ${inSuperset ? `<span class="superset-chip">${icon('layers', 12)} Superset</span>` : ''}
+      <div class="exercise-block-head">
+        <span class="exercise-thumb ${exercise.imageUrl ? '' : 'gray'}">
+          ${exercise.imageUrl ? `<img src="${esc(exercise.imageUrl)}" alt="" referrerpolicy="no-referrer" />` : icon('dumbbell', 22)}
+        </span>
+        <div class="info">
+          <div class="name">${esc(exercise.name)}</div>
+          <div class="prev">${esc(exercise.category || '')}</div>
+        </div>
+        <button type="button" class="icon-btn" data-delete-exercise aria-label="Eliminar ejercicio">
+          ${icon('trash', 18)}
+        </button>
+      </div>
+      <div class="set-table">
+        <div class="set-head">
+          <span>Serie</span>
+          <span>Kg</span>
+          <span>Reps</span>
+          <span>${icon('check', 13)}</span>
+          <span></span>
+        </div>
+        ${exercise.sets.map((set, index) => editSetRow(set, index)).join('')}
+      </div>
+      <button type="button" class="add-set-btn" data-add-set>${icon('plus', 15)} Agregar Serie</button>
+    </div>
+  `;
+}
+
 export async function render(container, ctx, params) {
   const id = params.id;
   let workout;
-  try {
+
+  async function load() {
     const response = await api.workouts.detail(id);
     workout = response.workout;
+  }
+
+  try {
+    await load();
   } catch (error) {
     if (error.status === 401) {
       ctx.handleUnauthorized();
@@ -84,9 +144,15 @@ export async function render(container, ctx, params) {
     return;
   }
 
-  const summary = workout.summary || {};
+  // Imported workouts are read-only: a later Hevy sync would overwrite any edit.
+  const readOnly = workout.source === 'hevy';
+  let editing = false;
 
-  container.innerHTML = `
+  // ---------- read-only (summary) view ----------
+
+  function renderView() {
+    const summary = workout.summary || {};
+    container.innerHTML = `
     <div class="view">
       <div class="topbar">
         <button type="button" class="icon-btn surface" data-link="/workouts" aria-label="Volver">
@@ -102,6 +168,7 @@ export async function render(container, ctx, params) {
         <div class="date">${esc(formatDate(workout.startedAt, { withYear: true }))} · ${esc(formatTime(workout.startedAt))}</div>
         <h1>${esc(workout.name)}</h1>
         ${workout.location ? `<div class="text-sm text-muted">${icon('target', 13)} ${esc(workout.location)}</div>` : ''}
+        ${readOnly ? `<div class="text-xs text-muted">${icon('repeat', 12)} Importado de Hevy · solo lectura</div>` : ''}
         <div class="stats">
           <div class="stat">
             <span class="value">${esc(formatDuration(workout.durationSeconds))}</span>
@@ -151,36 +218,263 @@ export async function render(container, ctx, params) {
     </div>
   `;
 
-  container.querySelector('[data-menu]')?.addEventListener('click', () => {
-    const items = [];
-    if (workout.routineId) {
+    container.querySelector('[data-menu]')?.addEventListener('click', () => {
+      const items = [];
+      if (!readOnly) {
+        items.push({
+          label: 'Editar entrenamiento',
+          icon: 'pencil',
+          onClick: () => {
+            editing = true;
+            renderEdit();
+          },
+        });
+      }
+      if (workout.routineId) {
+        items.push({
+          label: 'Ver rutina',
+          icon: 'list',
+          onClick: () => ctx.navigate(`/routines/${workout.routineId}`),
+        });
+      }
       items.push({
-        label: 'Ver rutina',
-        icon: 'list',
-        onClick: () => ctx.navigate(`/routines/${workout.routineId}`),
+        label: 'Eliminar entrenamiento',
+        icon: 'trash',
+        danger: true,
+        onClick: async () => {
+          const confirmed = await confirmDialog({
+            title: 'Eliminar entrenamiento',
+            message: 'Este entrenamiento y sus series se eliminarán. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            danger: true,
+          });
+          if (!confirmed) return;
+          try {
+            await api.workouts.remove(workout.id);
+            toast('Entrenamiento eliminado', 'success');
+            ctx.navigate('/workouts');
+          } catch (error) {
+            toast(errorMessage(error), 'error');
+          }
+        },
       });
+      openActionSheet(workout.name, items);
+    });
+  }
+
+  // ---------- editable view ----------
+
+  const getExercise = (weId) => workout.exercises.find((ex) => ex.id === weId);
+  const getSet = (weId, setId) =>
+    getExercise(weId)?.sets.find((set) => set.id === setId);
+
+  // Shared 403 handler: the backend refuses edits to imported content, so if
+  // this workout became read-only server-side we surface it and leave edit mode.
+  const handleEditError = (error) => {
+    if (error.status === 401) {
+      ctx.handleUnauthorized();
+      return;
     }
-    items.push({
-      label: 'Eliminar entrenamiento',
-      icon: 'trash',
-      danger: true,
-      onClick: async () => {
+    if (error.status === 403) {
+      toast(error.message || 'No se puede editar contenido importado de Hevy', 'error');
+      return;
+    }
+    toast(errorMessage(error), 'error');
+  };
+
+  function renderEditExercises() {
+    const list = container.querySelector('[data-exercises]');
+    if (!list) return;
+    list.innerHTML = workout.exercises.length
+      ? groupExercises(workout.exercises)
+          .map((group) =>
+            group.items
+              .map((exercise) =>
+                editExerciseBlock(exercise, {
+                  inSuperset: group.items.length > 1,
+                })
+              )
+              .join('')
+          )
+          .join('')
+      : `<div class="card"><div class="empty" style="padding:18px 8px">
+           <div class="empty-icon">${icon('dumbbell', 22)}</div>
+           <h3>Sin ejercicios</h3>
+         </div></div>`;
+  }
+
+  async function reloadAndView() {
+    editing = false;
+    try {
+      await load();
+    } catch (error) {
+      handleEditError(error);
+    }
+    renderView();
+  }
+
+  function renderEdit() {
+    container.innerHTML = `
+    <div class="view" style="gap:14px">
+      <div class="topbar">
+        <button type="button" class="icon-btn surface" data-done aria-label="Terminar edición">
+          ${icon('arrowLeft', 19)}
+        </button>
+        <div class="topbar-title">Editar entrenamiento</div>
+        <button type="button" class="btn btn-primary btn-sm" data-done-btn>Listo</button>
+      </div>
+
+      <div class="field">
+        <label>Nombre</label>
+        <input class="input" type="text" data-input="name" value="${esc(workout.name || '')}" placeholder="Entrenamiento" maxlength="120" />
+      </div>
+      <div class="field">
+        <label>Ubicación (opcional)</label>
+        <input class="input" type="text" data-input="location" value="${esc(workout.location || '')}" placeholder="Gimnasio" maxlength="120" />
+      </div>
+      <div class="field">
+        <label>Notas (opcional)</label>
+        <input class="input" type="text" data-input="notes" value="${esc(workout.notes || '')}" placeholder="Cómo fue el entreno" maxlength="500" />
+      </div>
+
+      <section>
+        <div class="section-head"><h2>Ejercicios</h2></div>
+        <div class="stack-sm" data-exercises></div>
+      </section>
+    </div>
+  `;
+
+    renderEditExercises();
+
+    // --- name / location / notes (persist on blur with absolute values) ---
+    container.querySelectorAll('[data-input]').forEach((input) => {
+      input.addEventListener('change', async () => {
+        const field = input.dataset.input;
+        const value = input.value.trim();
+        try {
+          await api.workouts.update(workout.id, { [field]: value || null });
+          workout[field] = value || null;
+        } catch (error) {
+          handleEditError(error);
+        }
+      });
+    });
+
+    // --- set field edits (weight / reps) ---
+    const exercisesEl = container.querySelector('[data-exercises]');
+
+    exercisesEl.addEventListener('change', async (event) => {
+      const field = event.target.closest('[data-field]');
+      if (!field) return;
+      const block = field.closest('[data-we-id]');
+      const row = field.closest('[data-set-id]');
+      const weId = Number(block.dataset.weId);
+      const setId = Number(row.dataset.setId);
+      const set = getSet(weId, setId);
+      if (!set) return;
+      const raw = field.value;
+      let value = raw === '' ? null : Number(raw);
+      if (value != null) {
+        const invalid = !Number.isFinite(value) || value < 0;
+        if (invalid) value = 0;
+        if (field.dataset.field === 'reps') value = Math.round(value);
+        field.value = String(value);
+      }
+      set[field.dataset.field] = value;
+      try {
+        await api.workouts.updateSet(workout.id, setId, {
+          weightKg: set.weightKg,
+          reps: set.reps,
+          completed: set.completed,
+        });
+      } catch (error) {
+        handleEditError(error);
+      }
+    });
+
+    exercisesEl.addEventListener('click', async (event) => {
+      const block = event.target.closest('[data-we-id]');
+      if (!block) return;
+      const weId = Number(block.dataset.weId);
+
+      // toggle completed
+      const toggle = event.target.closest('[data-toggle]');
+      if (toggle) {
+        const row = toggle.closest('[data-set-id]');
+        const setId = Number(row.dataset.setId);
+        const set = getSet(weId, setId);
+        if (!set) return;
+        const next = !set.completed;
+        try {
+          await api.workouts.updateSet(workout.id, setId, {
+            weightKg: set.weightKg,
+            reps: set.reps,
+            completed: next,
+          });
+          set.completed = next;
+          row.classList.toggle('completed', next);
+          toggle.classList.toggle('checked', next);
+        } catch (error) {
+          handleEditError(error);
+        }
+        return;
+      }
+
+      // delete set
+      const deleteSet = event.target.closest('[data-delete-set]');
+      if (deleteSet) {
+        const row = deleteSet.closest('[data-set-id]');
+        const setId = Number(row.dataset.setId);
+        try {
+          await api.workouts.removeSet(workout.id, setId);
+          const exercise = getExercise(weId);
+          if (exercise) exercise.sets = exercise.sets.filter((s) => s.id !== setId);
+          renderEditExercises();
+        } catch (error) {
+          handleEditError(error);
+        }
+        return;
+      }
+
+      // add set
+      const addSet = event.target.closest('[data-add-set]');
+      if (addSet) {
+        try {
+          const { set } = await api.workouts.addSet(workout.id, weId, {});
+          const exercise = getExercise(weId);
+          if (exercise) exercise.sets.push(set);
+          renderEditExercises();
+        } catch (error) {
+          handleEditError(error);
+        }
+        return;
+      }
+
+      // delete exercise
+      const deleteExercise = event.target.closest('[data-delete-exercise]');
+      if (deleteExercise) {
+        const exercise = getExercise(weId);
         const confirmed = await confirmDialog({
-          title: 'Eliminar entrenamiento',
-          message: 'Este entrenamiento y sus series se eliminarán. Esta acción no se puede deshacer.',
+          title: 'Eliminar ejercicio',
+          message: `"${exercise ? exercise.name : 'Este ejercicio'}" y sus series se eliminarán del entrenamiento.`,
           confirmLabel: 'Eliminar',
           danger: true,
         });
         if (!confirmed) return;
         try {
-          await api.workouts.remove(workout.id);
-          toast('Entrenamiento eliminado', 'success');
-          ctx.navigate('/workouts');
+          const { workout: fresh } = await api.workouts.removeExercise(workout.id, weId);
+          workout = fresh;
+          renderEditExercises();
         } catch (error) {
-          toast(errorMessage(error), 'error');
+          handleEditError(error);
         }
-      },
+      }
     });
-    openActionSheet(workout.name, items);
-  });
+
+    const done = () => reloadAndView();
+    container.querySelector('[data-done]')?.addEventListener('click', done);
+    container.querySelector('[data-done-btn]')?.addEventListener('click', done);
+  }
+
+  renderView();
 }

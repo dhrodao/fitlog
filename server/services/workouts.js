@@ -25,6 +25,15 @@ export function assertWorkout(userId, workoutId) {
   return row;
 }
 
+// Workouts imported from Hevy are read-only: a later Hevy sync would overwrite
+// any local edit, so we block content mutations (deletion is still allowed).
+function assertEditableWorkout(row) {
+  if (row?.source === 'hevy') {
+    throw new HttpError(403, 'No se puede editar un entreno importado de Hevy');
+  }
+  return row;
+}
+
 export function workoutTotals(workoutId) {
   const row = db
     .prepare(
@@ -175,6 +184,7 @@ export function getWorkoutDetail(userId, workoutId) {
     location: workout.location,
     notes: workout.notes,
     routineId: workout.routine_id,
+    source: workout.source || null,
     startedAt: workout.started_at,
     finishedAt: workout.finished_at,
     durationSeconds,
@@ -214,6 +224,7 @@ export function addExerciseToWorkout(
   { targetSets = 3, targetReps = null, notes = null, prefill = true } = {}
 ) {
   const workout = assertWorkout(userId, workoutId);
+  assertEditableWorkout(workout);
   const positionRow = db
     .prepare(
       'SELECT COALESCE(MAX(position), -1) + 1 AS next_position FROM workout_exercises WHERE workout_id = ?'
@@ -283,7 +294,7 @@ export function startWorkoutFromRoutine(userId, routineId) {
 }
 
 export function addSet(userId, workoutId, workoutExerciseId, input = {}) {
-  assertWorkout(userId, workoutId);
+  assertEditableWorkout(assertWorkout(userId, workoutId));
   const we = db
     .prepare(
       'SELECT * FROM workout_exercises WHERE id = ? AND workout_id = ?'
@@ -316,7 +327,7 @@ export function addSet(userId, workoutId, workoutExerciseId, input = {}) {
 }
 
 export function updateSet(userId, workoutId, setId, input = {}) {
-  assertWorkout(userId, workoutId);
+  assertEditableWorkout(assertWorkout(userId, workoutId));
   const row = db
     .prepare(
       `SELECT s.* FROM workout_sets s
@@ -344,7 +355,7 @@ export function updateSet(userId, workoutId, setId, input = {}) {
 }
 
 export function deleteSet(userId, workoutId, setId) {
-  assertWorkout(userId, workoutId);
+  assertEditableWorkout(assertWorkout(userId, workoutId));
   const row = db
     .prepare(
       `SELECT s.* FROM workout_sets s
@@ -366,7 +377,7 @@ export function deleteSet(userId, workoutId, setId) {
 }
 
 export function deleteWorkoutExercise(userId, workoutId, workoutExerciseId) {
-  assertWorkout(userId, workoutId);
+  assertEditableWorkout(assertWorkout(userId, workoutId));
   const row = db
     .prepare(
       'SELECT * FROM workout_exercises WHERE id = ? AND workout_id = ?'
@@ -421,7 +432,7 @@ function writeExerciseOrder(workoutId, orderedIds) {
 }
 
 export function setSuperset(userId, workoutId, workoutExerciseId, otherWorkoutExerciseId) {
-  assertWorkout(userId, workoutId);
+  assertEditableWorkout(assertWorkout(userId, workoutId));
   const rows = getOrderedWorkoutExercises(workoutId);
   const source = rows.find((row) => row.id === workoutExerciseId);
   const target = rows.find((row) => row.id === otherWorkoutExerciseId);
@@ -476,7 +487,7 @@ export function setSuperset(userId, workoutId, workoutExerciseId, otherWorkoutEx
 }
 
 export function removeFromSuperset(userId, workoutId, workoutExerciseId) {
-  assertWorkout(userId, workoutId);
+  assertEditableWorkout(assertWorkout(userId, workoutId));
   const row = db
     .prepare(
       'SELECT * FROM workout_exercises WHERE id = ? AND workout_id = ?'
@@ -493,7 +504,7 @@ export function removeFromSuperset(userId, workoutId, workoutExerciseId) {
 }
 
 export function reorderWorkoutExercises(userId, workoutId, orderedIds) {
-  assertWorkout(userId, workoutId);
+  assertEditableWorkout(assertWorkout(userId, workoutId));
   const rows = getOrderedWorkoutExercises(workoutId);
   const currentIds = rows.map((row) => row.id);
   const ids = Array.isArray(orderedIds)
@@ -513,7 +524,7 @@ export function reorderWorkoutExercises(userId, workoutId, orderedIds) {
 }
 
 export function replaceWorkoutExercise(userId, workoutId, workoutExerciseId, exerciseId) {
-  assertWorkout(userId, workoutId);
+  assertEditableWorkout(assertWorkout(userId, workoutId));
   const row = db
     .prepare(
       'SELECT * FROM workout_exercises WHERE id = ? AND workout_id = ?'
@@ -531,6 +542,7 @@ export function replaceWorkoutExercise(userId, workoutId, workoutExerciseId, exe
 
 export function finishWorkout(userId, workoutId, input = {}) {
   const workout = assertWorkout(userId, workoutId);
+  assertEditableWorkout(workout);
   if (workout.finished_at) return getWorkoutDetail(userId, workoutId);
 
   const finishedAt = nowIso();
@@ -621,7 +633,7 @@ export function getActiveWorkout(userId) {
 }
 
 export function updateWorkout(userId, workoutId, input = {}) {
-  assertWorkout(userId, workoutId);
+  assertEditableWorkout(assertWorkout(userId, workoutId));
   const fields = [];
   const values = [];
 
@@ -649,7 +661,7 @@ export function updateWorkout(userId, workoutId, input = {}) {
 }
 
 export function updateWorkoutExercise(userId, workoutId, workoutExerciseId, input = {}) {
-  assertWorkout(userId, workoutId);
+  assertEditableWorkout(assertWorkout(userId, workoutId));
   const row = db
     .prepare(
       'SELECT * FROM workout_exercises WHERE id = ? AND workout_id = ?'

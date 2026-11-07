@@ -19,6 +19,17 @@ export async function render(container, ctx, params) {
   if (editing) {
     try {
       const { routine } = await api.routines.detail(id, '3m');
+      // Imported routines are read-only: block the editor if reached by URL.
+      if (routine.source === 'hevy') {
+        container.innerHTML = `
+          <div class="empty">
+            <div class="empty-icon">${icon('eye', 24)}</div>
+            <h3>Rutina de solo lectura</h3>
+            <p>Esta rutina se importó de Hevy y no se puede editar, porque la próxima sincronización sobrescribiría los cambios. Duplícala para crear una copia editable.</p>
+            <a class="btn btn-secondary btn-sm" href="#/routines/${id}" data-link="/routines/${id}">Volver</a>
+          </div>`;
+        return;
+      }
       form.name = routine.name || '';
       form.description = routine.description || '';
       form.folder = routine.folder || '';

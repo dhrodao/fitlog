@@ -222,6 +222,11 @@ router.get('/:id', (req, res) => {
 
 router.put('/:id', (req, res) => {
   const routine = getRoutineOr404(req.user.id, Number(req.params.id));
+  // Routines imported from Hevy are read-only: a later sync would overwrite
+  // local edits. Duplicating (which produces an editable copy) is still allowed.
+  if (routine.source === 'hevy') {
+    throw new HttpError(403, 'No se puede editar una rutina importada de Hevy');
+  }
   const name = req.body?.name
     ? requireString(req.body.name, 'nombre de la rutina', { max: 120 })
     : routine.name;

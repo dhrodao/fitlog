@@ -62,6 +62,9 @@ export async function render(container, ctx, params) {
   let metric = 'volume';
   const lastVolume = history.length ? history[history.length - 1] : null;
 
+  // Imported routines are read-only: a later Hevy sync would overwrite any edit.
+  const readOnly = data.source === 'hevy';
+
   const chartHtml = (key) => {
     const config = METRICS[key];
     return lineChart({
@@ -125,7 +128,11 @@ export async function render(container, ctx, params) {
       <section>
         <div class="section-head">
           <h2>Ejercicios</h2>
-          <a class="link-btn" href="#/routines/${data.id}/edit" data-link="/routines/${data.id}/edit">Editar</a>
+          ${
+            readOnly
+              ? `<span class="hint">${icon('eye', 12)} Solo lectura</span>`
+              : `<a class="link-btn" href="#/routines/${data.id}/edit" data-link="/routines/${data.id}/edit">Editar</a>`
+          }
         </div>
         <div class="exercise-list">
           ${
@@ -151,8 +158,12 @@ export async function render(container, ctx, params) {
               : `<div class="card"><div class="empty" style="padding:18px 8px">
                    <div class="empty-icon">${icon('dumbbell', 22)}</div>
                    <h3>Rutina vacía</h3>
-                   <p>Edita la rutina para añadir ejercicios.</p>
-                   <a class="btn btn-primary btn-sm" href="#/routines/${data.id}/edit" data-link="/routines/${data.id}/edit">${icon('pencil', 15)} Editar</a>
+                   ${
+                     readOnly
+                       ? `<p>Esta rutina se importó de Hevy y es de solo lectura.</p>`
+                       : `<p>Edita la rutina para añadir ejercicios.</p>
+                          <a class="btn btn-primary btn-sm" href="#/routines/${data.id}/edit" data-link="/routines/${data.id}/edit">${icon('pencil', 15)} Editar</a>`
+                   }
                  </div></div>`
           }
         </div>
@@ -195,12 +206,15 @@ export async function render(container, ctx, params) {
   });
 
   container.querySelector('[data-menu]')?.addEventListener('click', () => {
-    openActionSheet(data.name, [
-      {
+    const items = [];
+    if (!readOnly) {
+      items.push({
         label: 'Editar rutina',
         icon: 'pencil',
         onClick: () => ctx.navigate(`/routines/${data.id}/edit`),
-      },
+      });
+    }
+    items.push(
       {
         label: 'Duplicar',
         icon: 'repeat',
@@ -234,7 +248,8 @@ export async function render(container, ctx, params) {
             toast(errorMessage(error), 'error');
           }
         },
-      },
-    ]);
+      }
+    );
+    openActionSheet(data.name, items);
   });
 }

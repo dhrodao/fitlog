@@ -120,7 +120,12 @@ function imageBaseUrl() {
 }
 
 export function buildImageUrl(imagePath) {
-  const encodedPath = String(imagePath)
+  const value = String(imagePath);
+  // An already-absolute URL (e.g. a local `file://` image from a Hevy dump, or
+  // a full http(s) URL) is stored verbatim; only relative free-exercise-db
+  // paths get the CDN base prepended.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
+  const encodedPath = value
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/');
@@ -267,10 +272,21 @@ const upsertCatalog = db.prepare(
      updated_at = excluded.updated_at`
 );
 
-async function runSync({ dataset }) {
+async function runSync({ dataset, source = 'free-exercise-db' }) {
   const items = dataset || (await fetchDataset());
 
+  // When switching sources (e.g. free-exercise-db -> hevy), clear the old rows
+  // first so the catalog holds a single source instead of merging both and
+  // showing every exercise twice. Re-running the SAME source is a plain upsert
+  // (no wipe), which keeps it cheap and idempotent. exercises.catalog_id is
+  // ON DELETE SET NULL, so the user's own exercises survive and are re-linked
+  // by linkUserExercises() right after.
+  const sourceChanged = getCatalogSource() !== source;
+
   const writeCatalog = db.transaction((records) => {
+    if (sourceChanged) {
+      db.prepare('DELETE FROM exercise_catalog').run();
+    }
     for (const item of records) {
       if (!item?.id || !item?.name) continue;
       upsertCatalog.run(mapExercise(item));
@@ -289,14 +305,23 @@ async function runSync({ dataset }) {
   const syncedAt = nowIso();
   setMeta('catalog_last_sync', syncedAt);
   setMeta('catalog_count', items.length);
+  // Record which source populated the catalog so boot-time auto-sync does not
+  // silently overwrite a Hevy-seeded catalog with free-exercise-db.
+  setMeta('catalog_source', source);
 
   return {
     count: items.length,
     linked,
     problems,
     syncedAt,
+    source,
     skipped: false,
   };
+}
+
+/** Which source last populated the catalog: 'free-exercise-db' | 'hevy'. */
+export function getCatalogSource() {
+  return getMeta('catalog_source') || 'free-exercise-db';
 }
 
 export function getCatalogStatus() {
@@ -308,6 +333,7 @@ export function getCatalogStatus() {
   return {
     count,
     lastSync,
+    source: getCatalogSource(),
     stale:
       !lastSync ||
       Date.now() - new Date(lastSync).getTime() >
@@ -317,7 +343,7 @@ export function getCatalogStatus() {
 
 let syncPromise = null;
 
-export async function syncCatalog({ force = false, dataset = null } = {}) {
+export async function syncCatalog({ force = false, dataset = null, source = 'free-exercise-db' } = {}) {
   if (syncPromise) return syncPromise;
 
   const status = getCatalogStatus();
@@ -325,7 +351,7 @@ export async function syncCatalog({ force = false, dataset = null } = {}) {
     return { ...status, linked: 0, problems: [], skipped: true };
   }
 
-  syncPromise = runSync({ dataset }).finally(() => {
+  syncPromise = runSync({ dataset, source }).finally(() => {
     syncPromise = null;
   });
 

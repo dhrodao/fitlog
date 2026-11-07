@@ -1,10 +1,20 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import config from './config.js';
 import { db } from './db.js';
 
 const cacheDir = path.join(path.dirname(config.dbPath), 'exercise-images');
+
+/** Best-effort content type from a local file extension. */
+function contentTypeForPath(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.gif') return 'image/gif';
+  return 'image/jpeg';
+}
 
 function cacheFileFor(url) {
   const hash = crypto.createHash('sha256').update(url).digest('hex').slice(0, 32);
@@ -26,6 +36,21 @@ export function catalogImageUrl(id, index = 0) {
 export async function getCatalogImageFile(id, index = 0) {
   const url = upstreamUrl(id, index);
   if (!url) return null;
+
+  // Locally-dumped images (e.g. the Hevy catalog) are stored as file:// URLs
+  // and served straight from disk — no network fetch, no cache copy.
+  if (url.startsWith('file://')) {
+    const localPath = fileURLToPath(url);
+    try {
+      const stat = await fs.stat(localPath);
+      if (stat.size > 0) {
+        return { file: localPath, contentType: contentTypeForPath(localPath) };
+      }
+    } catch {
+      // Missing local file: treat as no image.
+    }
+    return null;
+  }
 
   const file = cacheFileFor(url);
   try {

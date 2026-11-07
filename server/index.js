@@ -14,7 +14,12 @@ const server = app.listen(config.port, () => {
   });
 
   const status = getCatalogStatus();
-  if (status.count === 0 || status.stale) {
+  // When the catalog was seeded from Hevy, never auto-sync from
+  // free-exercise-db on boot: that would silently replace the chosen catalog.
+  // Re-seed explicitly with `npm run seed:hevy-catalog` to refresh it.
+  if (status.source === 'hevy') {
+    logger.info('catalog cached (hevy source)', { count: status.count });
+  } else if (status.count === 0 || status.stale) {
     logger.info('catalog sync starting in background');
     syncCatalog({ force: true })
       .then((result) => {

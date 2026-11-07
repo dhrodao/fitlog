@@ -74,6 +74,7 @@ const { db } = await import('../server/db.js');
 const {
   getAliasNamesForCatalogId,
   getCatalogExercise,
+  getCatalogSource,
   getCatalogStatus,
   mapExercise,
   searchCatalog,
@@ -318,6 +319,23 @@ test('reutiliza el ejercicio propio al añadir desde el catálogo', () => {
 
   assert.throws(() => getOrCreateFromCatalog(userId, 'Missing'), /no encontrado/);
   assert.throws(() => getOrCreateFromCatalog(userId, ''), /Debes indicar/);
+});
+
+test('registra la fuente del catálogo y alterna entre free-exercise-db y hevy', async () => {
+  // Default source after a plain (free-exercise-db) sync.
+  await syncCatalog({ force: true, dataset });
+  assert.equal(getCatalogSource(), 'free-exercise-db');
+  assert.equal(getCatalogStatus().source, 'free-exercise-db');
+
+  // Seeding from a Hevy dump records the hevy source.
+  await syncCatalog({ force: true, dataset, source: 'hevy' });
+  assert.equal(getCatalogSource(), 'hevy');
+  assert.equal(getCatalogStatus().source, 'hevy');
+
+  // Switching back is explicit: a free-exercise-db sync flips it again.
+  const back = await syncCatalog({ force: true, dataset });
+  assert.equal(back.source, 'free-exercise-db');
+  assert.equal(getCatalogSource(), 'free-exercise-db');
 });
 
 test.after(() => {

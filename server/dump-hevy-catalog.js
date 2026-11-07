@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { HevyClient } from './hevy-client.js';
+import { seedCatalogFromDump } from './hevy-catalog-seed.js';
 
 /**
  * Dump the full Hevy exercise catalog to a local, free-exercise-db-style
@@ -10,6 +11,7 @@ import { HevyClient } from './hevy-client.js';
  *
  * Usage:
  *   node server/dump-hevy-catalog.js [--api-key KEY] [--out DIR] [--no-images]
+ *                                    [--seed-catalog]
  *
  * The API key can also come from the HEVY_API_KEY environment variable.
  *
@@ -17,6 +19,10 @@ import { HevyClient } from './hevy-client.js';
  *   <DIR>/exercises.json       every template, normalized
  *   <DIR>/exercises.raw.json   the untouched Hevy objects (nothing is lost)
  *   <DIR>/images/<id>.<ext>    the thumbnails Hevy actually exposes
+ *
+ * With --seed-catalog, after writing the dump it also loads it into the app's
+ * exercise_catalog table, so the app serves the Hevy catalog (and its local
+ * images) with no dependency on free-exercise-db or the Hevy API.
  *
  * NOTE: Hevy only returns a single `thumbnail_url` per template, and for the
  * official (non-custom) catalog it is frequently empty, so most standard
@@ -26,12 +32,13 @@ import { HevyClient } from './hevy-client.js';
  */
 
 function parseArgs(argv) {
-  const args = { apiKey: null, out: null, images: true };
+  const args = { apiKey: null, out: null, images: true, seed: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--api-key') args.apiKey = argv[++i];
     else if (a === '--out') args.out = argv[++i];
     else if (a === '--no-images') args.images = false;
+    else if (a === '--seed-catalog') args.seed = true;
   }
   return args;
 }
@@ -148,6 +155,20 @@ async function main() {
   console.log(`  ${normPath}`);
   console.log(`  ${rawPath}`);
   if (args.images) console.log(`  ${imagesDir}/ (${downloaded} imágenes)`);
+
+  if (args.seed) {
+    console.log('─'.repeat(50));
+    console.log('Cargando el catálogo en la app…');
+    const result = await seedCatalogFromDump(outDir);
+    console.log(
+      `Catálogo actualizado: ${result.count} ejercicios · ` +
+        `${result.linked} ejercicios propios enlazados.`
+    );
+    if (result.problems?.length) {
+      console.warn(`  Avisos (${result.problems.length}):`);
+      for (const p of result.problems) console.warn(`  - ${p}`);
+    }
+  }
 }
 
 main().catch((err) => {

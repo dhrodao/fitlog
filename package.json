@@ -12,6 +12,7 @@
     "import:hevy-csv": "node server/import-hevy-csv.js",
     "import:hevy-api": "node server/import-hevy-api.js",
     "dump:hevy-catalog": "node server/dump-hevy-catalog.js",
+    "seed:hevy-catalog": "node server/seed-hevy-catalog.js",
     "backup:db": "node scripts/backup-db.js",
     "backup:verify": "node scripts/verify-backup.js",
     "migrate": "node server/migrate.js",

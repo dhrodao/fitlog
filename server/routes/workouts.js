@@ -19,6 +19,7 @@ import {
   updateSet,
   updateWorkout,
   updateWorkoutExercise,
+  syncWorkout,
 } from '../services/workouts.js';
 
 const router = Router();
@@ -59,6 +60,13 @@ router.post('/', (req, res) => {
   });
 
   res.status(201).json({ workout: getWorkoutDetail(req.user.id, workoutId) });
+});
+
+// Upload a workout recorded offline. Idempotent by clientId: a retried upload
+// returns the already-synced workout instead of creating a duplicate.
+router.post('/sync', (req, res) => {
+  const workout = syncWorkout(req.user.id, req.body || {});
+  res.status(201).json({ workout });
 });
 
 router.get('/:id', (req, res) => {

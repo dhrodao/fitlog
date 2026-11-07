@@ -1,6 +1,6 @@
 import { db, nowIso } from '../db.js';
-import { HttpError, toNumber, toPositiveInt, toNonNegativeNumber } from '../http.js';
-import { serializeExercise } from './exercises.js';
+import { HttpError, toNumber, toPositiveInt, toNonNegativeNumber, requireString } from '../http.js';
+import { serializeExercise, resolveExercise } from './exercises.js';
 
 export function serializeSet(row) {
   return {
@@ -692,6 +692,113 @@ export function updateWorkoutExercise(userId, workoutId, workoutExerciseId, inpu
 export function deleteWorkout(userId, workoutId) {
   assertWorkout(userId, workoutId);
   db.prepare('DELETE FROM workouts WHERE id = ?').run(workoutId);
+}
+
+// Materialize a workout that was recorded offline, idempotently by client_id.
+//
+// The client assigns a UUID when it starts an offline workout and sends the
+// whole finished workout here. Idempotency: a workout is unique per
+// (user_id, client_id). If we have never seen this client_id we create and
+// finish the workout; if we have, the upload is a retry — we return the existing
+// workout untouched (a finished workout is append-only from the client, so a
+// retry must never mutate or duplicate it). Everything runs in one transaction,
+// so a partial materialization can never be observed.
+export function syncWorkout(userId, input = {}) {
+  const clientId = requireString(input.clientId, 'clientId', { max: 100 });
+
+  const existing = db
+    .prepare('SELECT * FROM workouts WHERE user_id = ? AND client_id = ?')
+    .get(userId, clientId);
+  if (existing) {
+    // Idempotent retry: do not duplicate or mutate an already-synced workout.
+    return getWorkoutDetail(userId, existing.id);
+  }
+
+  const name = input.name
+    ? requireString(input.name, 'nombre del entrenamiento', { max: 200 })
+    : 'Entreno';
+  const exercises = Array.isArray(input.exercises) ? input.exercises : [];
+
+  // Resolve exercises BEFORE opening the write transaction: resolveExercise may
+  // create catalog-linked or custom exercises, and we want any 404 (unknown
+  // exerciseId) to abort before we write the workout.
+  const resolved = exercises.map((ex) => ({
+    exercise: resolveExercise(userId, ex || {}),
+    notes: ex?.notes ? String(ex.notes).slice(0, 1000) : null,
+    supersetGroup:
+      ex?.supersetGroup == null ? null : Number(ex.supersetGroup),
+    sets: Array.isArray(ex?.sets) ? ex.sets : [],
+  }));
+
+  const startedAt = input.startedAt
+    ? new Date(input.startedAt).toISOString()
+    : nowIso();
+  const finishedAt = input.finishedAt
+    ? new Date(input.finishedAt).toISOString()
+    : nowIso();
+  const computedDuration = Math.max(
+    0,
+    Math.round((new Date(finishedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+  );
+  const duration = toPositiveInt(input.durationSeconds, computedDuration);
+
+  const create = db.transaction(() => {
+    const info = db
+      .prepare(
+        `INSERT INTO workouts
+           (user_id, routine_id, name, location, notes, started_at,
+            finished_at, duration_seconds, created_at, client_id)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        userId,
+        name,
+        input.location ? String(input.location).slice(0, 200) : null,
+        input.notes ? String(input.notes).slice(0, 2000) : null,
+        startedAt,
+        finishedAt,
+        duration,
+        nowIso(),
+        clientId
+      );
+    const workoutId = info.lastInsertRowid;
+
+    const insertWe = db.prepare(
+      'INSERT INTO workout_exercises (workout_id, exercise_id, position, notes, superset_group) VALUES (?, ?, ?, ?, ?)'
+    );
+    const insertSet = db.prepare(
+      `INSERT INTO workout_sets
+         (workout_exercise_id, set_number, weight_kg, reps, completed, rest_seconds, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    resolved.forEach((item, position) => {
+      const weInfo = insertWe.run(
+        workoutId,
+        item.exercise.id,
+        position,
+        item.notes,
+        Number.isInteger(item.supersetGroup) ? item.supersetGroup : null
+      );
+      const weId = weInfo.lastInsertRowid;
+      item.sets.forEach((set, index) => {
+        insertSet.run(
+          weId,
+          index + 1,
+          toNonNegativeNumber(set?.weightKg),
+          toPositiveInt(set?.reps),
+          set?.completed ? 1 : 0,
+          toPositiveInt(set?.restSeconds),
+          nowIso()
+        );
+      });
+    });
+
+    return workoutId;
+  });
+
+  const workoutId = create();
+  return getWorkoutDetail(userId, workoutId);
 }
 
 export { serializeExercise };

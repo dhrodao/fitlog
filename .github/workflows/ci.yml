@@ -1,9 +1,14 @@
 name: CI
 
-# Runs the test suite on every push and pull request. This is the fast,
-# early-feedback gate; the deploy workflow also runs tests before rebuilding
-# production (defence in depth), but this job catches regressions before a
-# change ever reaches main.
+# Runs the test suite on every push and pull request. This is the early-feedback
+# gate; the deploy workflow also runs tests before rebuilding production (defence
+# in depth), but this job catches regressions before a change reaches main.
+#
+# It runs on the same self-hosted runner as the deploy (this repo has no hosted
+# GitHub runners: the app lives behind a Cloudflare Tunnel on a single machine).
+# Because that host does not necessarily have Node/npm installed (the app runs
+# in Docker), the suite is executed inside an ephemeral Node container, so CI
+# depends only on Docker — exactly like the deploy's test gate.
 
 on:
   push:
@@ -12,28 +17,30 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+# Avoid two CI runs racing for the single self-hosted runner.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Syntax check (fast gate)
+      - name: Run syntax check and tests
         run: |
           set -euo pipefail
-          # node --check every first-party .js file (server, public, test).
-          find server public test -name '*.js' -print0 \
-            | xargs -0 -n1 node --check
-
-      - name: Run tests
-        run: npm test
+          # Run in an ephemeral Node container (Docker is the only host
+          # dependency). Tests use a throwaway SQLite DB in the container's tmp
+          # dir, so nothing on the host is touched.
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/app" \
+            -w /app \
+            node:20-bookworm-slim \
+            sh -eu -c '
+              find server public test -name "*.js" -print0 | xargs -0 -n1 node --check
+              npm ci
+              npm test
+            '

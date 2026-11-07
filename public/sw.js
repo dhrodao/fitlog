@@ -10,7 +10,7 @@
  *
  * Bump CACHE_VERSION to force clients to drop old caches.
  */
-const CACHE_VERSION = 'fitlog-v22';
+const CACHE_VERSION = 'fitlog-v23';
 // Complete first-party shell. Every module is imported statically from app.js
 // (no dynamic import()), so the whole graph must be present for an offline cold
 // launch to succeed — precaching only app.js left installed clients unable to
@@ -60,7 +60,7 @@ const PRECACHE = [
 // inject a release id, so a test computes the same hash from the files on disk
 // and fails if it drifts from this constant — forcing a deliberate bump here
 // (and with it CACHE_VERSION) whenever a shell file changes.
-const SHELL_HASH = 'b631b204a68f3796';
+const SHELL_HASH = '97536cf65eea53f7';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

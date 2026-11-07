@@ -1,6 +1,7 @@
 import { api, errorMessage } from '../api.js';
 import { openExercisePicker } from '../exercise-picker.js';
 import {
+  confirmDialog,
   connectionNeeded,
   esc,
   icon,
@@ -151,10 +152,17 @@ export async function render(container, ctx, params) {
 
   renderList();
 
+  // Track unsaved changes so leaving the editor can warn before discarding.
+  let dirty = false;
+  const markDirty = () => {
+    dirty = true;
+  };
+
   // --- form field binding ---
   container.querySelectorAll('[data-input]').forEach((input) => {
     input.addEventListener('input', () => {
       form[input.dataset.input] = input.value;
+      markDirty();
     });
   });
 
@@ -166,6 +174,7 @@ export async function render(container, ctx, params) {
     const item = exercises.find((ex) => ex.uid === Number(card.dataset.uid));
     if (!item) return;
     item[field.dataset.field] = field.value;
+    markDirty();
   });
 
   container.querySelector('[data-list]')?.addEventListener('click', (event) => {
@@ -177,6 +186,7 @@ export async function render(container, ctx, params) {
 
     if (event.target.closest('[data-remove]')) {
       exercises.splice(index, 1);
+      markDirty();
       renderList();
       return;
     }
@@ -186,6 +196,7 @@ export async function render(container, ctx, params) {
       const target = index + dir;
       if (target < 0 || target >= exercises.length) return;
       [exercises[index], exercises[target]] = [exercises[target], exercises[index]];
+      markDirty();
       renderList();
     }
   });
@@ -205,6 +216,7 @@ export async function render(container, ctx, params) {
           targetReps: '8-12',
           notes: '',
         });
+        markDirty();
         renderList();
         toast(`${item.name} añadido`, 'success');
       },
@@ -214,8 +226,19 @@ export async function render(container, ctx, params) {
   container.querySelector('[data-add]')?.addEventListener('click', openPicker);
 
   // --- cancel / save ---
-  container.querySelector('[data-cancel]')?.addEventListener('click', () => {
-    ctx.navigate(editing ? `/routines/${id}` : '/routines');
+  const leave = () => ctx.navigate(editing ? `/routines/${id}` : '/routines');
+  container.querySelector('[data-cancel]')?.addEventListener('click', async () => {
+    if (dirty) {
+      const confirmed = await confirmDialog({
+        title: 'Descartar cambios',
+        message: 'Has hecho cambios sin guardar en la rutina. Si sales ahora se perderán.',
+        confirmLabel: 'Descartar',
+        cancelLabel: 'Seguir editando',
+        danger: true,
+      });
+      if (!confirmed) return;
+    }
+    leave();
   });
 
   container.querySelector('[data-save]')?.addEventListener('click', async (event) => {
@@ -253,6 +276,7 @@ export async function render(container, ctx, params) {
         routineId = routine.id;
       }
       toast('Rutina guardada', 'success');
+      dirty = false;
       ctx.navigate(`/routines/${routineId}`);
     } catch (error) {
       setLoading(button, false);

@@ -1,6 +1,7 @@
 import { db, nowIso } from '../db.js';
 import { HttpError, toNumber, toPositiveInt, toNonNegativeNumber, requireString } from '../http.js';
 import { serializeExercise, resolveExercise } from './exercises.js';
+import { epley1rm } from './strength.js';
 
 export function serializeSet(row) {
   return {
@@ -56,6 +57,12 @@ export function workoutTotals(workoutId) {
   };
 }
 
+// Count how many of a workout's exercises set a personal record. An exercise
+// counts once if, within this workout, it beats the previous best in ANY of:
+// heaviest completed set (weight), best per-set estimated 1RM (Epley), or
+// single-session volume (sum of weight*reps of its completed sets). Rep PRs are
+// intentionally excluded from the badge: more reps at a lighter weight would
+// inflate the count. The per-exercise detail view still shows all record types.
 export function prCount(userId, workout) {
   const exerciseIds = db
     .prepare(
@@ -64,27 +71,64 @@ export function prCount(userId, workout) {
     .all(workout.id)
     .map((row) => row.exercise_id);
 
-  let count = 0;
-  const maxThis = db.prepare(
-    `SELECT MAX(s.weight_kg) AS max_weight
+  // Completed sets of one exercise within a single workout.
+  const setsForWorkout = db.prepare(
+    `SELECT s.weight_kg AS weightKg, s.reps AS reps
      FROM workout_sets s
      JOIN workout_exercises we ON we.id = s.workout_exercise_id
-     WHERE we.workout_id = ? AND we.exercise_id = ? AND s.completed = 1 AND s.weight_kg > 0`
+     WHERE we.workout_id = ? AND we.exercise_id = ? AND s.completed = 1`
   );
-  const maxPrevious = db.prepare(
-    `SELECT MAX(s.weight_kg) AS max_weight
+  // Completed sets of one exercise across all earlier finished workouts, keyed
+  // by workout so session volume can be computed per previous session.
+  const previousSets = db.prepare(
+    `SELECT w.id AS workoutId, s.weight_kg AS weightKg, s.reps AS reps
      FROM workout_sets s
      JOIN workout_exercises we ON we.id = s.workout_exercise_id
      JOIN workouts w ON w.id = we.workout_id
      WHERE we.exercise_id = ? AND w.user_id = ? AND w.finished_at IS NOT NULL
-       AND w.started_at < ? AND s.completed = 1 AND s.weight_kg > 0`
+       AND w.started_at < ? AND s.completed = 1`
   );
 
+  const bests = (sets) => {
+    let weight = 0;
+    let e1rm = 0;
+    for (const s of sets) {
+      const w = Number(s.weightKg) || 0;
+      const r = Number(s.reps) || 0;
+      if (w > weight) weight = w;
+      const e = epley1rm(w, r);
+      if (e > e1rm) e1rm = e;
+    }
+    return { weight, e1rm };
+  };
+  const volume = (sets) =>
+    sets.reduce((sum, s) => sum + (Number(s.weightKg) || 0) * (Number(s.reps) || 0), 0);
+
+  let count = 0;
   for (const exerciseId of exerciseIds) {
-    const current = maxThis.get(workout.id, exerciseId)?.max_weight;
-    if (current === null || current === undefined) continue;
-    const previous = maxPrevious.get(exerciseId, userId, workout.started_at)?.max_weight;
-    if (Number(current) > Number(previous || 0)) count += 1;
+    const thisSets = setsForWorkout.all(workout.id, exerciseId);
+    if (!thisSets.length) continue;
+
+    const prevRows = previousSets.all(exerciseId, userId, workout.started_at);
+    const prevBests = bests(prevRows);
+    // Previous best single-session volume for this exercise.
+    const prevVolumeByWorkout = new Map();
+    for (const row of prevRows) {
+      prevVolumeByWorkout.set(
+        row.workoutId,
+        (prevVolumeByWorkout.get(row.workoutId) || 0) +
+          (Number(row.weightKg) || 0) * (Number(row.reps) || 0)
+      );
+    }
+    const prevMaxVolume = Math.max(0, ...prevVolumeByWorkout.values());
+
+    const cur = bests(thisSets);
+    const curVolume = volume(thisSets);
+
+    const beatsWeight = cur.weight > 0 && cur.weight > prevBests.weight;
+    const beatsE1rm = cur.e1rm > 0 && cur.e1rm > prevBests.e1rm;
+    const beatsVolume = curVolume > 0 && curVolume > prevMaxVolume;
+    if (beatsWeight || beatsE1rm || beatsVolume) count += 1;
   }
 
   return count;

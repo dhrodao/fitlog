@@ -157,3 +157,35 @@ test('a successful sync clears a previous warning', async () => {
   assert.equal(status.lastStatus, 'ok');
   assert.equal(status.lastWarning, null);
 });
+
+test('disconnect clears the per-user Hevy template cache', async () => {
+  const agent = request.agent(app);
+  const user = await loginDev(agent);
+  const { storeTemplates } = await import('../server/hevy-templates.js');
+
+  await withFakeFetch(makeFakeFetch().fetchImpl, async () => {
+    await hevySync.connect(user.id, 'fake-key', { autoSync: false });
+  });
+  storeTemplates(user.id, [
+    {
+      id: 'tmpl-1',
+      title: 'Bench Press',
+      type: 'weight_reps',
+      primary_muscle_group: 'chest',
+      secondary_muscle_groups: [],
+      equipment: 'barbell',
+      is_custom: false,
+    },
+  ]);
+  const before = db
+    .prepare('SELECT COUNT(*) AS n FROM hevy_templates WHERE user_id = ?')
+    .get(user.id).n;
+  assert.ok(before >= 1, 'templates were cached while connected');
+
+  await hevySync.disconnect(user.id);
+
+  const after = db
+    .prepare('SELECT COUNT(*) AS n FROM hevy_templates WHERE user_id = ?')
+    .get(user.id).n;
+  assert.equal(after, 0, 'disconnect removes the cached templates');
+});

@@ -9,7 +9,7 @@ import {
   foldersToMap,
   relinkAllImportedWorkouts,
 } from './hevy-routines-import.js';
-import { storeTemplates } from './hevy-templates.js';
+import { storeTemplates, deleteTemplates } from './hevy-templates.js';
 import { logger } from './logger.js';
 import {
   HevyClient,
@@ -134,6 +134,9 @@ export async function disconnect(userId) {
     }
   }
   db.prepare('DELETE FROM hevy_sync WHERE user_id = ?').run(userId);
+  // Drop the per-user template cache too: it is only useful while connected and
+  // would otherwise linger after disconnect.
+  deleteTemplates(userId);
   return { connected: false };
 }
 

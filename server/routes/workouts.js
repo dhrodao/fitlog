@@ -107,9 +107,7 @@ router.post('/:id/exercises', (req, res) => {
   const exercise = resolveExercise(req.user.id, req.body || {});
   addExerciseToWorkout(req.user.id, Number(req.params.id), exercise.id, {
     targetSets: toPositiveInt(req.body?.targetSets, 3) || 3,
-    targetReps: req.body?.targetReps || null,
     notes: req.body?.notes || null,
-    prefill: req.body?.prefill !== false,
   });
 
   res.status(201).json({

@@ -39,6 +39,12 @@ function categoryFromMuscle(muscle) {
   return HEVY_MUSCLE_CATEGORY[String(muscle).toLowerCase()] || 'Personalizado';
 }
 
+/** Delete all cached Hevy templates for a user (e.g. on disconnect). */
+export function deleteTemplates(userId) {
+  return db.prepare('DELETE FROM hevy_templates WHERE user_id = ?').run(userId)
+    .changes;
+}
+
 /** Upsert a batch of Hevy ExerciseTemplate objects for a user. */
 export function storeTemplates(userId, templates) {
   if (!Array.isArray(templates) || !templates.length) return 0;

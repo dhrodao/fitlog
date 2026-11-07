@@ -239,7 +239,7 @@ export function addExerciseToWorkout(
   userId,
   workoutId,
   exerciseId,
-  { targetSets = 3, targetReps = null, notes = null, prefill = true } = {}
+  { targetSets = 3, notes = null } = {}
 ) {
   const workout = assertWorkout(userId, workoutId);
   assertEditableWorkout(workout);
@@ -299,9 +299,7 @@ export function startWorkoutFromRoutine(userId, routineId) {
     for (const rex of exercises) {
       addExerciseToWorkout(userId, workoutId, rex.exercise_id, {
         targetSets: rex.target_sets,
-        targetReps: rex.target_reps,
         notes: rex.notes,
-        prefill: true,
       });
     }
 

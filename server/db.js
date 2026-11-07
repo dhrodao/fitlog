@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS hevy_sync (
   api_key TEXT NOT NULL,
   auto_sync INTEGER NOT NULL DEFAULT 1,
   last_sync_at TEXT,
-  last_cursor TEXT,
+  last_cursor TEXT, -- reserved, unused: incremental sync keys off last_sync_at
   last_status TEXT,
   last_error TEXT,
   webhook_token TEXT,

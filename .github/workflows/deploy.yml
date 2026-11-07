@@ -41,16 +41,19 @@ jobs:
           # Run the suite in an ephemeral Node container so we depend only on
           # Docker (already required on this host), never on a host Node install
           # or the production node_modules. The checkout is mounted READ-ONLY
-          # and copied inside the container before installing, so npm never
-          # writes root-owned node_modules into /opt/fitlog. Tests use a
-          # throwaway SQLite DB in the container's tmp dir, so the ./data bind
-          # mount is never touched.
+          # and copied inside the container before installing; we also run as
+          # the runner's UID/GID with a writable HOME/npm cache, so npm never
+          # writes root-owned files into /opt/fitlog. Tests use a throwaway
+          # SQLite DB in the container, so the ./data bind mount is untouched.
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e npm_config_cache=/tmp/.npm \
             -v "$PROD_DIR:/src:ro" \
             node:20-bookworm-slim \
             sh -eu -c '
-              cp -r /src /build
-              cd /build
+              cp -r /src /tmp/build
+              cd /tmp/build
               rm -rf node_modules
               npm ci
               npm test

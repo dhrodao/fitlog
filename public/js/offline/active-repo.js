@@ -178,7 +178,13 @@ export function createActiveWorkoutRepo({
      */
     async finish(payload = {}) {
       if (isLocal()) {
-        if (!isOnline()) return { pending: true, workout };
+        if (!isOnline()) {
+          // Mark it as finished-offline and persist, so a global syncer can
+          // upload it later even after the user leaves the active view.
+          workout.finishedOffline = true;
+          persist();
+          return { pending: true, workout };
+        }
         const { workout: finished } = await api.workouts.sync(
           model.toSyncPayload(workout)
         );

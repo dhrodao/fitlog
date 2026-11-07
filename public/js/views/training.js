@@ -1,6 +1,9 @@
 import { api, errorMessage } from '../api.js';
 import { attachPullToRefresh } from '../pull-refresh.js';
 import { currentTheme } from '../theme.js';
+import { createLocalWorkout } from '../offline/local-workout.js';
+import { saveActiveWorkout } from '../offline/active-store.js';
+import { refreshCatalogCache } from '../offline/catalog-cache.js';
 import {
   confirmDialog,
   esc,
@@ -225,9 +228,28 @@ export async function render(container, ctx) {
   const startEmpty = async () => {
     const buttons = container.querySelectorAll('[data-start-empty]');
     buttons.forEach((button) => setLoading(button, true, 'Empezando...'));
+
+    // Create a local workout, persist it as the active snapshot and navigate.
+    // Shared by the explicit-offline path and the network-failure fallback.
+    const startLocal = async () => {
+      const workout = createLocalWorkout({ name: 'Entreno' });
+      await saveActiveWorkout(ctx.user?.id ?? null, workout);
+      haptic(10);
+      ctx.navigate('/workout/active');
+    };
+
+    // Explicitly offline: skip the request entirely and go local.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      await startLocal();
+      return;
+    }
+
     try {
       await api.workouts.create({ name: 'Entreno' });
       haptic(10);
+      // Fire-and-forget: warm the offline catalog cache so a later offline
+      // session can still build a workout from scratch. Never blocks the nav.
+      refreshCatalogCache(api, ctx.user?.id ?? null);
       ctx.navigate('/workout/active');
     } catch (error) {
       buttons.forEach((button) => setLoading(button, false));
@@ -235,6 +257,10 @@ export async function render(container, ctx) {
         ctx.navigate('/workout/active');
       } else if (error.status === 401) {
         ctx.handleUnauthorized();
+      } else if (error.status === 0) {
+        // The request never reached the server (connection dropped): degrade to
+        // a local workout instead of failing the start.
+        await startLocal();
       } else {
         toast(errorMessage(error), 'error');
       }
@@ -242,10 +268,17 @@ export async function render(container, ctx) {
   };
 
   const startRoutine = async (button, id) => {
+    // Routines cannot be resolved without the server (we do not cache them), so
+    // offline the user must use an empty workout instead.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      toast('No se puede empezar una rutina sin conexión; usa Entreno vacío', 'error');
+      return;
+    }
     setLoading(button, true, 'Empezando...');
     try {
       await api.routines.start(id);
       haptic(10);
+      refreshCatalogCache(api, ctx.user?.id ?? null);
       ctx.navigate('/workout/active');
     } catch (error) {
       setLoading(button, false);
@@ -253,6 +286,8 @@ export async function render(container, ctx) {
         ctx.navigate('/workout/active');
       } else if (error.status === 401) {
         ctx.handleUnauthorized();
+      } else if (error.status === 0) {
+        toast('No se puede empezar una rutina sin conexión; usa Entreno vacío', 'error');
       } else {
         toast(errorMessage(error), 'error');
       }

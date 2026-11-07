@@ -2,6 +2,7 @@ import { api, errorMessage } from './api.js';
 import { initTheme } from './theme.js';
 import { esc, errorScreen, icon, loaderScreen, offlineScreen } from './ui.js';
 import { clearAll as clearOfflineData } from './offline/active-store.js';
+import { syncFinishedOffline } from './offline/sync.js';
 import * as LoginView from './views/login.js';
 import * as HomeView from './views/home.js';
 import * as TrainingView from './views/training.js';
@@ -352,6 +353,23 @@ async function boot() {
 
   await loadActiveState();
   await handleRoute();
+
+  // Upload any workout that was finished while offline, now and whenever
+  // connectivity returns. Idempotent (/sync is keyed by clientId), best-effort.
+  const trySyncFinished = async () => {
+    if (!state.user) return;
+    try {
+      const finished = await syncFinishedOffline(state.user.id, api);
+      if (finished) {
+        state.activeWorkout = null;
+        updateNav(document.documentElement.dataset.route || 'home');
+      }
+    } catch {
+      // stay pending; will retry on the next reconnect / launch
+    }
+  };
+  trySyncFinished();
+  window.addEventListener('online', trySyncFinished);
 }
 
 boot();

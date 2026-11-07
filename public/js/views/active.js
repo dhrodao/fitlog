@@ -5,8 +5,10 @@ import { createWriteScheduler } from '../pending-writes.js';
 import {
   saveActiveWorkout,
   loadActiveWorkout,
-  clearActiveWorkout,
 } from '../offline/active-store.js';
+import { createActiveWorkoutRepo } from '../offline/active-repo.js';
+import * as activeStore from '../offline/active-store.js';
+import * as localModel from '../offline/local-workout.js';
 import {
   confirmDialog,
   esc,
@@ -172,6 +174,30 @@ export async function render(container, ctx) {
 
   ctx.setActiveWorkout(workout);
 
+  // Repository that decides per-mutation whether to hit the server (online) or
+  // the local model (offline). It owns the single source of truth for the
+  // workout; the view mirrors repo.current into its own `workout` after each
+  // mutation so all the existing render helpers keep working unchanged.
+  const repo = createActiveWorkoutRepo({
+    userId,
+    api,
+    store: activeStore,
+    model: localModel,
+  });
+  repo.set(workout);
+
+  // Compare ids tolerantly: server ids are numbers rendered as strings in the
+  // dataset; local ids are strings like "local-…". Comparing as strings matches
+  // both without turning a local id into NaN via Number().
+  const sameId = (a, b) => String(a) === String(b);
+
+  // Show/hide the persistent "offline · will sync" pill. A workout is pending
+  // sync whenever the repo holds a local copy; it clears once uploaded.
+  const renderOfflineState = () => {
+    const el = container.querySelector('[data-offline-state]');
+    if (el) el.hidden = !repo.isLocal();
+  };
+
   // Keep the local recovery snapshot in sync with the in-memory workout. Called
   // after every mutation (set edits, add/remove exercise, reorder, …). It is
   // fire-and-forget and never throws, so it can't interfere with the UI.
@@ -217,11 +243,17 @@ export async function render(container, ctx) {
 
   async function deleteSet(weId, setId) {
     try {
-      await api.workouts.removeSet(workout.id, setId);
+      await repo.deleteSet(setId);
+      workout = repo.current;
+      // Online, the repo returns the workout untouched (the server owns the
+      // delete), so drop the set from the in-memory copy here. Offline the
+      // model already removed it; filtering again is a harmless no-op.
       const exercise = getExercise(weId);
-      if (exercise) exercise.sets = exercise.sets.filter((s) => s.id !== setId);
+      if (exercise) exercise.sets = exercise.sets.filter((s) => !sameId(s.id, setId));
+      ctx.setActiveWorkout(workout);
       haptic(16);
       renderExercises();
+      renderOfflineState();
     } catch (error) {
       if (error.status === 401) ctx.handleUnauthorized();
       else toast(errorMessage(error), 'error');
@@ -237,8 +269,10 @@ export async function render(container, ctx) {
       const handle = wrapper.querySelector('[data-set-handle]');
       if (!handle) return;
       const block = wrapper.closest('[data-we-id]');
-      const weId = Number(block.dataset.weId);
-      const setId = Number(wrapper.dataset.setId);
+      // Keep ids as-is (string for local, numeric-as-string for server). Do not
+      // coerce with Number() or local ids become NaN.
+      const weId = block.dataset.weId;
+      const setId = wrapper.dataset.setId;
 
       const controller = attachSwipeToDelete(handle, {
         onDelete: () => deleteSet(weId, setId),
@@ -270,6 +304,7 @@ export async function render(container, ctx) {
             <div class="t" data-title>${esc(workout.name)}</div>
             <div class="s" data-timer>${formatClock(workout.durationSeconds)}</div>
             <div class="s save-state" data-save-state hidden aria-live="polite">Guardando…</div>
+            <div class="s save-state" data-offline-state hidden aria-live="polite">Sin conexión · se sincronizará</div>
           </div>
           <button type="button" class="finish-check" data-finish aria-label="Terminar entrenamiento">
             ${icon('check', 20)}
@@ -305,6 +340,7 @@ export async function render(container, ctx) {
   `;
 
   renderExercises();
+  renderOfflineState();
 
   // When the server was unreachable and we fell back to the local snapshot,
   // tell the user they are looking at an offline copy so it is clear why edits
@@ -326,16 +362,16 @@ export async function render(container, ctx) {
   const timerId = setInterval(tick, 1000);
   tick();
 
-  const getExercise = (weId) => workout.exercises.find((ex) => ex.id === weId);
+  const getExercise = (weId) => workout.exercises.find((ex) => sameId(ex.id, weId));
   const getSet = (weId, setId) => {
     const exercise = getExercise(weId);
-    return exercise?.sets.find((set) => set.id === setId);
+    return exercise?.sets.find((set) => sameId(set.id, setId));
   };
 
   // Map a set id back to its exercise so the scheduler can read live values.
   const findSetById = (setId) => {
     for (const exercise of workout.exercises) {
-      const set = exercise.sets.find((s) => s.id === setId);
+      const set = exercise.sets.find((s) => sameId(s.id, setId));
       if (set) return set;
     }
     return null;
@@ -355,11 +391,16 @@ export async function render(container, ctx) {
       const set = findSetById(setId);
       if (!set) return; // the set was deleted; nothing to persist
       try {
-        await api.workouts.updateSet(workout.id, setId, {
+        // Route through the repo: online this is the same PATCH as before;
+        // offline (or on a network drop) it updates the local model and keeps
+        // the workout pending sync instead of leaving the edit unsaved.
+        await repo.updateSet(setId, {
           weightKg: set.weightKg,
           reps: set.reps,
           completed: set.completed,
         });
+        workout = repo.current;
+        renderOfflineState();
       } catch (error) {
         if (error.status === 401) ctx.handleUnauthorized();
         throw error; // surface via onError, keep it visibly unsaved
@@ -378,13 +419,22 @@ export async function render(container, ctx) {
 
   const applyWorkout = (fresh) => {
     workout = fresh;
+    repo.set(workout);
     ctx.setActiveWorkout(workout);
     renderExercises();
+    renderOfflineState();
   };
 
   const openReplacePicker = (exercise) => {
+    // Replace requires the server (it re-resolves history and ids), so offline
+    // we degrade with a toast rather than silently doing nothing.
+    if (repo.isLocal()) {
+      toast('No disponible sin conexión', 'error');
+      return;
+    }
     openExercisePicker({
       title: 'Reemplazar ejercicio',
+      userId,
       onPick: async (item) => {
         try {
           const { workout: fresh } = await api.workouts.replaceExercise(
@@ -406,6 +456,10 @@ export async function render(container, ctx) {
   };
 
   const openSupersetSheet = (exercise) => {
+    if (repo.isLocal()) {
+      toast('No disponible sin conexión', 'error');
+      return;
+    }
     const candidates = workout.exercises.filter(
       (item) =>
         item.id !== exercise.id &&
@@ -465,6 +519,10 @@ export async function render(container, ctx) {
   };
 
   const openReorderSheet = () => {
+    if (repo.isLocal()) {
+      toast('No disponible sin conexión', 'error');
+      return;
+    }
     if (workout.exercises.length < 2) {
       toast('Añade más ejercicios para reordenar', 'error');
       return;
@@ -557,8 +615,9 @@ export async function render(container, ctx) {
     if (!field) return;
     const block = field.closest('[data-we-id]');
     const row = field.closest('[data-set-id]');
-    const weId = Number(block.dataset.weId);
-    const setId = Number(row.dataset.setId);
+    // Preserve ids as-is (string for local, numeric-as-string for server).
+    const weId = block.dataset.weId;
+    const setId = row.dataset.setId;
     const set = getSet(weId, setId);
     if (!set) return;
     const raw = field.value;
@@ -593,12 +652,13 @@ export async function render(container, ctx) {
   container.querySelector('[data-exercises]').addEventListener('click', async (event) => {
     const block = event.target.closest('[data-we-id]');
     if (!block) return;
-    const weId = Number(block.dataset.weId);
+    // Preserve ids as-is (string for local, numeric-as-string for server).
+    const weId = block.dataset.weId;
 
     const prevFill = event.target.closest('[data-prev-fill]');
     if (prevFill) {
       const wrapper = prevFill.closest('[data-set-id]');
-      const setId = Number(wrapper.dataset.setId);
+      const setId = wrapper.dataset.setId;
       const exercise = getExercise(weId);
       const set = getSet(weId, setId);
       if (!exercise || !set) return;
@@ -622,7 +682,7 @@ export async function render(container, ctx) {
     const toggle = event.target.closest('[data-toggle]');
     if (toggle) {
       const wrapper = toggle.closest('[data-set-id]');
-      const setId = Number(wrapper.dataset.setId);
+      const setId = wrapper.dataset.setId;
       const set = getSet(weId, setId);
       if (!set) return;
       set.completed = !set.completed;
@@ -641,10 +701,19 @@ export async function render(container, ctx) {
     const addSet = event.target.closest('[data-add-set]');
     if (addSet) {
       try {
-        const { set } = await api.workouts.addSet(workout.id, weId, {});
-        const exercise = getExercise(weId);
-        exercise.sets.push(set);
+        // Online: the repo returns the server-created set; offline: the repo
+        // returns the set it appended to the local model.
+        const { local, set } = await repo.addSet(weId, {});
+        workout = repo.current;
+        ctx.setActiveWorkout(workout);
+        if (!local && set) {
+          // Online path: the model does not own the workout, so append the new
+          // set to the in-memory exercise just like before.
+          const exercise = getExercise(weId);
+          if (exercise) exercise.sets.push(set);
+        }
         renderExercises();
+        renderOfflineState();
       } catch (error) {
         if (error.status === 401) ctx.handleUnauthorized();
         else toast(errorMessage(error), 'error');
@@ -702,13 +771,15 @@ export async function render(container, ctx) {
         danger: true,
         onClick: async () => {
           try {
-            const { workout: fresh } = await api.workouts.removeExercise(
-              workout.id,
-              weId
-            );
-            applyWorkout(fresh);
+            await repo.deleteExercise(weId);
+            workout = repo.current;
+            // Online the repo returns the server's fresh workout; offline the
+            // model removed the exercise in place. Either way repo.current is
+            // authoritative.
+            applyWorkout(workout);
           } catch (error) {
-            toast(errorMessage(error), 'error');
+            if (error.status === 401) ctx.handleUnauthorized();
+            else toast(errorMessage(error), 'error');
           }
         },
       });
@@ -720,15 +791,17 @@ export async function render(container, ctx) {
   // --- add exercise picker (shared module with muscle-group filter) ---
   container.querySelector('[data-add-exercise]')?.addEventListener('click', () => {
     openExercisePicker({
+      userId,
       onPick: async (item) => {
         try {
-          const { workout: fresh } = await api.workouts.addExercise(workout.id, {
-            ...(item.exerciseId ? { exerciseId: item.exerciseId } : {}),
-            ...(item.catalogId ? { catalogId: item.catalogId } : {}),
-          });
-          workout = fresh;
+          // Online: POST and adopt the server's fresh workout. Offline: the repo
+          // appends the exercise to the local model (keeping name/category/
+          // imageUrl for rendering). repo.current is authoritative afterwards.
+          await repo.addExercise(item);
+          workout = repo.current;
           ctx.setActiveWorkout(workout);
           renderExercises();
+          renderOfflineState();
           toast(`${item.name} añadido`, 'success');
         } catch (error) {
           if (error.status === 401) ctx.handleUnauthorized();
@@ -755,8 +828,18 @@ export async function render(container, ctx) {
       // Persist any pending set edits before finishing so the last change is
       // never lost in the debounce window.
       await setWrites.flush();
-      const { workout: finished } = await api.workouts.finish(workout.id, {});
-      clearActiveWorkout(userId);
+      workout = repo.current;
+      const result = await repo.finish({});
+      if (result.pending) {
+        // Finished offline: the workout does not exist on the server yet, so we
+        // cannot navigate to /workouts/:id. Keep the snapshot for later sync.
+        ctx.setActiveWorkout(null);
+        haptic([12, 40, 24]);
+        toast('Entreno guardado localmente; se sincronizará al recuperar la conexión', 'success');
+        ctx.navigate('/');
+        return;
+      }
+      const { finished } = result;
       ctx.setActiveWorkout(null);
       haptic([12, 40, 24]);
       toast('¡Entrenamiento guardado!', 'success');
@@ -779,8 +862,7 @@ export async function render(container, ctx) {
     });
     if (!confirmed) return;
     try {
-      await api.workouts.remove(workout.id);
-      clearActiveWorkout(userId);
+      await repo.discard();
       ctx.setActiveWorkout(null);
       toast('Entrenamiento descartado', 'success');
       ctx.navigate('/');
@@ -803,10 +885,24 @@ export async function render(container, ctx) {
   window.addEventListener('pagehide', flushOnHide);
   document.addEventListener('visibilitychange', onVisibility);
 
+  // --- reconnect handling ---
+  // When connectivity returns mid-workout we do NOT upload yet: the workout is
+  // still in progress and uploading it would finish it prematurely (the /sync
+  // endpoint materializes a finished workout). We just drop the offline pill;
+  // the workout stays local and editable and is uploaded when the user presses
+  // "Terminar". The "Anterior" suggestions remain empty until the workout is
+  // finished and the view reloads online — filling them live would need the
+  // workout on the server, which we deliberately avoid until finish.
+  const onOnline = () => {
+    renderOfflineState();
+  };
+  window.addEventListener('online', onOnline);
+
   return () => {
     clearInterval(timerId);
     window.removeEventListener('pagehide', flushOnHide);
     document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('online', onOnline);
     // Flush (do NOT cancel) pending set writes on navigation so edits made
     // right before leaving the view are persisted instead of dropped.
     setWrites.flush();

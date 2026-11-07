@@ -345,6 +345,32 @@ full-screen like a native app. The pieces live in `public/`:
   the server is unreachable at launch, the app shows an explicit *offline* state
   with a retry instead of bouncing to the login screen.
 
+### Recording a workout offline
+
+You can start and record a full workout with no connectivity (e.g. a gym with
+no signal) and sync it later:
+
+- **Starting offline.** "Empezar Entrenamiento Vacío" works offline: the workout
+  is created locally with a client-generated id. (Starting *from a routine*
+  still needs the server, since routines are not cached; use an empty workout
+  offline.)
+- **Building offline.** The exercise catalog and your own exercises are cached
+  in IndexedDB the first time you are online, so you can add exercises, add and
+  edit sets, and mark them complete entirely offline. Exercise images are not
+  cached, so they show a placeholder until you are back online. The "Anterior"
+  (previous set) suggestions are not available offline; they reappear once the
+  workout is finished and loaded online.
+- **Syncing.** When you press *Terminar*, the whole workout is uploaded in one
+  request to `POST /api/workouts/sync`. That endpoint is **idempotent** by a
+  per-workout client id (unique per user): a retried upload — an ambiguous
+  timeout, a double tap, or an upload driven at the next app launch — never
+  creates a duplicate. If you finish offline, the workout is kept locally and
+  uploaded automatically the next time the app launches or regains
+  connectivity. Reconnecting *mid-workout* does not upload anything: the workout
+  stays local and editable until you finish it.
+- **Scope and cleanup.** All local data is keyed per user and wiped on logout,
+  so nothing leaks between accounts on a shared device.
+
 ### Updating the service worker on deploy
 
 The shell assets are not content-hashed, so after a deploy that changes the CSS

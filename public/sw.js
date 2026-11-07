@@ -10,18 +10,49 @@
  *
  * Bump CACHE_VERSION to force clients to drop old caches.
  */
-const CACHE_VERSION = 'fitlog-v11';
+const CACHE_VERSION = 'fitlog-v12';
+// Complete first-party shell. Every module is imported statically from app.js
+// (no dynamic import()), so the whole graph must be present for an offline cold
+// launch to succeed — precaching only app.js left installed clients unable to
+// boot offline. Keep this list in sync with the files on disk; a test enforces
+// that it is complete and that SHELL_HASH below changes whenever any shell file
+// does (so a deploy can never ship a stale CACHE_VERSION).
 const PRECACHE = [
   '/',
   '/index.html',
+  '/manifest.webmanifest',
+  '/assets/icon.svg',
   '/css/tokens.css',
   '/css/base.css',
   '/css/components.css',
   '/css/views.css',
   '/js/app.js',
-  '/manifest.webmanifest',
-  '/assets/icon.svg',
+  '/js/api.js',
+  '/js/ui.js',
+  '/js/theme.js',
+  '/js/charts.js',
+  '/js/format.js',
+  '/js/exercise-picker.js',
+  '/js/pending-writes.js',
+  '/js/pull-refresh.js',
+  '/js/swipe.js',
+  '/js/views/active.js',
+  '/js/views/exercises.js',
+  '/js/views/history.js',
+  '/js/views/home.js',
+  '/js/views/login.js',
+  '/js/views/measurements.js',
+  '/js/views/profile.js',
+  '/js/views/routine-editor.js',
+  '/js/views/routine.js',
+  '/js/views/training.js',
+  '/js/views/workout.js',
 ];
+// Fingerprint of the shell contents. The build-less project has no bundler to
+// inject a release id, so a test computes the same hash from the files on disk
+// and fails if it drifts from this constant — forcing a deliberate bump here
+// (and with it CACHE_VERSION) whenever a shell file changes.
+const SHELL_HASH = 'de3da7fcccb1967e';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

@@ -420,6 +420,21 @@ export function errorScreen(message, retryAttr = '') {
   `;
 }
 
+// Shown when the server is unreachable (offline) rather than when the session
+// is genuinely invalid. The installed shell loads from cache, so we land here
+// instead of bouncing the user to the login screen as if they were logged out.
+export function offlineScreen(retryAttr = '') {
+  return `
+    <div class="empty">
+      <div class="empty-icon">${icon('refresh', 24)}</div>
+      <h3>Sin conexión</h3>
+      <p>No hay conexión con el servidor. Tus datos aparecerán en cuanto
+      vuelvas a estar en línea.</p>
+      <button type="button" class="btn btn-secondary btn-sm" ${retryAttr}>Reintentar</button>
+    </div>
+  `;
+}
+
 export function monthKey(value) {
   const date = new Date(value);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;

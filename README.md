@@ -337,20 +337,28 @@ full-screen like a native app. The pieces live in `public/`:
 
 - `manifest.webmanifest` — name, theme/background colours and icons
   (`assets/icon*.svg` / `assets/icon-*.png`).
-- `sw.js` — the service worker. It precaches the app shell, serves navigations
-  network-first (falling back to the cached shell when offline) and static
-  assets stale-while-revalidate. **API traffic (`/api/…`) is never cached**, so
-  user data is always fresh and never shared between sessions.
+- `sw.js` — the service worker. It precaches the **complete first-party shell**
+  (every CSS and JS module, since `app.js` imports them statically), serves
+  navigations network-first (falling back to the cached shell when offline) and
+  static assets stale-while-revalidate. **API traffic (`/api/…`) is never
+  cached**, so user data is always fresh and never shared between sessions. When
+  the server is unreachable at launch, the app shows an explicit *offline* state
+  with a retry instead of bouncing to the login screen.
 
 ### Updating the service worker on deploy
 
 The shell assets are not content-hashed, so after a deploy that changes the CSS
 or JS of the shell, **bump `CACHE_VERSION` in `public/sw.js`** (e.g.
-`fitlog-v1` → `fitlog-v2`). On the next load the worker wipes the old cache and
-re-precaches the shell, guaranteeing installed clients pick up the new assets
-instead of a stale cached copy. (The worker already revalidates over the
-network, so this is a safety net for fully offline launches and for forcing an
-immediate refresh.)
+`fitlog-v1` → `fitlog-v2`) and update `SHELL_HASH` next to it. On the next load
+the worker wipes the old cache and re-precaches the shell, guaranteeing
+installed clients pick up the new assets instead of a stale cached copy. (The
+worker already revalidates over the network, so this is a safety net for fully
+offline launches and for forcing an immediate refresh.)
+
+A test computes the shell fingerprint from the files on disk and fails if it
+drifts from `SHELL_HASH`; because the test gate runs before every deploy, you
+cannot ship a shell change while leaving `CACHE_VERSION` stale. The same test
+asserts the precache list still covers every module under `public/js`.
 
 ## Production
 

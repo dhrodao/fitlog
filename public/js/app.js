@@ -1,6 +1,6 @@
 import { api, errorMessage } from './api.js';
 import { initTheme } from './theme.js';
-import { esc, errorScreen, icon, loaderScreen } from './ui.js';
+import { esc, errorScreen, icon, loaderScreen, offlineScreen } from './ui.js';
 import * as LoginView from './views/login.js';
 import * as HomeView from './views/home.js';
 import * as TrainingView from './views/training.js';
@@ -306,6 +306,12 @@ document.addEventListener('click', (event) => {
     event.preventDefault();
     handleRoute();
   }
+
+  const reboot = event.target.closest('[data-reboot]');
+  if (reboot) {
+    event.preventDefault();
+    boot();
+  }
 });
 
 window.addEventListener('hashchange', handleRoute);
@@ -320,11 +326,24 @@ async function boot() {
     state.authConfig = { googleEnabled: false, devLoginEnabled: true };
   }
 
+  let offline = false;
   try {
     const { user } = await api.auth.me();
     state.user = user;
-  } catch {
+  } catch (error) {
     state.user = null;
+    // status 0 means the request never reached the server (offline). Treat that
+    // differently from a 401: the shell loaded from cache, so show an explicit
+    // offline state with a retry instead of bouncing to the login screen as if
+    // the session had expired.
+    offline = error?.status === 0;
+  }
+
+  if (offline && !state.user) {
+    nav.classList.add('hidden');
+    shell.classList.add('no-nav');
+    viewRoot.innerHTML = offlineScreen('data-reboot');
+    return;
   }
 
   await loadActiveState();

@@ -115,6 +115,57 @@ Docker setup details:
 > `PORT`. Do not run `npm run dev` and the container on the same port at the
 > same time.
 
+## Database backups
+
+The SQLite database runs in **WAL** mode (write-ahead logging): at any moment
+the live state is split between `fitness.db` and its `fitness.db-wal` sidecar,
+so a plain `cp` of the `.db` file while the app is running can produce an
+inconsistent copy. The backup script avoids this by using SQLite's online
+backup API, which captures a consistent snapshot — including the WAL — even
+while the app is writing.
+
+```bash
+npm run backup:db        # create a timestamped backup + apply retention
+npm run backup:verify    # restore the newest backup to a temp path and check it
+```
+
+- Backups are written to `BACKUP_DIR` (default `backups/`, gitignored because
+  they contain personal data). Each file is named `fitness-<UTC-timestamp>.db`.
+- Retention keeps `BACKUP_KEEP_DAILY` most recent backups plus one per ISO week
+  for `BACKUP_KEEP_WEEKLY` weeks (defaults: 7 daily + 4 weekly).
+- `backup:verify` copies a backup to a throwaway path, runs `integrity_check`
+  and `foreign_key_check`, and prints row counts for the key tables. A backup
+  you have never restored is not a backup — run it periodically.
+
+### Scheduling
+
+Run the backup daily from the host (the host owns the `./data` bind mount). A
+systemd timer or cron entry, e.g. a daily cron:
+
+```cron
+0 4 * * *  cd /opt/fitlog && /usr/bin/node scripts/backup-db.js >> /var/log/fitlog-backup.log 2>&1
+```
+
+> **Off-host copy.** Local backups do not protect against disk loss. Copy at
+> least one generation off the machine (e.g. `rsync`/`rclone` to another host
+> or an encrypted object-store bucket). Restrict permissions and encrypt
+> off-host copies, since they contain personal data.
+
+### Restore
+
+```bash
+# Stop the app so nothing writes during the restore.
+docker compose stop app
+# Replace the live database with a backup (remove stale WAL/SHM siblings).
+cp backups/fitness-<timestamp>.db data/fitness.db
+rm -f data/fitness.db-wal data/fitness.db-shm
+docker compose start app
+```
+
+**RPO/RTO:** with a daily backup the recovery point objective is up to 24 h of
+data; the recovery time objective is a few minutes (copy one file and restart).
+Tighten the RPO by scheduling the backup more frequently.
+
 ## Expose it with Cloudflare Tunnel (optional)
 
 The Compose file includes a `cloudflared` service that publishes the app over

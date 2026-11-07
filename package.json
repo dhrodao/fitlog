@@ -11,6 +11,8 @@
     "seed:demo": "node server/seed.js",
     "import:hevy-csv": "node server/import-hevy-csv.js",
     "import:hevy-api": "node server/import-hevy-api.js",
+    "backup:db": "node scripts/backup-db.js",
+    "backup:verify": "node scripts/verify-backup.js",
     "test": "node --test"
   },
   "engines": {

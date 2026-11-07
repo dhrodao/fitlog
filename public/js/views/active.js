@@ -987,7 +987,16 @@ export async function render(container, ctx) {
     if (setWrites.hasPending()) setWrites.flush();
   };
   const onVisibility = () => {
-    if (document.visibilityState === 'hidden') flushOnHide();
+    if (document.visibilityState === 'hidden') {
+      flushOnHide();
+      return;
+    }
+    // Back in the foreground: the duration clock and the rest timer are both
+    // anchored to absolute timestamps, so recompute them right away instead of
+    // waiting for the next interval. This corrects any drift accumulated while
+    // iOS/Safari had the PWA frozen in the background.
+    tick();
+    if (restTimer.running) restTick();
   };
   window.addEventListener('pagehide', flushOnHide);
   document.addEventListener('visibilitychange', onVisibility);

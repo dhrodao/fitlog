@@ -313,7 +313,7 @@ export async function render(container, ctx) {
     if (el) el.hidden = !setWrites.hasPending();
   };
 
-  // Per-set write scheduler (roadmap P0-01): one debounce per set, and flush()
+  // Per-set write scheduler: one debounce per set, and flush()
   // persists pending edits instead of cancelling them. Absolute values are
   // sent, so flushing or re-running is idempotent (last write wins).
   const setWrites = createWriteScheduler({

@@ -1,4 +1,4 @@
-// Per-key debounced writer for the active workout (roadmap P0-01).
+// Per-key debounced writer for the active workout.
 //
 // The active view previously used ONE shared debounce for every set, so editing
 // two sets within the window persisted only the last one, and navigating away

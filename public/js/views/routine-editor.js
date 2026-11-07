@@ -1,6 +1,7 @@
 import { api, errorMessage } from '../api.js';
 import { openExercisePicker } from '../exercise-picker.js';
 import {
+  connectionNeeded,
   esc,
   icon,
   setLoading,
@@ -12,6 +13,25 @@ let idSeq = 1;
 export async function render(container, ctx, params) {
   const id = params.id;
   const editing = id != null;
+
+  // Creating/editing routines offline is not supported (saving needs the
+  // server). When the browser knows it is offline, show a clear notice instead
+  // of a form that would only fail on save. Edit-by-URL while offline is also
+  // caught by the detail fetch below (status 0 -> error screen).
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    const backHref = editing ? `/routines/${id}` : '/routines';
+    container.innerHTML = `
+      <div class="view">
+        <div class="topbar">
+          <a class="icon-btn surface" href="#${backHref}" data-link="${backHref}" aria-label="Volver">${icon('arrowLeft', 19)}</a>
+          <div class="topbar-title">${editing ? 'Editar rutina' : 'Nueva rutina'}</div>
+          <span style="width:40px"></span>
+        </div>
+        ${connectionNeeded('Crear y editar rutinas necesita conexión. Vuelve a intentarlo cuando estés en línea.', 'data-retry')}
+      </div>`;
+    container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
+    return;
+  }
 
   const form = { name: '', description: '', folder: '' };
   let exercises = [];

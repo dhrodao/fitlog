@@ -411,6 +411,12 @@ export async function render(container, ctx) {
 
     const newRoutine = event.target.closest('[data-new-routine]');
     if (newRoutine) {
+      // Creating/editing routines offline is not supported: the editor needs
+      // the server to save. Offline, routines are read-only (view + start).
+      if (offline || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+        toast('Necesitas conexión para crear una rutina', 'error');
+        return;
+      }
       ctx.navigate('/routines/new');
       return;
     }

@@ -1058,16 +1058,17 @@ needs a way to prove it did not break authentication, isolation or sync.
 | 13 | P1-08 | Operational readiness: health, shutdown, logs | P1 | S | P1-07 | ✅ Done |
 | 14 | P1-09 | Deploy safety: versioned images and rollback | P1 | M | P0-02, P1-01 | ◻ Partial |
 | 15 | P1-10 | Complete and version the PWA shell cache | P1 | S | — | ✅ Done |
-| 16 | P1-11 | Invalidate catalog caches after sync | P1 | XS | — | ☐ Pending |
-| 17 | P1-12 | Shared frontend helpers and unsaved-change guard | P1 | S | P1-03 | ☐ Pending |
+| 16 | P1-11 | Invalidate catalog caches after sync | P1 | XS | — | ✅ Done |
+| 17 | P1-12 | Shared frontend helpers and unsaved-change guard | P1 | S | P1-03 | ◻ Partial (dirty guard done; shared-helper extraction deferred) |
 | 18 | P2-01 | Offline workout logging (conditional) | P2 | XL | Product decision, P1-10, P0-03 | ✅ Done |
 | 19 | P2-02 | Apple Health integration spike / companion (conditional) | P2 | L–XL | Product decision | ☐ Pending |
-| 20 | P2-03 | Rest timer and set-level UX | P2 | M | P1-03 | ☐ Pending |
+| 20 | P2-03 | Rest timer and set-level UX | P2 | M | P1-03 | ✅ Done |
 | 21 | P2-04 | Richer PR and statistics definitions | P2 | M | P1-05 | ☐ Pending |
 | 22 | P2-05 | Remove dead schema and unused API surface | P2 | S | P1-07 | ☐ Pending |
 
-> **Progress (updated 2026-11-07).** All P0 tasks and all P1 tasks except P1-11
-> and P1-12 are complete; P1-09 is partially complete (test gate, pre-deploy
+> **Progress (updated 2026-11-07).** All P0 tasks are complete. All P1 tasks are
+> complete except P1-09 (partial) and P1-12 (only the shared-helper extraction
+> is deferred — the unsaved-change guard is done); P1-09 is partially complete (test gate, pre-deploy
 > backup and migration, and a health-gated deploy are in place; SHA-tagged
 > images and automatic rollback are not). Offline workout logging (P2-01) was
 > implemented as a product priority — the active workout and a cached exercise
@@ -1075,8 +1076,9 @@ needs a way to prove it did not break authentication, isolation or sync.
 > routine can be started with no connectivity, and the whole workout is uploaded
 > idempotently through `POST /api/workouts/sync` keyed by a per-user client id.
 > Creating or editing routines offline is intentionally **not** supported.
-> Remaining: P1-11, P1-12 and the P2 items P2-02 (Apple Health), P2-03 (rest
-> timer), P2-04 (richer PRs) and P2-05 (dead-schema cleanup).
+> P1-11 (catalog cache invalidation) and P2-03 (rest timer) are now done.
+> Remaining: the deferred half of P1-12, and P2-02 (Apple Health), P2-04 (richer
+> PRs) and P2-05 (dead-schema cleanup).
 
 P0-04 is the only task that may reasonably jump the queue: if the instance is
 publicly reachable today, apply the allowlist as an immediate hotfix. It is
@@ -1378,7 +1380,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-11 |
-| **Status** | ☐ Pending |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Invalidate catalog caches after sync |
 | **Priority** | P1 |
 | **Problem** | Module-level name→catalog caches in `hevy-import.js` and `hevy-templates.js` are never cleared after a catalog re-sync. Hevy imports can resolve against stale catalog data until the process restarts. |
@@ -1397,7 +1399,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-12 |
-| **Status** | ☐ Pending |
+| **Status** | ◻ Partial — unsaved-change guard done; shared workout-card/helper extraction deferred (broad refactor, no user-facing benefit now) |
 | **Title** | Shared frontend helpers and unsaved-change guard |
 | **Priority** | P1 |
 | **Problem** | Workout cards, date/week labels and exercise grouping are duplicated across views. The routine editor discards unsaved changes silently on cancel/navigation. |
@@ -1456,7 +1458,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P2-03 |
-| **Status** | ☐ Pending |
+| **Status** | ✅ Done (verified in code) |
 | **Title** | Rest timer and set-level UX |
 | **Priority** | P2 |
 | **Problem** | `rest_seconds` exists in the schema/API but there is no timer in the active view. Users must watch the clock. |
@@ -1546,7 +1548,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
-| **Status** | ◻ Mostly done — P0-03, P1-02 and P1-07 complete; P1-11 (catalog cache invalidation) still pending. |
+| **Status** | ✅ Done — P0-03, P1-02, P1-07 and P1-11 complete. |
 | **Objective** | Make Hevy sync genuinely idempotent, updatable and observable. |
 | **Included tasks** | P0-03, P1-02, P1-07, P1-11 |
 | **Dependencies** | M1 (test fixtures and CI) |
@@ -1582,7 +1584,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
-| **Status** | ◻ Partial — P1-05 (progression + per-set Epley e1RM) complete; P1-12 (shared helpers + unsaved-change guard) pending; P2-04 not started. |
+| **Status** | ◻ Mostly done — P1-05 complete; P1-12 unsaved-change guard done (shared-helper extraction deferred); P2-04 not started. |
 | **Objective** | Turn stored history into useful, trustworthy progression feedback and reduce frontend duplication. |
 | **Included tasks** | P1-05, P1-12 (P2-04 only if the product owner approves the PR definitions) |
 | **Dependencies** | M5 (editable/correct data) |
@@ -1606,7 +1608,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
-| **Status** | ◻ Partial — P2-01 (offline workout logging) done; P2-02, P2-03, P2-05 pending (P2-03 next). |
+| **Status** | ◻ Partial — P2-01 (offline logging) and P2-03 (rest timer) done; P2-02 and P2-05 pending. |
 | **Objective** | Evaluate and, only if approved, deliver the larger product bets. |
 | **Included tasks** | P2-01, P2-02, P2-03, P2-05 |
 | **Dependencies** | Written product decisions in §10; P1-10 and P0-03 for offline; P1-07 for cleanup |

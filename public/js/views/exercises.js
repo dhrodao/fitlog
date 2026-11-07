@@ -63,25 +63,73 @@ export async function render(container, ctx) {
 
   const resultsEl = container.querySelector('[data-results]');
 
-  const renderResults = (exercises) => {
-    resultsEl.innerHTML = exercises.length
-      ? exercises.map(catalogCard).join('')
-      : `<div class="empty" style="grid-column:1/-1;padding:28px 8px">
-          <div class="empty-icon">${icon('search', 22)}</div>
-          <h3>Sin resultados</h3>
-          <p>Prueba con otro término o categoría.</p>
-        </div>`;
+  const PAGE_SIZE = 40;
+  let catalogCache = [];
+  let offset = 0;
+  let hasMore = true;
+  let loading = false;
+  let loadToken = 0;
+  let observer = null;
+
+  const renderCards = (exercises) => exercises.map(catalogCard).join('');
+
+  const showEmpty = () => {
+    resultsEl.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:28px 8px">
+        <div class="empty-icon">${icon('search', 22)}</div>
+        <h3>Sin resultados</h3>
+        <p>Prueba con otro término o categoría.</p>
+      </div>`;
   };
 
-  let catalogCache = [];
+  const sentinelMarkup = () =>
+    `<div data-sentinel style="grid-column:1/-1;padding:16px 8px;display:flex;justify-content:center">
+      <div class="spinner"></div>
+    </div>`;
 
-  const load = async () => {
-    resultsEl.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:24px 8px"><div class="spinner"></div></div>`;
+  // Load the next page. `reset` restarts from offset 0 (new query/category).
+  const loadMore = async (reset = false) => {
+    if (loading) return;
+    if (!reset && !hasMore) return;
+    loading = true;
+
+    if (reset) {
+      offset = 0;
+      hasMore = true;
+      catalogCache = [];
+      loadToken += 1;
+      resultsEl.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:24px 8px"><div class="spinner"></div></div>`;
+    }
+
+    const token = loadToken;
+
     try {
-      const { exercises } = await api.exercises.search(query, category);
-      catalogCache = exercises;
-      renderResults(exercises);
+      const { exercises } = await api.exercises.search(query, category, {
+        limit: PAGE_SIZE,
+        offset,
+      });
+      // A newer search started while this request was in flight: drop it.
+      if (token !== loadToken) return;
+
+      if (reset) resultsEl.innerHTML = '';
+      // Remove the previous sentinel before appending the new page.
+      resultsEl.querySelector('[data-sentinel]')?.remove();
+
+      catalogCache = catalogCache.concat(exercises);
+      offset += exercises.length;
+      hasMore = exercises.length === PAGE_SIZE;
+
+      if (!catalogCache.length) {
+        showEmpty();
+        return;
+      }
+
+      resultsEl.insertAdjacentHTML('beforeend', renderCards(exercises));
+      if (hasMore) {
+        resultsEl.insertAdjacentHTML('beforeend', sentinelMarkup());
+        observer?.observe(resultsEl.querySelector('[data-sentinel]'));
+      }
     } catch (error) {
+      if (token !== loadToken) return;
       if (error.status === 401) {
         ctx.handleUnauthorized();
         return;
@@ -94,12 +142,23 @@ export async function render(container, ctx) {
           'El catálogo de ejercicios aparecerá cuando vuelvas a estar en línea.',
           'data-retry'
         )}</div>`;
-        resultsEl.querySelector('[data-retry]')?.addEventListener('click', () => load());
+        resultsEl.querySelector('[data-retry]')?.addEventListener('click', () => loadMore(true));
         return;
       }
       resultsEl.innerHTML = `<div class="notice danger" style="grid-column:1/-1">${icon('info', 16)} ${esc(errorMessage(error))}</div>`;
+    } finally {
+      if (token === loadToken) loading = false;
     }
   };
+
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMore(false);
+    },
+    { root: null, rootMargin: '300px' }
+  );
+
+  const load = () => loadMore(true);
 
   const debouncedLoad = debounce(load, 280);
 
@@ -176,4 +235,9 @@ export async function render(container, ctx) {
   });
 
   await load();
+
+  return () => {
+    observer?.disconnect();
+    observer = null;
+  };
 }

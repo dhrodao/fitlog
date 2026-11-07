@@ -231,6 +231,33 @@ test('sincroniza el catálogo y enlaza ejercicios propios por alias', async () =
   assert.equal(second.linked, 0);
 });
 
+test('pagina el catálogo con limit y offset sin solapar resultados', () => {
+  // 4 exercises in the dataset, sorted by name COLLATE NOCASE:
+  // Barbell Deadlift, Jump Rope, Plank, Standing Calf Raises.
+  const firstPage = searchCatalog('', { limit: 2, offset: 0 });
+  assert.deepEqual(
+    firstPage.map((exercise) => exercise.id),
+    ['Barbell_Deadlift', 'Jump_Rope']
+  );
+
+  const secondPage = searchCatalog('', { limit: 2, offset: 2 });
+  assert.deepEqual(
+    secondPage.map((exercise) => exercise.id),
+    ['Plank', 'Standing_Calf_Raises']
+  );
+
+  // Past the end returns an empty page (signals "no more" to the client).
+  assert.deepEqual(searchCatalog('', { limit: 2, offset: 4 }), []);
+
+  // Offset also works together with a category filter.
+  const strengthFirst = searchCatalog('', { category: 'Espalda', limit: 1, offset: 0 });
+  assert.deepEqual(
+    strengthFirst.map((exercise) => exercise.id),
+    ['Barbell_Deadlift']
+  );
+  assert.deepEqual(searchCatalog('', { category: 'Espalda', limit: 1, offset: 1 }), []);
+});
+
 test('expone el catálogo por la API con ids de texto', async () => {
   const app = createApp();
   const agent = request.agent(app);

@@ -45,10 +45,12 @@ export const api = {
       request('/auth/google', { method: 'POST', body: { credential } }),
   },
   exercises: {
-    search: (query = '', category = '') => {
+    search: (query = '', category = '', { limit, offset } = {}) => {
       const params = new URLSearchParams();
       if (query) params.set('q', query);
       if (category) params.set('category', category);
+      if (limit != null) params.set('limit', String(limit));
+      if (offset != null) params.set('offset', String(offset));
       return request(`/exercises/search?${params}`);
     },
     categories: () => request('/exercises/categories'),

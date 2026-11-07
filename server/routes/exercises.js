@@ -20,6 +20,7 @@ const router = Router();
 router.get('/search', (req, res) => {
   const results = searchCatalog(req.query.q, {
     limit: req.query.limit,
+    offset: req.query.offset,
     category: req.query.category,
   });
   res.json({ exercises: results });

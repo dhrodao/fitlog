@@ -332,8 +332,9 @@ export async function syncCatalog({ force = false, dataset = null } = {}) {
   return syncPromise;
 }
 
-export function searchCatalog(query, { limit = 40, category = '' } = {}) {
+export function searchCatalog(query, { limit = 40, offset = 0, category = '' } = {}) {
   const safeLimit = Math.min(Math.max(Number(limit) || 40, 1), 100);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
   const term = `%${String(query || '').trim()}%`;
   const hasQuery = Boolean(String(query || '').trim());
 
@@ -343,31 +344,31 @@ export function searchCatalog(query, { limit = 40, category = '' } = {}) {
       .prepare(
         `SELECT * FROM exercise_catalog
          WHERE name LIKE ? AND category = ?
-         ORDER BY name COLLATE NOCASE LIMIT ?`
+         ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`
       )
-      .all(term, category, safeLimit);
+      .all(term, category, safeLimit, safeOffset);
   } else if (hasQuery) {
     rows = db
       .prepare(
         `SELECT * FROM exercise_catalog
          WHERE name LIKE ?
-         ORDER BY name COLLATE NOCASE LIMIT ?`
+         ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`
       )
-      .all(term, safeLimit);
+      .all(term, safeLimit, safeOffset);
   } else if (category) {
     rows = db
       .prepare(
         `SELECT * FROM exercise_catalog
          WHERE category = ?
-         ORDER BY name COLLATE NOCASE LIMIT ?`
+         ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`
       )
-      .all(category, safeLimit);
+      .all(category, safeLimit, safeOffset);
   } else {
     rows = db
       .prepare(
-        'SELECT * FROM exercise_catalog ORDER BY name COLLATE NOCASE LIMIT ?'
+        'SELECT * FROM exercise_catalog ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?'
       )
-      .all(safeLimit);
+      .all(safeLimit, safeOffset);
   }
 
   return rows.map(serializeCatalogRow);

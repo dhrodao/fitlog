@@ -1,5 +1,5 @@
 import { api, errorMessage } from '../api.js';
-import { debounce, esc, icon, openModal, toast } from '../ui.js';
+import { connectionNeeded, debounce, esc, icon, openModal, toast } from '../ui.js';
 
 function catalogCard(exercise) {
   return `
@@ -84,6 +84,17 @@ export async function render(container, ctx) {
     } catch (error) {
       if (error.status === 401) {
         ctx.handleUnauthorized();
+        return;
+      }
+      if (error.status === 0) {
+        // Offline: the catalog of this browse view is not cached (the exercise
+        // picker keeps its own cache). Keep the header/search/chips and show a
+        // "needs connection" block in the results area.
+        resultsEl.innerHTML = `<div style="grid-column:1/-1">${connectionNeeded(
+          'El catálogo de ejercicios aparecerá cuando vuelvas a estar en línea.',
+          'data-retry'
+        )}</div>`;
+        resultsEl.querySelector('[data-retry]')?.addEventListener('click', () => load());
         return;
       }
       resultsEl.innerHTML = `<div class="notice danger" style="grid-column:1/-1">${icon('info', 16)} ${esc(errorMessage(error))}</div>`;

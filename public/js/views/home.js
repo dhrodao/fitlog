@@ -2,6 +2,7 @@ import { api, errorMessage } from '../api.js';
 import { attachPullToRefresh } from '../pull-refresh.js';
 import {
   avatar,
+  connectionNeeded,
   esc,
   formatDate,
   formatDuration,
@@ -66,6 +67,7 @@ function weekRangeLabel(weekStart) {
 
 export async function render(container, ctx) {
   let data;
+  let offline = false;
   try {
     const [overview] = await Promise.all([
       api.stats.overview('3m'),
@@ -77,15 +79,23 @@ export async function render(container, ctx) {
       ctx.handleUnauthorized();
       return;
     }
-    container.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">${icon('info', 24)}</div>
-        <h3>No se pudo cargar</h3>
-        <p>${esc(errorMessage(error))}</p>
-        <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
-      </div>`;
-    container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
-    return;
+    if (error.status !== 0) {
+      container.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">${icon('info', 24)}</div>
+          <h3>No se pudo cargar</h3>
+          <p>${esc(errorMessage(error))}</p>
+          <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
+        </div>`;
+      container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
+      return;
+    }
+    // Offline: render the view structure with empty stats and show a
+    // "needs connection" block where the server data would go. refreshActive()
+    // already fell back to the local snapshot, so the active banner still works.
+    offline = true;
+    await ctx.refreshActive();
+    data = { totals: {}, recent: [], weekly: [], thisWeekSeconds: 0, allTimeWorkouts: 0 };
   }
 
   const user = ctx.user;
@@ -128,6 +138,7 @@ export async function render(container, ctx) {
         </button>
       `}
 
+      ${offline ? connectionNeeded('Tus estadísticas e historial aparecerán cuando vuelvas a estar en línea.', 'data-retry') : `
       <section class="card-hero hero-week">
         <div class="hero-week-top">
           <div>
@@ -191,6 +202,7 @@ export async function render(container, ctx) {
           }
         </div>
       </section>
+      `}
     </div>
   `;
 

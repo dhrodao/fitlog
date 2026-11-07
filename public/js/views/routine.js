@@ -2,6 +2,7 @@ import { api, errorMessage } from '../api.js';
 import { lineChart, attachLineChart } from '../charts.js';
 import {
   confirmDialog,
+  connectionNeeded,
   esc,
   formatDate,
   formatDuration,
@@ -48,13 +49,30 @@ export async function render(container, ctx, params) {
       ctx.handleUnauthorized();
       return;
     }
+    if (error.status !== 0) {
+      container.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">${icon('info', 24)}</div>
+          <h3>No se pudo cargar la rutina</h3>
+          <p>${esc(errorMessage(error))}</p>
+          <a class="btn btn-secondary btn-sm" href="#/routines" data-link="/routines">Volver</a>
+        </div>`;
+      return;
+    }
+    // Offline: routines are not cached yet, so render the view header/back
+    // button and a "needs connection" block instead of a full-screen error.
     container.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">${icon('info', 24)}</div>
-        <h3>No se pudo cargar la rutina</h3>
-        <p>${esc(errorMessage(error))}</p>
-        <a class="btn btn-secondary btn-sm" href="#/routines" data-link="/routines">Volver</a>
+      <div class="view">
+        <div class="topbar">
+          <button type="button" class="icon-btn surface" data-link="/routines" aria-label="Volver">
+            ${icon('arrowLeft', 19)}
+          </button>
+          <div class="topbar-title">Rutina</div>
+          <span style="width:40px"></span>
+        </div>
+        ${connectionNeeded('Esta rutina aparecerá cuando vuelvas a estar en línea.', 'data-retry')}
       </div>`;
+    container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
     return;
   }
 

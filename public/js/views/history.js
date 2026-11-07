@@ -1,6 +1,7 @@
 import { api, errorMessage } from '../api.js';
 import { attachPullToRefresh } from '../pull-refresh.js';
 import {
+  connectionNeeded,
   esc,
   formatDate,
   formatDuration,
@@ -49,6 +50,7 @@ export async function render(container, ctx) {
   let workouts = [];
   let offset = 0;
   let hasMore = true;
+  let offline = false;
 
   const loadPage = async () => {
     const { workouts: page } = await api.workouts.list(PAGE_SIZE, offset);
@@ -64,20 +66,33 @@ export async function render(container, ctx) {
       ctx.handleUnauthorized();
       return;
     }
-    container.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">${icon('info', 24)}</div>
-        <h3>No se pudo cargar el historial</h3>
-        <p>${esc(errorMessage(error))}</p>
-        <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
-      </div>`;
-    container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
-    return;
+    if (error.status !== 0) {
+      container.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">${icon('info', 24)}</div>
+          <h3>No se pudo cargar el historial</h3>
+          <p>${esc(errorMessage(error))}</p>
+          <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
+        </div>`;
+      container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
+      return;
+    }
+    // Offline: render the view header and show a "needs connection" block in
+    // the list area instead of a full-screen error. No workouts are cached.
+    offline = true;
+    hasMore = false;
   }
 
   const renderBody = () => {
     const groups = groupByMonth(workouts);
     const body = container.querySelector('[data-body]');
+    if (offline) {
+      body.innerHTML = connectionNeeded(
+        'Tu historial aparecerá cuando vuelvas a estar en línea.',
+        'data-retry'
+      );
+      return;
+    }
     if (!workouts.length) {
       body.innerHTML = `<div class="card"><div class="empty" style="padding:24px 8px">
         <div class="empty-icon">${icon('history', 24)}</div>
@@ -112,6 +127,9 @@ export async function render(container, ctx) {
   `;
 
   renderBody();
+
+  // Retry from the inline offline block re-runs the view load.
+  container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
 
   container.querySelector('[data-body]').addEventListener('click', async (event) => {
     const more = event.target.closest('[data-more]');

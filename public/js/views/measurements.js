@@ -2,6 +2,7 @@ import { api, errorMessage } from '../api.js';
 import { lineChart } from '../charts.js';
 import {
   confirmDialog,
+  connectionNeeded,
   esc,
   formatDate,
   formatDateInput,
@@ -33,6 +34,7 @@ function measurementRow(measurement) {
 
 export async function render(container, ctx) {
   let measurements = [];
+  let offline = false;
   try {
     const response = await api.measurements.list();
     measurements = response.measurements || [];
@@ -41,15 +43,20 @@ export async function render(container, ctx) {
       ctx.handleUnauthorized();
       return;
     }
-    container.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">${icon('info', 24)}</div>
-        <h3>No se pudo cargar</h3>
-        <p>${esc(errorMessage(error))}</p>
-        <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
-      </div>`;
-    container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
-    return;
+    if (error.status !== 0) {
+      container.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">${icon('info', 24)}</div>
+          <h3>No se pudo cargar</h3>
+          <p>${esc(errorMessage(error))}</p>
+          <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
+        </div>`;
+      container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
+      return;
+    }
+    // Offline: keep the header and the add-measurement form, but show a
+    // "needs connection" block where the chart/history (server data) would go.
+    offline = true;
   }
 
   const chartHtml = () => {
@@ -78,6 +85,7 @@ export async function render(container, ctx) {
         <span style="width:40px"></span>
       </div>
 
+      ${offline ? connectionNeeded('Tu progreso de peso aparecerá cuando vuelvas a estar en línea.', 'data-retry') : `
       <section class="chart-card">
         <div class="chart-head">
           <div>
@@ -88,6 +96,7 @@ export async function render(container, ctx) {
         </div>
         <div data-chart>${chartHtml()}</div>
       </section>
+      `}
 
       <section class="card">
         <div class="section-head">
@@ -124,7 +133,8 @@ export async function render(container, ctx) {
       </section>
 
       <section>
-        <div class="section-head"><h2>Historial</h2><span class="hint">${measurements.length}</span></div>
+        <div class="section-head"><h2>Historial</h2><span class="hint">${offline ? '' : measurements.length}</span></div>
+        ${offline ? connectionNeeded('Tu histórico de medidas aparecerá cuando vuelvas a estar en línea.', 'data-retry') : `
         <div class="stack-sm" data-list>
           ${
             measurements.length
@@ -136,11 +146,24 @@ export async function render(container, ctx) {
                  </div></div>`
           }
         </div>
+        `}
       </section>
     </div>
   `;
 
   const field = (name) => container.querySelector(`[data-field="${name}"]`);
+
+  // Offline: the chart and history (server data) are replaced by the inline
+  // block. The add form is still shown but saving needs the server, so it will
+  // surface a toast on failure. Wire only the retry button and the save button
+  // (whose own catch handles the offline error) and skip the list/chart logic.
+  if (offline) {
+    container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
+    container.querySelector('[data-save]')?.addEventListener('click', () => {
+      toast('Necesitas conexión para guardar una medida', 'error');
+    });
+    return;
+  }
 
   // Edit state: null = creating a new record (empty numeric fields are omitted
   // from the payload, so they never clear other fields). A date = editing an

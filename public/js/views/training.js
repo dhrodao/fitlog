@@ -76,6 +76,7 @@ function routineCard(routine) {
 
 export async function render(container, ctx) {
   let data;
+  let offline = false;
   try {
     const [routinesResult, workoutsResult] = await Promise.all([
       api.routines.list(),
@@ -91,15 +92,26 @@ export async function render(container, ctx) {
       ctx.handleUnauthorized();
       return;
     }
-    container.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">${icon('info', 24)}</div>
-        <h3>No se pudo cargar</h3>
-        <p>${esc(errorMessage(error))}</p>
-        <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
-      </div>`;
-    container.querySelector('[data-retry]').addEventListener('click', () => ctx.refresh());
-    return;
+    // Offline (request never reached the server): do NOT show a dead error
+    // screen — that would hide "Empezar Entrenamiento Vacío", the one action
+    // that works with no connectivity. Render the view with empty routine/
+    // history lists plus an offline notice; the active-workout banner still
+    // shows because refreshActive() falls back to the local snapshot.
+    if (error.status === 0) {
+      offline = true;
+      await ctx.refreshActive();
+      data = { routines: [], workouts: [] };
+    } else {
+      container.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">${icon('info', 24)}</div>
+          <h3>No se pudo cargar</h3>
+          <p>${esc(errorMessage(error))}</p>
+          <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
+        </div>`;
+      container.querySelector('[data-retry]').addEventListener('click', () => ctx.refresh());
+      return;
+    }
   }
 
   const collapsed = getCollapsed();
@@ -134,6 +146,13 @@ export async function render(container, ctx) {
         <span class="grow">Empezar Entrenamiento Vacío</span>
         ${icon('chevronRight', 17)}
       </button>
+
+      ${offline ? `
+        <div class="notice">
+          ${icon('info', 16)}
+          <span>Sin conexión. Puedes empezar un entreno vacío; las rutinas y el historial aparecerán cuando vuelvas a estar en línea.</span>
+        </div>
+      ` : ''}
 
       <section>
         <div class="section-head">

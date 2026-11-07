@@ -4,6 +4,7 @@ import { currentTheme, toggleTheme } from '../theme.js';
 import {
   avatar,
   confirmDialog,
+  connectionNeeded,
   esc,
   formatDate,
   formatDuration,
@@ -303,6 +304,7 @@ function openHevyImport(ctx) {
 
 export async function render(container, ctx) {
   let data;
+  let offline = false;
   try {
     data = await api.stats.overview('6m');
   } catch (error) {
@@ -310,15 +312,21 @@ export async function render(container, ctx) {
       ctx.handleUnauthorized();
       return;
     }
-    container.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">${icon('info', 24)}</div>
-        <h3>No se pudo cargar</h3>
-        <p>${esc(errorMessage(error))}</p>
-        <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
-      </div>`;
-    container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
-    return;
+    if (error.status !== 0) {
+      container.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">${icon('info', 24)}</div>
+          <h3>No se pudo cargar</h3>
+          <p>${esc(errorMessage(error))}</p>
+          <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
+        </div>`;
+      container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
+      return;
+    }
+    // Offline: keep the profile header/actions and show a "needs connection"
+    // block where the server-backed sections (stats, chart, Hevy, recent) go.
+    offline = true;
+    data = { totals: {}, weekly: [], recent: [], allTimeWorkouts: 0 };
   }
 
   const user = ctx.user;
@@ -328,20 +336,22 @@ export async function render(container, ctx) {
   let metric = 'duration';
 
   let syncStatus = { connected: false };
-  try {
-    syncStatus = await api.hevySync.status();
-  } catch {
-    // Non-fatal: show the connect form by default.
-  }
-
   let importedCount = 0;
   let importedRoutines = 0;
-  try {
-    const { count, routines } = await api.import.importedCount();
-    importedCount = count || 0;
-    importedRoutines = routines || 0;
-  } catch {
-    // Non-fatal.
+  if (!offline) {
+    try {
+      syncStatus = await api.hevySync.status();
+    } catch {
+      // Non-fatal: show the connect form by default.
+    }
+
+    try {
+      const { count, routines } = await api.import.importedCount();
+      importedCount = count || 0;
+      importedRoutines = routines || 0;
+    } catch {
+      // Non-fatal.
+    }
   }
 
   const chartHtml = (key) => {
@@ -382,6 +392,7 @@ export async function render(container, ctx) {
         </div>
       </div>
 
+      ${offline ? connectionNeeded('Tus estadísticas aparecerán cuando vuelvas a estar en línea.', 'data-retry') : `
       <div class="stat-grid">
         <div class="stat accent">
           <span class="value">${esc(String(data.allTimeWorkouts || 0))}</span>
@@ -414,6 +425,7 @@ export async function render(container, ctx) {
             .join('')}
         </div>
       </section>
+      `}
 
       <section>
         <div class="section-head"><h2>Información</h2></div>
@@ -438,6 +450,7 @@ export async function render(container, ctx) {
 
       <section>
         <div class="section-head"><h2>Sincronización con Hevy</h2></div>
+        ${offline ? connectionNeeded('La sincronización con Hevy necesita conexión.', 'data-retry') : `
         <div data-sync-section>${hevySyncSection(syncStatus)}</div>
         <div data-hevy-flush>${
           importedCount > 0 || importedRoutines > 0
@@ -446,13 +459,15 @@ export async function render(container, ctx) {
                </button>`
             : ''
         }</div>
+        `}
       </section>
 
       <section>
         <div class="section-head">
           <h2>Entrenamientos</h2>
-          <a class="link-btn" href="#/workouts" data-link="/workouts">Ver todo</a>
+          ${offline ? '' : `<a class="link-btn" href="#/workouts" data-link="/workouts">Ver todo</a>`}
         </div>
+        ${offline ? connectionNeeded('Tus entrenamientos aparecerán cuando vuelvas a estar en línea.', 'data-retry') : `
         <div class="stack-sm">
           ${
             recent.length
@@ -480,6 +495,7 @@ export async function render(container, ctx) {
                  </div></div>`
           }
         </div>
+        `}
       </section>
 
       <button type="button" class="btn btn-danger btn-block" data-logout>
@@ -498,6 +514,27 @@ export async function render(container, ctx) {
     }
   };
   window.addEventListener('themechange', themeListener);
+
+  // Offline: the chart/sync/recent sections are replaced by the inline block.
+  // Wire its retry button and skip the data-only listeners below.
+  if (offline) {
+    container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
+    container.querySelector('[data-theme-toggle]')?.addEventListener('click', () => toggleTheme());
+    container.querySelector('[data-logout]')?.addEventListener('click', async () => {
+      const confirmed = await confirmDialog({
+        title: 'Cerrar sesión',
+        message: '¿Quieres salir de tu cuenta?',
+        confirmLabel: 'Cerrar sesión',
+        danger: true,
+      });
+      if (!confirmed) return;
+      toast('Hasta pronto', 'success');
+      ctx.logout();
+    });
+    return () => {
+      window.removeEventListener('themechange', themeListener);
+    };
+  }
 
   attachBarChart(container.querySelector('[data-chart]'));
 

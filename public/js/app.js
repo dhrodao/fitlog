@@ -1,7 +1,7 @@
 import { api, errorMessage } from './api.js';
 import { initTheme } from './theme.js';
 import { esc, errorScreen, icon, loaderScreen, offlineScreen } from './ui.js';
-import { clearAll as clearOfflineData } from './offline/active-store.js';
+import { clearAll as clearOfflineData, loadActiveWorkout } from './offline/active-store.js';
 import { syncFinishedOffline } from './offline/sync.js';
 import * as LoginView from './views/login.js';
 import * as HomeView from './views/home.js';
@@ -181,7 +181,14 @@ const ctx = {
       const { workout } = await api.workouts.active();
       state.activeWorkout = workout;
       return workout;
-    } catch {
+    } catch (error) {
+      // Offline: fall back to the locally saved workout (started/edited with no
+      // connectivity) so the "active workout" banner still shows.
+      if (error?.status === 0) {
+        const local = await loadActiveWorkout(state.user.id);
+        state.activeWorkout = local;
+        return local;
+      }
       return null;
     }
   },
@@ -221,8 +228,12 @@ async function loadActiveState() {
   try {
     const { workout } = await api.workouts.active();
     state.activeWorkout = workout;
-  } catch {
-    state.activeWorkout = null;
+  } catch (error) {
+    // Offline: recover the locally saved workout if there is one.
+    state.activeWorkout =
+      error?.status === 0 && state.user
+        ? await loadActiveWorkout(state.user.id)
+        : null;
   }
 }
 

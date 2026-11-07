@@ -439,3 +439,25 @@ export function monthKey(value) {
   const date = new Date(value);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
+
+/** True when an API error means "the request never reached the server". */
+export function isOffline(error) {
+  return error?.status === 0;
+}
+
+// Inline "needs connection" block, meant to sit INSIDE a view's structure (not
+// as a full-screen error): the view still renders its header/layout, and only
+// the data region shows this. Keeps a retry button.
+export function connectionNeeded(
+  text = 'Esta sección necesita conexión. Vuelve a intentarlo cuando estés en línea.',
+  retryAttr = ''
+) {
+  return `
+    <div class="card"><div class="empty" style="padding:22px 8px">
+      <div class="empty-icon">${icon('refresh', 22)}</div>
+      <h3>Sin conexión</h3>
+      <p>${esc(text)}</p>
+      <button type="button" class="btn btn-secondary btn-sm" ${retryAttr}>Reintentar</button>
+    </div></div>
+  `;
+}

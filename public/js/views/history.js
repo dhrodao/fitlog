@@ -1,6 +1,6 @@
-import { api, errorMessage } from '../api.js';
+import { api } from '../api.js';
 import { attachPullToRefresh } from '../pull-refresh.js';
-import { workoutCard } from '../view-helpers.js';
+import { workoutCard, loadView } from '../view-helpers.js';
 import {
   connectionNeeded,
   esc,
@@ -37,24 +37,11 @@ export async function render(container, ctx) {
     hasMore = page.length === PAGE_SIZE;
   };
 
-  try {
-    await loadPage();
-  } catch (error) {
-    if (error.status === 401) {
-      ctx.handleUnauthorized();
-      return;
-    }
-    if (error.status !== 0) {
-      container.innerHTML = `
-        <div class="empty">
-          <div class="empty-icon">${icon('info', 24)}</div>
-          <h3>No se pudo cargar el historial</h3>
-          <p>${esc(errorMessage(error))}</p>
-          <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
-        </div>`;
-      container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
-      return;
-    }
+  const result = await loadView(container, ctx, () => loadPage(), {
+    errorTitle: 'No se pudo cargar el historial',
+  });
+  if (!result.ok) return;
+  if (result.offline) {
     // Offline: render the view header and show a "needs connection" block in
     // the list area instead of a full-screen error. No workouts are cached.
     offline = true;

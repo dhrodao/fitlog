@@ -9,7 +9,7 @@ import {
   cachedRoutinesLocal,
   startRoutineLocal,
 } from '../offline/routines-cache.js';
-import { workoutCard } from '../view-helpers.js';
+import { workoutCard, loadView } from '../view-helpers.js';
 import {
   confirmDialog,
   esc,
@@ -81,44 +81,32 @@ function routineCard(routine, offline = false) {
 export async function render(container, ctx) {
   let data;
   let offline = false;
-  try {
+  const result = await loadView(container, ctx, async () => {
     const [routinesResult, workoutsResult] = await Promise.all([
       api.routines.list(),
       api.workouts.list(4, 0),
       ctx.refreshActive(),
     ]);
-    data = {
+    return {
       routines: routinesResult.routines,
       workouts: workoutsResult.workouts,
     };
-  } catch (error) {
-    if (error.status === 401) {
-      ctx.handleUnauthorized();
-      return;
-    }
+  });
+  if (!result.ok) return;
+  if (result.offline) {
     // Offline (request never reached the server): do NOT show a dead error
     // screen — that would hide "Empezar Entrenamiento Vacío", the one action
     // that works with no connectivity. Render the view with empty routine/
     // history lists plus an offline notice; the active-workout banner still
     // shows because refreshActive() falls back to the local snapshot.
-    if (error.status === 0) {
-      offline = true;
-      await ctx.refreshActive();
-      // Routines cached while online stay available (read-only) and can be
-      // started offline; history is not cached so it stays empty.
-      const cachedRoutines = await cachedRoutinesLocal(ctx.user?.id ?? null);
-      data = { routines: cachedRoutines, workouts: [] };
-    } else {
-      container.innerHTML = `
-        <div class="empty">
-          <div class="empty-icon">${icon('info', 24)}</div>
-          <h3>No se pudo cargar</h3>
-          <p>${esc(errorMessage(error))}</p>
-          <button type="button" class="btn btn-secondary btn-sm" data-retry>Reintentar</button>
-        </div>`;
-      container.querySelector('[data-retry]').addEventListener('click', () => ctx.refresh());
-      return;
-    }
+    offline = true;
+    await ctx.refreshActive();
+    // Routines cached while online stay available (read-only) and can be
+    // started offline; history is not cached so it stays empty.
+    const cachedRoutines = await cachedRoutinesLocal(ctx.user?.id ?? null);
+    data = { routines: cachedRoutines, workouts: [] };
+  } else {
+    data = result.data;
   }
 
   const collapsed = getCollapsed();

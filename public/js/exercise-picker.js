@@ -1,5 +1,10 @@
 import { api, errorMessage } from './api.js';
 import { debounce, esc, icon, openModal } from './ui.js';
+import {
+  searchCatalogLocal,
+  categoriesLocal,
+  mineLocal,
+} from './offline/catalog-cache.js';
 
 // Groups the catalog categories the way Hevy splits muscles, so the muscle
 // sheet feels familiar. Any category not listed falls back to "Otros".
@@ -50,10 +55,14 @@ function groupCategories(categories) {
  * @param {(item: {catalogId?: string, exerciseId?: number, name: string, category: string, imageUrl: string|null}) => void} options.onPick
  *   Called with the chosen exercise. The sheet closes automatically afterwards.
  */
-export function openExercisePicker({ onPick, title = 'Añadir ejercicio' } = {}) {
+export function openExercisePicker({ onPick, title = 'Añadir ejercicio', userId = null } = {}) {
   let categories = [];
   let tab = 'catalog';
   let category = ''; // '' == all muscle groups
+
+  const offline = () =>
+    typeof navigator !== 'undefined' && navigator.onLine === false;
+  const isNetworkError = (err) => err && err.status === 0;
 
   const modal = openModal({
     title,
@@ -119,27 +128,48 @@ export function openExercisePicker({ onPick, title = 'Añadir ejercicio' } = {})
     const query = searchEl.value.trim();
     try {
       if (tab === 'catalog') {
-        const { exercises } = await api.exercises.search(query, category);
+        // Offline (or on a network failure) read from the cached catalog so a
+        // workout can still be built from scratch; images are not cached.
+        const exercises = offline()
+          ? await searchCatalogLocal(userId, query, category)
+          : await api.exercises.search(query, category).then((r) => r.exercises);
         renderResults(
           exercises.map((row) => ({
             catalogId: row.id,
             name: row.name,
             category: row.category,
-            imageUrl: row.thumbnailUrl || row.imageUrl,
+            imageUrl: row.thumbnailUrl || row.imageUrl || null,
           }))
         );
       } else {
-        const { exercises } = await api.exercises.mine(query);
+        const exercises = offline()
+          ? await mineLocal(userId, query)
+          : await api.exercises.mine(query).then((r) => r.exercises);
         renderResults(
           exercises.map((row) => ({
             exerciseId: row.id,
             name: row.name,
             category: row.category,
-            imageUrl: row.imageUrl,
+            imageUrl: row.imageUrl || null,
           }))
         );
       }
     } catch (error) {
+      // A network failure while "online" (flaky link): fall back to the cache.
+      if (isNetworkError(error)) {
+        const exercises =
+          tab === 'catalog'
+            ? await searchCatalogLocal(userId, query, category)
+            : await mineLocal(userId, query);
+        renderResults(
+          exercises.map((row) =>
+            tab === 'catalog'
+              ? { catalogId: row.id, name: row.name, category: row.category, imageUrl: null }
+              : { exerciseId: row.id, name: row.name, category: row.category, imageUrl: null }
+          )
+        );
+        return;
+      }
       resultsEl.innerHTML = `<div class="notice danger">${icon('info', 16)} ${esc(errorMessage(error))}</div>`;
     }
   };
@@ -169,11 +199,16 @@ export function openExercisePicker({ onPick, title = 'Añadir ejercicio' } = {})
 
     if (!categories.length) {
       try {
-        const response = await api.exercises.categories();
-        categories = response.categories || [];
+        categories = offline()
+          ? await categoriesLocal(userId)
+          : (await api.exercises.categories()).categories || [];
       } catch (error) {
-        sheet.body.innerHTML = `<div class="notice danger">${icon('info', 16)} ${esc(errorMessage(error))}</div>`;
-        return;
+        if (isNetworkError(error)) {
+          categories = await categoriesLocal(userId);
+        } else {
+          sheet.body.innerHTML = `<div class="notice danger">${icon('info', 16)} ${esc(errorMessage(error))}</div>`;
+          return;
+        }
       }
     }
 

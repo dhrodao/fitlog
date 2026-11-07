@@ -19,8 +19,10 @@ function measurementRow(measurement) {
   if (measurement.waistCm != null) parts.push(`<span><b>${formatNumber(measurement.waistCm, 1)}</b> cm cintura</span>`);
   return `
     <div class="measurement-row" data-id="${measurement.id}">
-      <div class="date">${esc(formatDate(measurement.date, { withYear: true }))}</div>
-      <div class="vals">${parts.join('') || '<span class="text-muted">Sin datos</span>'}</div>
+      <button type="button" class="measurement-edit" data-edit="${esc(measurement.date)}" aria-label="Editar medida">
+        <div class="date">${esc(formatDate(measurement.date, { withYear: true }))}</div>
+        <div class="vals">${parts.join('') || '<span class="text-muted">Sin datos</span>'}</div>
+      </button>
       <button type="button" class="icon-btn danger btn-sm" data-remove="${measurement.id}" aria-label="Eliminar medida">
         ${icon('trash', 16)}
       </button>
@@ -87,7 +89,10 @@ export async function render(container, ctx) {
       </section>
 
       <section class="card">
-        <div class="section-head"><h2>Nuevo registro</h2></div>
+        <div class="section-head">
+          <h2 data-form-title>Nuevo registro</h2>
+          <button type="button" class="btn btn-ghost btn-sm" data-cancel-edit hidden>Cancelar</button>
+        </div>
         <div class="measurement-form">
           <div class="field">
             <label>Fecha</label>
@@ -136,6 +141,41 @@ export async function render(container, ctx) {
 
   const field = (name) => container.querySelector(`[data-field="${name}"]`);
 
+  // Edit state: null = creating a new record (empty numeric fields are omitted
+  // from the payload, so they never clear other fields). A date = editing an
+  // existing record (empty fields are sent as explicit null to clear them).
+  let editingDate = null;
+
+  const formTitle = container.querySelector('[data-form-title]');
+  const cancelEditBtn = container.querySelector('[data-cancel-edit]');
+  const saveBtn = container.querySelector('[data-save]');
+
+  const resetForm = () => {
+    editingDate = null;
+    field('date').value = formatDateInput(new Date());
+    ['weightKg', 'bodyFat', 'waistCm', 'notes'].forEach((name) => {
+      field(name).value = '';
+    });
+    formTitle.textContent = 'Nuevo registro';
+    cancelEditBtn.hidden = true;
+    saveBtn.innerHTML = `${icon('plus', 16)} Guardar medida`;
+  };
+
+  const startEdit = (date) => {
+    const record = measurements.find((m) => m.date === date);
+    if (!record) return;
+    editingDate = date;
+    field('date').value = record.date;
+    field('weightKg').value = record.weightKg != null ? record.weightKg : '';
+    field('bodyFat').value = record.bodyFat != null ? record.bodyFat : '';
+    field('waistCm').value = record.waistCm != null ? record.waistCm : '';
+    field('notes').value = record.notes || '';
+    formTitle.textContent = 'Editar registro';
+    cancelEditBtn.hidden = false;
+    saveBtn.innerHTML = `${icon('plus', 16)} Guardar cambios`;
+    container.querySelector('.measurement-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   const refreshViews = () => {
     container.querySelector('[data-chart]').innerHTML = chartHtml();
     const list = container.querySelector('[data-list]');
@@ -147,22 +187,43 @@ export async function render(container, ctx) {
          </div></div>`;
   };
 
-  container.querySelector('[data-save]')?.addEventListener('click', async (event) => {
-    const button = event.currentTarget;
-    const num = (name) => {
-      const value = field(name).value.trim();
-      return value === '' ? null : Number(value);
-    };
+  cancelEditBtn?.addEventListener('click', () => resetForm());
 
+  saveBtn?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const editing = editingDate !== null;
+
+    // When creating, an empty field is omitted so it never clears a stored
+    // value. When editing, an empty field is sent as explicit null to clear it.
     const payload = {
       date: field('date').value || formatDateInput(new Date()),
-      weightKg: num('weightKg'),
-      bodyFat: num('bodyFat'),
-      waistCm: num('waistCm'),
-      notes: field('notes').value.trim() || null,
     };
+    const applyNumeric = (name) => {
+      const raw = field(name).value.trim();
+      if (raw === '') {
+        if (editing) payload[name] = null;
+      } else {
+        payload[name] = Number(raw);
+      }
+    };
+    ['weightKg', 'bodyFat', 'waistCm'].forEach(applyNumeric);
 
-    if (payload.weightKg == null && payload.bodyFat == null && payload.waistCm == null) {
+    const noteRaw = field('notes').value.trim();
+    if (noteRaw !== '') payload.notes = noteRaw;
+    else if (editing) payload.notes = null;
+
+    // Client-side guard mirrors the server: the merged record must keep at
+    // least one measure. On a new date there is nothing stored to preserve.
+    const existing = measurements.find((m) => m.date === payload.date) || null;
+    const resolved = (name, column) => {
+      if (Object.hasOwn(payload, name)) return payload[name];
+      return existing ? existing[name] : null;
+    };
+    if (
+      resolved('weightKg') == null &&
+      resolved('bodyFat') == null &&
+      resolved('waistCm') == null
+    ) {
       toast('Añade al menos una medida', 'error');
       return;
     }
@@ -170,15 +231,12 @@ export async function render(container, ctx) {
     setLoading(button, true, 'Guardando...');
     try {
       const { measurement } = await api.measurements.save(payload);
-      // upsert by date (server replaces same-date record)
       const index = measurements.findIndex((m) => m.date === measurement.date);
       if (index >= 0) measurements[index] = measurement;
       else measurements.push(measurement);
       measurements.sort((a, b) => a.date.localeCompare(b.date));
       setLoading(button, false);
-      ['weightKg', 'bodyFat', 'waistCm', 'notes'].forEach((name) => {
-        field(name).value = '';
-      });
+      resetForm();
       refreshViews();
       toast('Medida guardada', 'success');
     } catch (error) {
@@ -189,6 +247,11 @@ export async function render(container, ctx) {
   });
 
   container.querySelector('[data-list]')?.addEventListener('click', async (event) => {
+    const edit = event.target.closest('[data-edit]');
+    if (edit) {
+      startEdit(edit.dataset.edit);
+      return;
+    }
     const remove = event.target.closest('[data-remove]');
     if (!remove) return;
     const id = Number(remove.dataset.remove);
@@ -202,6 +265,9 @@ export async function render(container, ctx) {
     try {
       await api.measurements.remove(id);
       measurements = measurements.filter((m) => m.id !== id);
+      if (editingDate && !measurements.some((m) => m.date === editingDate)) {
+        resetForm();
+      }
       refreshViews();
       toast('Medida eliminada', 'success');
     } catch (error) {

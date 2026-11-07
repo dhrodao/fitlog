@@ -1415,6 +1415,26 @@
   min-width: 54px;
 }
 
+.measurement-edit {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.measurement-edit:hover .date,
+.measurement-edit:focus-visible .date {
+  color: var(--primary, var(--text));
+}
+
 .measurement-row .vals {
   flex: 1;
   display: flex;

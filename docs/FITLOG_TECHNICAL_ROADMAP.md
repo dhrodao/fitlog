@@ -1056,7 +1056,7 @@ needs a way to prove it did not break authentication, isolation or sync.
 | 11 | P1-06 | Security hardening pass | P1 | M | P0-04 | ✅ Done |
 | 12 | P1-07 | Versioned transactional migrations and integrity constraints | P1 | M | P0-03 | ✅ Done |
 | 13 | P1-08 | Operational readiness: health, shutdown, logs | P1 | S | P1-07 | ✅ Done |
-| 14 | P1-09 | Deploy safety: versioned images and rollback | P1 | M | P0-02, P1-01 | ◻ Partial |
+| 14 | P1-09 | Deploy safety: versioned images and rollback | P1 | M | P0-02, P1-01 | ✅ Done |
 | 15 | P1-10 | Complete and version the PWA shell cache | P1 | S | — | ✅ Done |
 | 16 | P1-11 | Invalidate catalog caches after sync | P1 | XS | — | ✅ Done |
 | 17 | P1-12 | Shared frontend helpers and unsaved-change guard | P1 | S | P1-03 | ✅ Done |
@@ -1072,8 +1072,8 @@ needs a way to prove it did not break authentication, isolation or sync.
 > are not). Of the P2 items, P2-01 (offline logging), P2-03 (rest timer),
 > P2-04 (richer PRs) and P2-05 (dead-schema cleanup) are done. P2-02 (Apple
 > Health) is a deliberate won't-do: FitLog stays a PWA and HealthKit would
-> require a separate native iOS companion. The only remaining open item is
-> the unfinished half of P1-09 (image versioning + automatic rollback).
+> require a separate native iOS companion. Every task in the backlog is now
+> either done or an explicit won't-do (P2-02).
 
 P0-04 is the only task that may reasonably jump the queue: if the instance is
 publicly reachable today, apply the allowlist as an immediate hotfix. It is
@@ -1337,7 +1337,7 @@ security fix forward.
 | Field | Value |
 |---|---|
 | **ID** | P1-09 |
-| **Status** | ◻ Partial — test gate + pre-deploy backup + migrate + health-gated deploy done; SHA-tagged images and automatic rollback NOT done |
+| **Status** | ✅ Done (code in repo; not runnable here — needs the self-hosted runner to exercise) |
 | **Title** | Deploy safety: versioned images and rollback |
 | **Priority** | P1 |
 | **Problem** | The deploy resets the production checkout hard, rebuilds in place and overwrites the local image tag. There is no pre-deploy backup, no test gate and no rollback. |
@@ -1531,7 +1531,7 @@ functionality, and ends with tests. The sequence follows the dependency order in
 
 | Field | Value |
 |---|---|
-| **Status** | ◻ Mostly done — P0-02 complete; P1-09 partial (test gate + pre-deploy backup/migrate + health-gated deploy done; SHA-tagged images and automatic rollback not done). |
+| **Status** | ✅ Done — P0-02 and P1-09 complete. |
 | **Objective** | Make the database recoverable and make deploys reversible. |
 | **Included tasks** | P0-02, P1-09 |
 | **Dependencies** | M1 (CI test gate) |

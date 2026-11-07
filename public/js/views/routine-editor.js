@@ -279,9 +279,10 @@ export async function render(container, ctx, params) {
       dirty = false;
       ctx.navigate(`/routines/${routineId}`);
     } catch (error) {
-      setLoading(button, false);
       if (error.status === 401) ctx.handleUnauthorized();
       else toast(errorMessage(error), 'error');
+    } finally {
+      setLoading(button, false);
     }
   });
 }

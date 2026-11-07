@@ -59,6 +59,43 @@ jobs:
               npm test
             '
 
+      - name: Back up and migrate the database
+        run: |
+          set -euo pipefail
+          cd "$PROD_DIR"
+          # Apply pending schema migrations BEFORE recreating the container, so
+          # the schema change is separated from serving traffic and a failed
+          # migration stops the deploy while the old container keeps running.
+          # A consistent backup is taken immediately before migrating.
+          #
+          # Runs in an ephemeral Node container (same pattern as the test gate):
+          # the checkout is mounted read-only and copied in, but ./data and
+          # ./backups are mounted read-write so the backup and the migration act
+          # on the REAL production database. We force a non-production NODE_ENV
+          # here: migrations only touch the schema and need no secrets, and this
+          # avoids the production boot guard (SESSION_SECRET / allowlist). DB_PATH
+          # and BACKUP_DIR point at the mounted volumes.
+          mkdir -p "$PROD_DIR/data" "$PROD_DIR/backups"
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e npm_config_cache=/tmp/.npm \
+            -e NODE_ENV=development \
+            -e DB_PATH=/data/fitness.db \
+            -e BACKUP_DIR=/backups \
+            -v "$PROD_DIR:/src:ro" \
+            -v "$PROD_DIR/data:/data" \
+            -v "$PROD_DIR/backups:/backups" \
+            node:20-bookworm-slim \
+            sh -eu -c '
+              cp -r /src /tmp/build
+              cd /tmp/build
+              rm -rf node_modules
+              npm ci
+              npm run backup:db
+              npm run migrate
+            '
+
       - name: Build and (re)start the stack
         run: |
           set -euo pipefail

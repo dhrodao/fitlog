@@ -216,10 +216,19 @@ On push to `main` (or via the **Run workflow** button — `workflow_dispatch`) i
 
 1. Fast-forwards the production checkout at `PROD_DIR` (`/opt/fitlog`) to
    `origin/main` (`git reset --hard`).
-2. Rebuilds and recreates only the `app` service
+2. Runs the test suite in an ephemeral Node container as a gate; if it fails,
+   the deploy stops before anything is rebuilt.
+3. Backs up the database and applies any pending schema migrations
+   (`npm run backup:db && npm run migrate`) in an ephemeral Node container that
+   mounts the real `./data` and `./backups`. Doing this **before** recreating
+   the container separates the schema change from serving traffic: a failed
+   migration stops the deploy while the old container keeps running. (The app
+   also migrates on boot, so this step is a safety net plus a pre-migration
+   backup, not the only path.)
+4. Rebuilds and recreates only the `app` service
    (`docker compose up -d --build app`); the `cloudflared` service and the
    `./data` bind mount are left untouched.
-3. Probes `GET /api/health` until it responds (up to 60 s); if it never does,
+5. Probes `GET /api/health` until it responds (up to 60 s); if it never does,
    the job fails and dumps the last 60 lines of the container logs.
 
 A `concurrency` group prevents two deploys from overlapping.

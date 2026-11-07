@@ -388,6 +388,22 @@ boot();
 // Register the service worker (PWA install + offline shell). Non-blocking and
 // best-effort: failures must never break the app.
 if ('serviceWorker' in navigator) {
+  // When a freshly deployed worker takes control (it calls skipWaiting +
+  // clients.claim), reload once so the page stops running the old cached JS.
+  // Without this the previous worker keeps serving stale modules until the
+  // user manually clears the cache, which can leave the shell half-updated.
+  // Only reload when a worker *replaces* an existing one: if the page already
+  // had a controller at load time, a later controllerchange is an update, not
+  // the first install.
+  const hadControllerAtLoad = Boolean(navigator.serviceWorker.controller);
+  let reloadingForUpdate = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadControllerAtLoad && !reloadingForUpdate) {
+      reloadingForUpdate = true;
+      window.location.reload();
+    }
+  });
+
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {
       /* ignore: offline/PWA features simply stay disabled */

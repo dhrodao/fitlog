@@ -24,7 +24,9 @@ cp .env.example .env
 | `NODE_ENV` | `development` or `production`. |
 | `DB_PATH` | SQLite file path (relative to the project root). |
 | `GOOGLE_CLIENT_ID` | OAuth Client ID (Web type). Empty = demo login only. |
-| `ALLOW_DEV_LOGIN` | `true` enables the test login without Google. |
+| `ALLOWED_EMAILS` | Comma-separated list of verified Google emails allowed to sign in. Empty = Google login locked (unless `ALLOW_ANY_GOOGLE_USER`). |
+| `ALLOW_ANY_GOOGLE_USER` | `true` accepts any verified Google account (public instance). |
+| `ALLOW_DEV_LOGIN` | Exactly `true` enables the test login without Google. Never active in production. |
 | `COOKIE_SECURE` | `true` when serving over HTTPS. |
 | `SESSION_DAYS` | Session duration in days. |
 | `SESSION_SECRET` | Internal session secret. |
@@ -261,11 +263,17 @@ A `concurrency` group prevents two deploys from overlapping.
    origin (e.g. `http://localhost:3000`) to **Authorized JavaScript origins**.
 3. Paste the Client ID into `GOOGLE_CLIENT_ID` in `.env` and restart the
    server.
+4. List who may sign in: set `ALLOWED_EMAILS` to your Google address (a
+   comma-separated list of verified emails). Only those accounts can create or
+   use an account; everyone else is rejected with 403 and no user row is
+   created. To open the instance to anyone, set `ALLOW_ANY_GOOGLE_USER=true`
+   instead. In production the server refuses to boot if Google is enabled with
+   neither an allowlist nor the escape hatch.
 
 The flow uses Google Identity Services (Client ID only, **no client secret**):
 the browser obtains an ID token and the server verifies it with the official
-library. Without `GOOGLE_CLIENT_ID`, development falls back to the "demo mode"
-button.
+library and checks the access policy above. Without `GOOGLE_CLIENT_ID`,
+development falls back to the "demo mode" button.
 
 ## Import from Hevy
 

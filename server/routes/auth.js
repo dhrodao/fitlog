@@ -11,6 +11,7 @@ import {
   setSessionCookie,
   upsertGoogleUser,
   verifyGoogleCredential,
+  isGoogleUserAllowed,
 } from '../auth.js';
 import { asyncHandler } from '../http.js';
 
@@ -39,6 +40,13 @@ router.post(
       return res
         .status(401)
         .json({ error: 'No se pudo verificar la cuenta de Google' });
+    }
+
+    // Enforce the access policy BEFORE creating or touching any user row.
+    if (!isGoogleUserAllowed(payload)) {
+      return res
+        .status(403)
+        .json({ error: 'Esta cuenta no tiene acceso a esta instancia' });
     }
 
     const user = upsertGoogleUser(payload);

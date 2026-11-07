@@ -24,7 +24,15 @@ export const config = {
   googleClientId: (process.env.GOOGLE_CLIENT_ID || '').trim(),
   sessionSecret: process.env.SESSION_SECRET || INSECURE_SESSION_SECRET,
   allowDevLogin:
-    process.env.ALLOW_DEV_LOGIN !== 'false' && nodeEnv !== 'production',
+    process.env.ALLOW_DEV_LOGIN === 'true' && nodeEnv !== 'production',
+  // Access control: only these verified Google emails may create/use an
+  // account. Empty + allowAnyGoogleUser=false means Google login is locked.
+  allowedEmails: (process.env.ALLOWED_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+  // Explicit opt-in to accept ANY verified Google account (public instance).
+  allowAnyGoogleUser: process.env.ALLOW_ANY_GOOGLE_USER === 'true',
   cookieSecure: process.env.COOKIE_SECURE === 'true',
   publicUrl: (process.env.PUBLIC_URL || '').trim().replace(/\/$/, ''),
   sessionDays: Number(process.env.SESSION_DAYS || 30),
@@ -42,6 +50,24 @@ if (config.isProduction && config.sessionSecret === INSECURE_SESSION_SECRET) {
     '[config] SESSION_SECRET no está definido (o usa el valor inseguro por ' +
       'defecto). Define un SESSION_SECRET fuerte en producción: protege las ' +
       'sesiones y cifra la API key de Hevy en reposo.'
+  );
+}
+
+// In production, refuse to boot with Google login enabled but no access policy:
+// otherwise any Google account could create a user on a publicly reachable
+// instance. Either list ALLOWED_EMAILS or opt in explicitly with
+// ALLOW_ANY_GOOGLE_USER=true.
+if (
+  config.isProduction &&
+  config.googleClientId &&
+  config.allowedEmails.length === 0 &&
+  !config.allowAnyGoogleUser
+) {
+  throw new Error(
+    '[config] El login con Google está activo sin política de acceso. Define ' +
+      'ALLOWED_EMAILS (lista separada por comas) para limitar quién puede ' +
+      'entrar, o ALLOW_ANY_GOOGLE_USER=true para abrir la instancia a ' +
+      'cualquier cuenta de Google de forma explícita.'
   );
 }
 

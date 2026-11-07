@@ -110,6 +110,25 @@ export async function verifyGoogleCredential(credential) {
   return payload;
 }
 
+/**
+ * Decide whether a verified Google payload is allowed to create/use an account.
+ * Requires a verified email, and either an explicit allowlist match or the
+ * ALLOW_ANY_GOOGLE_USER escape hatch. Returns true/false; never throws.
+ */
+export function isGoogleUserAllowed(payload) {
+  if (!payload) return false;
+  // Google Identity Services may send email_verified as a boolean or string.
+  const verified =
+    payload.email_verified === true || payload.email_verified === 'true';
+  if (!verified) return false;
+
+  if (config.allowAnyGoogleUser) return true;
+
+  const email = String(payload.email || '').trim().toLowerCase();
+  if (!email) return false;
+  return config.allowedEmails.includes(email);
+}
+
 export function upsertGoogleUser(payload) {
   const existing = db
     .prepare('SELECT * FROM users WHERE google_sub = ?')

@@ -22,6 +22,10 @@
 | 9 | Product-owner questions | Completed |
 | 10 | Assumptions, limitations & open questions | Completed |
 
+> **Update (D-15, §9.0):** the Docker `e2e` stage and the CI `e2e` job that this
+> document audits (§1.1, F-3, F-10, §7.2) were **removed**; E2E runs locally only
+> (`npm run test:e2e`). Read every CI/Docker mention below as "deferred".
+
 **Evidence convention.** Claims cite `file:line` or a function/element name that
 was read while writing this document. Where something was *not* read or *not*
 executed it is labelled **Unverified** or **Spike** (a small investigation to
@@ -1375,6 +1379,7 @@ M6 (13) + M7 (6) + M8 (9) + M9 (4) + M10 (1) = **99**.
 | D-12 (Q-12) | **Add a WebKit project for a subset only**: `@smoke` + the core loop (WRK-002). PWA/offline and the full suite stay Chromium-only; real-iPhone checks stay on the manual list (§7.6). | Config: `webkit` project with `grep` on `@smoke`/`@webkit` tag; scheduled in M2. WebKit is not iOS Safari (no iOS keyboard, safe areas, standalone mode, or iOS storage/SW limits). The Playwright image already bundles WebKit, so the `e2e` image does not grow. If WebKit proves flaky it is quarantined per §7.3 rather than widened. |
 | D-13 (Q-13) | **Starting a workout while one is active shows a message** before landing on the existing one. | **App change AC-9**: in `training.js`, both the empty-start and routine-start 409 branches show a toast (the server message `Ya tienes un entrenamiento en curso`) and then navigate to the active screen. Same shell bump. (Observation: `home.js` contains an unused `startEmpty` copy of that logic; remove or leave, owner's call — not needed for this plan.) |
 | D-14 (Q-14) | **Keep Hevy sync failures visible only in the Profile status line.** | No app change. HEV-006 asserts the error/warning lines in Profile only. |
+| D-15 (after Q-10) | **E2E runs locally only; no Docker `e2e` stage and no CI `e2e` job for now.** Reason: the first `docker build` of the Playwright image on the CI/production host failed with `no space left on device`, and that host is the production machine. Supersedes the CI parts of D-10 and the Docker/CI items of the plan (F-3, F-10, §7.2, the artifact and `@smoke`-on-push work in M0). | The pilot's `Dockerfile` stage and `ci.yml` job were removed (the stage had also been placed after `runner`, so a plain `docker build` — deploy, compose — would have built the Playwright image as the app). `AGENTS.md` now says: run `npm run test:e2e` locally. If CI is wanted later, the preferred route is a GitHub-hosted runner with `npx playwright install --with-deps chromium` (no image, no disk on the production host). Everything else in the plan is unchanged. |
 
 ### 9.1 Question register (all answered)
 

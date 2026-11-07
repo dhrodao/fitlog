@@ -38,6 +38,10 @@ export function setupTestEnv(overrides = {}) {
     COOKIE_SECURE: 'false',
     ALLOW_DEV_LOGIN: 'true',
     GOOGLE_CLIENT_ID: '',
+    // By default the harness does not lock the instance to an allowlist, so
+    // fixtures that insert ad-hoc Google users keep working. Tests that assert
+    // the access policy set ALLOWED_EMAILS / ALLOW_ANY_GOOGLE_USER explicitly.
+    ALLOW_ANY_GOOGLE_USER: 'true',
     SESSION_SECRET: 'test-session-secret-not-for-production',
     ...overrides,
   };

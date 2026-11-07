@@ -72,6 +72,18 @@ export function requireAuth(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: 'No autenticado' });
   }
+  // Re-check the access policy on every request: a user removed from the
+  // allowlist (or dev login disabled) loses access immediately, even with a
+  // still-valid session cookie. Revoke the session so it cannot be reused.
+  if (!isUserAllowed(req.user)) {
+    const token = req.cookies?.[COOKIE_NAME];
+    destroySession(token);
+    clearSessionCookie(res);
+    req.user = null;
+    return res
+      .status(403)
+      .json({ error: 'Esta cuenta ya no tiene acceso a esta instancia' });
+  }
   next();
 }
 
@@ -125,6 +137,29 @@ export function isGoogleUserAllowed(payload) {
   if (config.allowAnyGoogleUser) return true;
 
   const email = String(payload.email || '').trim().toLowerCase();
+  if (!email) return false;
+  return config.allowedEmails.includes(email);
+}
+
+/**
+ * Decide whether an ALREADY-STORED user row is still allowed to use the app
+ * under the CURRENT access policy. This is checked on every authenticated
+ * request, so revoking access (removing an email from ALLOWED_EMAILS) takes
+ * effect immediately for existing sessions, not only at login.
+ *
+ *   - dev users (is_dev) are governed by ALLOW_DEV_LOGIN, not the allowlist;
+ *   - accounts with no google_sub are not Google accounts subject to the
+ *     allowlist (none exist today, but this keeps the check conservative);
+ *   - Google accounts must match the allowlist or the escape hatch.
+ *
+ * Returns true/false; never throws.
+ */
+export function isUserAllowed(userRow) {
+  if (!userRow) return false;
+  if (userRow.is_dev) return config.allowDevLogin;
+  if (!userRow.google_sub) return true;
+  if (config.allowAnyGoogleUser) return true;
+  const email = String(userRow.email || '').trim().toLowerCase();
   if (!email) return false;
   return config.allowedEmails.includes(email);
 }

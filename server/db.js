@@ -244,6 +244,7 @@ ensureColumn('workout_exercises', 'superset_group', 'INTEGER');
 ensureColumn('workouts', 'source', 'TEXT');
 ensureColumn('routines', 'source', 'TEXT');
 ensureColumn('routines', 'hevy_routine_id', 'TEXT');
+ensureColumn('workouts', 'hevy_workout_id', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_token', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_enabled', 'INTEGER NOT NULL DEFAULT 0');
 db.exec(
@@ -254,6 +255,12 @@ db.exec(
 db.exec(
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_routines_hevy
      ON routines(user_id, hevy_routine_id) WHERE hevy_routine_id IS NOT NULL`
+);
+// One imported workout per Hevy workout id, per user. Backs idempotent upsert:
+// re-syncing an updated workout updates it in place instead of duplicating.
+db.exec(
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_workouts_hevy
+     ON workouts(user_id, hevy_workout_id) WHERE hevy_workout_id IS NOT NULL`
 );
 
 export const nowIso = () => new Date().toISOString();

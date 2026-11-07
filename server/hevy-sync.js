@@ -257,6 +257,7 @@ export async function syncUser(userId, { full = false } = {}) {
 
   const totals = {
     imported: 0,
+    updated: 0,
     skipped: 0,
     duplicates: 0,
     exercises: 0,
@@ -308,7 +309,8 @@ export async function syncUser(userId, { full = false } = {}) {
           totals.skipped += 1;
           if (res.reason === 'duplicate') totals.duplicates += 1;
         } else {
-          totals.imported += 1;
+          if (res.updated) totals.updated += 1;
+          else totals.imported += 1;
           totals.exercises += res.exercises;
           totals.sets += res.sets;
           totals.matched += res.matched;

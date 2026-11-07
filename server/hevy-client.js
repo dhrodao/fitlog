@@ -180,6 +180,7 @@ export function hevyApiWorkoutToNormalized(w) {
     }));
 
   return {
+    hevyWorkoutId: w.id != null ? String(w.id) : null,
     name: w.title || 'Entreno',
     startedAt: w.start_time ? new Date(w.start_time).toISOString() : null,
     finishedAt: w.end_time ? new Date(w.end_time).toISOString() : null,

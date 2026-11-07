@@ -203,10 +203,125 @@ export function workoutExists(userId, name, startedAt) {
   return row ? row.id : null;
 }
 
+/** Look up an imported workout by its stable Hevy id. */
+export function workoutByHevyId(userId, hevyWorkoutId) {
+  if (!hevyWorkoutId) return null;
+  const row = db
+    .prepare(
+      'SELECT id FROM workouts WHERE user_id = ? AND hevy_workout_id = ?'
+    )
+    .get(userId, hevyWorkoutId);
+  return row ? row.id : null;
+}
+
+// Find a legacy imported workout (source 'hevy', no Hevy id) that matches by
+// name and start time. Used once per workout to adopt rows imported before
+// stable ids existed, so the first post-upgrade sync updates them instead of
+// creating a duplicate.
+function legacyWorkoutToAdopt(userId, name, startedAt) {
+  const row = db
+    .prepare(
+      `SELECT id FROM workouts
+        WHERE user_id = ? AND source = 'hevy' AND hevy_workout_id IS NULL
+          AND name = ? AND started_at = ?`
+    )
+    .get(userId, name, startedAt);
+  return row ? row.id : null;
+}
+
+// Insert all exercises/sets of a normalized workout under an existing workout
+// row, resolving exercises and rebuilding superset groups. Assumes the caller
+// runs inside a transaction and has already cleared any previous children.
+function insertWorkoutChildren(userId, workoutId, workout, { templateMap, createdAt }) {
+  const insertWe = db.prepare(
+    `INSERT INTO workout_exercises (workout_id, exercise_id, position, notes, superset_group)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  const insertSet = db.prepare(
+    `INSERT INTO workout_sets
+       (workout_exercise_id, set_number, weight_kg, reps, completed, rest_seconds, created_at)
+     VALUES (?, ?, ?, ?, 1, NULL, ?)`
+  );
+
+  const stats = { exercises: 0, sets: 0, custom: 0, matched: 0 };
+  // Map Hevy superset ids to local superset group ids (only when >= 2 members).
+  const supersetCount = new Map();
+  for (const ex of workout.exercises) {
+    if (ex.supersetId != null && ex.supersetId !== '') {
+      supersetCount.set(ex.supersetId, (supersetCount.get(ex.supersetId) || 0) + 1);
+    }
+  }
+  const supersetGroupIds = new Map();
+  let nextGroup = 1;
+
+  workout.exercises.forEach((ex, position) => {
+    const resolved = resolveHevyExercise(userId, ex.name, {
+      templateMap,
+      templateId: ex.templateId || null,
+    });
+    if (!resolved) return;
+    if (resolved.source === 'custom' || resolved.source === 'template-custom')
+      stats.custom += 1;
+    else stats.matched += 1;
+
+    let supersetGroup = null;
+    if (
+      ex.supersetId != null &&
+      ex.supersetId !== '' &&
+      supersetCount.get(ex.supersetId) >= 2
+    ) {
+      if (!supersetGroupIds.has(ex.supersetId)) {
+        supersetGroupIds.set(ex.supersetId, nextGroup);
+        nextGroup += 1;
+      }
+      supersetGroup = supersetGroupIds.get(ex.supersetId);
+    }
+
+    const weInfo = insertWe.run(
+      workoutId,
+      resolved.row.id,
+      position,
+      ex.notes || null,
+      supersetGroup
+    );
+    const weId = weInfo.lastInsertRowid;
+    stats.exercises += 1;
+
+    ex.sets.forEach((set, i) => {
+      insertSet.run(weId, i + 1, set.weightKg ?? null, set.reps ?? null, createdAt);
+      stats.sets += 1;
+    });
+  });
+
+  // If an imported Hevy routine shares this workout's name, link them so the
+  // routine's history/chart includes this workout. Hevy's API doesn't expose
+  // the workout's routine, so we match by normalized name.
+  const targetName = normalizeName(workout.name);
+  if (targetName) {
+    const routines = db
+      .prepare("SELECT id, name FROM routines WHERE user_id = ? AND source = 'hevy'")
+      .all(userId);
+    const match = routines.find((r) => normalizeName(r.name) === targetName);
+    if (match) {
+      db.prepare('UPDATE workouts SET routine_id = ? WHERE id = ?').run(
+        match.id,
+        workoutId
+      );
+    }
+  }
+
+  return stats;
+}
+
 /**
- * Persist a single normalized workout. Returns a result describing what
- * happened. Does nothing (returns {skipped:true}) if an identical workout
- * already exists, so the import is idempotent.
+ * Persist a single normalized workout, upserting by the stable Hevy workout id
+ * when present. Behaviour:
+ *   - If the workout has a Hevy id that already exists for this user, it is
+ *     updated in place (metadata + children replaced), so renames and edited
+ *     sets/notes are applied without creating duplicates.
+ *   - If it has a Hevy id that is new, it is inserted with that id.
+ *   - If it has no Hevy id (CSV import / legacy), it falls back to the
+ *     (name, startedAt) duplicate check and is skipped when already present.
  */
 export function importWorkout(userId, workout, { templateMap = null } = {}) {
   const name = String(workout.name || 'Entreno').slice(0, 200);
@@ -215,9 +330,14 @@ export function importWorkout(userId, workout, { templateMap = null } = {}) {
     return { skipped: true, reason: 'missing-start', name };
   }
 
-  const existingId = workoutExists(userId, name, startedAt);
-  if (existingId) {
-    return { skipped: true, reason: 'duplicate', name, workoutId: existingId };
+  const hevyWorkoutId = workout.hevyWorkoutId || null;
+
+  // Without a stable id (CSV/legacy), keep the old name+time idempotency.
+  if (!hevyWorkoutId) {
+    const existingId = workoutExists(userId, name, startedAt);
+    if (existingId) {
+      return { skipped: true, reason: 'duplicate', name, workoutId: existingId };
+    }
   }
 
   const finishedAt = workout.finishedAt || null;
@@ -232,119 +352,66 @@ export function importWorkout(userId, workout, { templateMap = null } = {}) {
   }
 
   const createdAt = nowIso();
-  const run = db.transaction(() => {
-    const info = db
-      .prepare(
-        `INSERT INTO workouts
-           (user_id, routine_id, name, location, notes, started_at, finished_at, duration_seconds, source, created_at)
-         VALUES (?, NULL, ?, NULL, ?, ?, ?, ?, 'hevy', ?)`
-      )
-      .run(
-        userId,
-        name,
-        workout.notes || null,
-        startedAt,
-        finishedAt,
-        durationSeconds,
-        createdAt
-      );
-    const workoutId = info.lastInsertRowid;
-
-    const insertWe = db.prepare(
-      `INSERT INTO workout_exercises (workout_id, exercise_id, position, notes, superset_group)
-       VALUES (?, ?, ?, ?, ?)`
-    );
-    const insertSet = db.prepare(
-      `INSERT INTO workout_sets
-         (workout_exercise_id, set_number, weight_kg, reps, completed, rest_seconds, created_at)
-       VALUES (?, ?, ?, ?, 1, NULL, ?)`
-    );
-
-    const stats = { exercises: 0, sets: 0, custom: 0, matched: 0 };
-    // Map Hevy superset ids to local superset group ids (only when >= 2 members).
-    const supersetCount = new Map();
-    for (const ex of workout.exercises) {
-      if (ex.supersetId != null && ex.supersetId !== '') {
-        supersetCount.set(
-          ex.supersetId,
-          (supersetCount.get(ex.supersetId) || 0) + 1
-        );
-      }
+  let existingByHevyId = hevyWorkoutId ? workoutByHevyId(userId, hevyWorkoutId) : null;
+  // One-time backfill: a workout that now has a Hevy id may already exist as a
+  // legacy row (imported before ids). Adopt it so we update instead of
+  // duplicating on the first sync after upgrading.
+  if (hevyWorkoutId && !existingByHevyId) {
+    const legacyId = legacyWorkoutToAdopt(userId, name, startedAt);
+    if (legacyId) {
+      db.prepare(
+        'UPDATE workouts SET hevy_workout_id = ? WHERE id = ? AND user_id = ?'
+      ).run(hevyWorkoutId, legacyId, userId);
+      existingByHevyId = legacyId;
     }
-    const supersetGroupIds = new Map();
-    let nextGroup = 1;
+  }
 
-    workout.exercises.forEach((ex, position) => {
-      const resolved = resolveHevyExercise(userId, ex.name, {
-        templateMap,
-        templateId: ex.templateId || null,
-      });
-      if (!resolved) return;
-      if (resolved.source === 'custom' || resolved.source === 'template-custom')
-        stats.custom += 1;
-      else stats.matched += 1;
+  const run = db.transaction(() => {
+    let workoutId;
+    let updated = false;
 
-      let supersetGroup = null;
-      if (
-        ex.supersetId != null &&
-        ex.supersetId !== '' &&
-        supersetCount.get(ex.supersetId) >= 2
-      ) {
-        if (!supersetGroupIds.has(ex.supersetId)) {
-          supersetGroupIds.set(ex.supersetId, nextGroup);
-          nextGroup += 1;
-        }
-        supersetGroup = supersetGroupIds.get(ex.supersetId);
-      }
-
-      const weInfo = insertWe.run(
-        workoutId,
-        resolved.row.id,
-        position,
-        ex.notes || null,
-        supersetGroup
-      );
-      const weId = weInfo.lastInsertRowid;
-      stats.exercises += 1;
-
-      ex.sets.forEach((set, i) => {
-        insertSet.run(
-          weId,
-          i + 1,
-          set.weightKg ?? null,
-          set.reps ?? null,
+    if (existingByHevyId) {
+      // Update in place: refresh metadata and replace children. Only touch
+      // imported ('hevy') workouts; never a user-created one.
+      workoutId = existingByHevyId;
+      updated = true;
+      db.prepare(
+        `UPDATE workouts
+           SET name = ?, notes = ?, started_at = ?, finished_at = ?,
+               duration_seconds = ?
+         WHERE id = ? AND user_id = ? AND source = 'hevy'`
+      ).run(name, workout.notes || null, startedAt, finishedAt, durationSeconds, workoutId, userId);
+      // Replace children (cascades delete sets via FK on workout_exercises).
+      db.prepare('DELETE FROM workout_exercises WHERE workout_id = ?').run(workoutId);
+    } else {
+      const info = db
+        .prepare(
+          `INSERT INTO workouts
+             (user_id, routine_id, name, location, notes, started_at, finished_at, duration_seconds, source, hevy_workout_id, created_at)
+           VALUES (?, NULL, ?, NULL, ?, ?, ?, ?, 'hevy', ?, ?)`
+        )
+        .run(
+          userId,
+          name,
+          workout.notes || null,
+          startedAt,
+          finishedAt,
+          durationSeconds,
+          hevyWorkoutId,
           createdAt
         );
-        stats.sets += 1;
-      });
-    });
-
-    // If an imported Hevy routine shares this workout's name, link them so the
-    // routine's history/chart includes this workout. Hevy's API doesn't expose
-    // the workout's routine, so we match by normalized name (see option B).
-    const targetName = normalizeName(name);
-    if (targetName) {
-      const routines = db
-        .prepare(
-          "SELECT id, name FROM routines WHERE user_id = ? AND source = 'hevy'"
-        )
-        .all(userId);
-      const match = routines.find(
-        (r) => normalizeName(r.name) === targetName
-      );
-      if (match) {
-        db.prepare('UPDATE workouts SET routine_id = ? WHERE id = ?').run(
-          match.id,
-          workoutId
-        );
-      }
+      workoutId = info.lastInsertRowid;
     }
 
-    return { workoutId, stats };
+    const stats = insertWorkoutChildren(userId, workoutId, workout, {
+      templateMap,
+      createdAt,
+    });
+    return { workoutId, stats, updated };
   });
 
-  const { workoutId, stats } = run();
-  return { skipped: false, name, startedAt, workoutId, ...stats };
+  const { workoutId, stats, updated } = run();
+  return { skipped: false, updated, name, startedAt, workoutId, hevyWorkoutId, ...stats };
 }
 
 /** Group flat Hevy CSV rows into normalized workouts. */

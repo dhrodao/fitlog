@@ -23,6 +23,7 @@ import {
   toast,
 } from '../ui.js';
 import { parseDecimalInput, INVALID } from '../format.js';
+import { createRestTimer } from '../rest-timer.js';
 
 function computeTotals(workout) {
   let volume = 0;
@@ -306,6 +307,9 @@ export async function render(container, ctx) {
             <div class="s save-state" data-save-state hidden aria-live="polite">Guardando…</div>
             <div class="s save-state" data-offline-state hidden aria-live="polite">Sin conexión · se sincronizará</div>
           </div>
+          <button type="button" class="icon-btn surface" data-rest-toggle aria-label="Temporizador de descanso">
+            ${icon('timer', 20)}
+          </button>
           <button type="button" class="finish-check" data-finish aria-label="Terminar entrenamiento">
             ${icon('check', 20)}
           </button>
@@ -337,6 +341,17 @@ export async function render(container, ctx) {
         ${icon('trash', 16)} Descartar entrenamiento
       </button>
     </div>
+
+    <div class="rest-timer" data-rest-timer hidden aria-live="polite" role="status">
+      <button type="button" class="rest-skip" data-rest-skip aria-label="Saltar descanso">
+        ${icon('x', 18)}
+      </button>
+      <div class="rest-timer-main">
+        <div class="rest-timer-label">Descanso</div>
+        <div class="rest-timer-count" data-rest-count>0:00</div>
+      </div>
+      <button type="button" class="rest-add" data-rest-add>+15s</button>
+    </div>
   `;
 
   renderExercises();
@@ -361,6 +376,95 @@ export async function render(container, ctx) {
   };
   const timerId = setInterval(tick, 1000);
   tick();
+
+  // --- rest timer (client-only, opt-in) ---
+  // Starts when a set is marked complete, counts down from the set's
+  // restSeconds (or a default), and can be extended or skipped. Opt-in state is
+  // persisted so the user's choice survives reloads. No server involvement.
+  const REST_PREF_KEY = 'fit-rest-timer';
+  const DEFAULT_REST_SECONDS = 90;
+  const restEnabled = () => {
+    try {
+      // Default ON: only an explicit "0" disables it.
+      return localStorage.getItem(REST_PREF_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  };
+  const setRestEnabled = (on) => {
+    try {
+      localStorage.setItem(REST_PREF_KEY, on ? '1' : '0');
+    } catch {
+      /* ignore storage failures */
+    }
+  };
+
+  const restEl = container.querySelector('[data-rest-timer]');
+  const restCountEl = container.querySelector('[data-rest-count]');
+  const restToggleBtn = container.querySelector('[data-rest-toggle]');
+  const restTimer = createRestTimer({ defaultSeconds: DEFAULT_REST_SECONDS });
+  let restInterval = null;
+
+  const paintRestToggle = () => {
+    if (restToggleBtn) restToggleBtn.classList.toggle('active', restEnabled());
+  };
+
+  const paintRestCount = () => {
+    if (restCountEl) restCountEl.textContent = formatClock(Math.max(0, restTimer.remaining));
+  };
+
+  const stopRestTimer = () => {
+    if (restInterval) {
+      clearInterval(restInterval);
+      restInterval = null;
+    }
+    restTimer.skip();
+    if (restEl) restEl.hidden = true;
+  };
+
+  const restTick = () => {
+    const done = restTimer.tick();
+    paintRestCount();
+    if (done) {
+      haptic([18, 60, 18]);
+      stopRestTimer();
+    }
+  };
+
+  const startRestTimer = (seconds) => {
+    if (!restEnabled() || !restEl) return;
+    restTimer.start(seconds);
+    paintRestCount();
+    restEl.hidden = false;
+    if (restInterval) clearInterval(restInterval);
+    restInterval = setInterval(restTick, 1000);
+  };
+
+  paintRestToggle();
+
+  if (restToggleBtn) {
+    restToggleBtn.addEventListener('click', () => {
+      const next = !restEnabled();
+      setRestEnabled(next);
+      paintRestToggle();
+      haptic(8);
+      if (!next) stopRestTimer();
+      toast(next ? 'Temporizador de descanso activado' : 'Temporizador de descanso desactivado', 'default');
+    });
+  }
+  if (restEl) {
+    restEl.querySelector('[data-rest-skip]')?.addEventListener('click', () => {
+      haptic(8);
+      stopRestTimer();
+    });
+    restEl.querySelector('[data-rest-add]')?.addEventListener('click', () => {
+      restTimer.add(15);
+      paintRestCount();
+      haptic(8);
+      if (restEl.hidden) restEl.hidden = false;
+      if (!restInterval) restInterval = setInterval(restTick, 1000);
+    });
+  }
 
   const getExercise = (weId) => workout.exercises.find((ex) => sameId(ex.id, weId));
   const getSet = (weId, setId) => {
@@ -688,7 +792,11 @@ export async function render(container, ctx) {
       set.completed = !set.completed;
       wrapper.querySelector('[data-set-handle]')?.classList.toggle('completed', set.completed);
       toggle.classList.toggle('checked', set.completed);
-      if (set.completed) haptic(12);
+      if (set.completed) {
+        haptic(12);
+        // Start the rest countdown from this set's planned rest (or a default).
+        startRestTimer(set.restSeconds);
+      }
       renderStats();
       // Route through the scheduler and flush immediately: this serialises the
       // completion write against any in-flight weight/reps write for the same
@@ -919,6 +1027,7 @@ export async function render(container, ctx) {
 
   return () => {
     clearInterval(timerId);
+    if (restInterval) clearInterval(restInterval);
     window.removeEventListener('pagehide', flushOnHide);
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('online', onOnline);

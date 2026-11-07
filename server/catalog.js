@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { db, getMeta, nowIso, setMeta } from './db.js';
 import config from './config.js';
 import { catalogImageUrl } from './catalog-images.js';
+import { invalidateCatalogCaches } from './catalog-cache-registry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALIASES_PATH = path.join(__dirname, 'user-exercise-aliases.json');
@@ -279,6 +280,11 @@ async function runSync({ dataset }) {
   writeCatalog(items);
 
   const { linked, problems } = db.transaction(() => linkUserExercises())();
+
+  // The global catalog just changed; drop any catalog-derived caches (Hevy
+  // name→catalog maps) so later imports resolve against the fresh data instead
+  // of a stale in-memory map that only cleared on process restart.
+  invalidateCatalogCaches();
 
   const syncedAt = nowIso();
   setMeta('catalog_last_sync', syncedAt);

@@ -1,5 +1,6 @@
 import { db, nowIso } from './db.js';
 import { normalizeExerciseName } from './catalog.js';
+import { registerCatalogCache } from './catalog-cache-registry.js';
 import { getOrCreateFromCatalog, getOrCreateByName } from './services/exercises.js';
 
 /**
@@ -143,3 +144,6 @@ export function resolveByTemplateId(userId, templateId) {
 export function _clearCatalogCache() {
   catalogByNormCache = null;
 }
+
+// Drop the cached name→catalog map whenever the catalog is re-synced.
+registerCatalogCache(_clearCatalogCache);

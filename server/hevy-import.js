@@ -1,5 +1,6 @@
 import { db, nowIso } from './db.js';
 import { normalizeExerciseName, normalizeName } from './catalog.js';
+import { registerCatalogCache } from './catalog-cache-registry.js';
 import { getOrCreateFromCatalog, getOrCreateByName } from './services/exercises.js';
 import { resolveByTemplateId } from './hevy-templates.js';
 
@@ -105,6 +106,13 @@ function catalogByNorm() {
   catalogByNormCache = map;
   return map;
 }
+
+/** Drop the cached name→catalog map (called after a catalog re-sync). */
+export function _clearCatalogCache() {
+  catalogByNormCache = null;
+}
+
+registerCatalogCache(_clearCatalogCache);
 
 /**
  * Resolve a Hevy exercise to a Fitlog exercise row for the given user.

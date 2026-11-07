@@ -1,6 +1,7 @@
 import { api, errorMessage } from './api.js';
 import { initTheme } from './theme.js';
 import { esc, errorScreen, icon, loaderScreen, offlineScreen } from './ui.js';
+import { clearAll as clearOfflineData } from './offline/active-store.js';
 import * as LoginView from './views/login.js';
 import * as HomeView from './views/home.js';
 import * as TrainingView from './views/training.js';
@@ -133,6 +134,9 @@ async function logout() {
   } catch {
     // no-op
   }
+  // Wipe any locally cached workout so it never leaks to the next user on a
+  // shared device.
+  clearOfflineData();
   state.user = null;
   state.activeWorkout = null;
   navigate('/login', { replace: true });

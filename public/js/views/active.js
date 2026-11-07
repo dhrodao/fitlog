@@ -3,6 +3,11 @@ import { openExercisePicker } from '../exercise-picker.js';
 import { attachSwipeToDelete } from '../swipe.js';
 import { createWriteScheduler } from '../pending-writes.js';
 import {
+  saveActiveWorkout,
+  loadActiveWorkout,
+  clearActiveWorkout,
+} from '../offline/active-store.js';
+import {
   confirmDialog,
   esc,
   formatClock,
@@ -128,14 +133,26 @@ function exerciseBlock(exercise, { inSuperset = false } = {}) {
 }
 
 export async function render(container, ctx) {
+  const userId = ctx.user?.id ?? null;
   let workout = ctx.activeWorkout;
+  let offline = false;
   try {
     const { workout: fresh } = await api.workouts.active();
     workout = fresh;
+    // Refresh the local snapshot with the server's authoritative copy.
+    saveActiveWorkout(userId, workout);
   } catch (error) {
     if (error.status === 401) {
       ctx.handleUnauthorized();
       return;
+    }
+    // status 0 = the request never reached the server (offline). Fall back to
+    // the last locally saved snapshot so the user can keep seeing (and editing)
+    // the workout instead of losing it. Any other error: keep ctx.activeWorkout.
+    if (error.status === 0) {
+      offline = true;
+      const local = await loadActiveWorkout(userId);
+      if (local) workout = local;
     }
   }
 
@@ -155,12 +172,20 @@ export async function render(container, ctx) {
 
   ctx.setActiveWorkout(workout);
 
+  // Keep the local recovery snapshot in sync with the in-memory workout. Called
+  // after every mutation (set edits, add/remove exercise, reorder, …). It is
+  // fire-and-forget and never throws, so it can't interfere with the UI.
+  const snapshot = () => saveActiveWorkout(userId, workout);
+
   const renderStats = () => {
     const totals = computeTotals(workout);
     const volumeEl = container.querySelector('[data-stat-volume]');
     const setsEl = container.querySelector('[data-stat-sets]');
     if (volumeEl) volumeEl.textContent = `${formatVolume(totals.volume)} kg`;
     if (setsEl) setsEl.textContent = String(totals.sets);
+    // renderStats runs after every structural change and every edit, so it is
+    // the single natural place to refresh the local snapshot.
+    snapshot();
   };
 
   const renderExercises = () => {
@@ -280,6 +305,13 @@ export async function render(container, ctx) {
   `;
 
   renderExercises();
+
+  // When the server was unreachable and we fell back to the local snapshot,
+  // tell the user they are looking at an offline copy so it is clear why edits
+  // are not confirmed as saved yet.
+  if (offline) {
+    toast('Sin conexión · mostrando tu copia local', 'default');
+  }
 
   // --- timer ---
   const startMs = new Date(workout.startedAt).getTime();
@@ -724,6 +756,7 @@ export async function render(container, ctx) {
       // never lost in the debounce window.
       await setWrites.flush();
       const { workout: finished } = await api.workouts.finish(workout.id, {});
+      clearActiveWorkout(userId);
       ctx.setActiveWorkout(null);
       haptic([12, 40, 24]);
       toast('¡Entrenamiento guardado!', 'success');
@@ -747,6 +780,7 @@ export async function render(container, ctx) {
     if (!confirmed) return;
     try {
       await api.workouts.remove(workout.id);
+      clearActiveWorkout(userId);
       ctx.setActiveWorkout(null);
       toast('Entrenamiento descartado', 'success');
       ctx.navigate('/');

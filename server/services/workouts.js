@@ -128,6 +128,24 @@ export function getPreviousSets(userId, exerciseId, beforeIso, excludeWorkoutId 
     .map(serializeSet);
 }
 
+// Previous-set suggestions for a set of exercises, keyed by exerciseId. Used to
+// refill the "Anterior" column live when connectivity returns mid-workout, so
+// an offline workout does not have to be uploaded (finished) just to see them.
+// Only exercises the user owns are considered; unknown ids yield an empty list.
+export function suggestionsForExercises(userId, exerciseIds = []) {
+  const now = nowIso();
+  const out = {};
+  for (const raw of exerciseIds) {
+    const exerciseId = Number(raw);
+    if (!Number.isInteger(exerciseId)) continue;
+    const owns = db
+      .prepare('SELECT 1 FROM exercises WHERE id = ? AND user_id = ?')
+      .get(exerciseId, userId);
+    out[exerciseId] = owns ? getPreviousSets(userId, exerciseId, now) : [];
+  }
+  return out;
+}
+
 export function getWorkoutExercises(workoutId) {
   return db
     .prepare(

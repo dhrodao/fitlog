@@ -20,6 +20,7 @@ import {
   updateWorkout,
   updateWorkoutExercise,
   syncWorkout,
+  suggestionsForExercises,
 } from '../services/workouts.js';
 
 const router = Router();
@@ -67,6 +68,16 @@ router.post('/', (req, res) => {
 router.post('/sync', (req, res) => {
   const workout = syncWorkout(req.user.id, req.body || {});
   res.status(201).json({ workout });
+});
+
+// Previous-set suggestions for the given exercise ids (comma-separated). Lets
+// the active view refill the "Anterior" column on reconnect without uploading.
+router.get('/suggestions', (req, res) => {
+  const ids = String(req.query.exerciseIds || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  res.json({ suggestions: suggestionsForExercises(req.user.id, ids) });
 });
 
 router.get('/:id', (req, res) => {

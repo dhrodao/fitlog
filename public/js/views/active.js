@@ -888,13 +888,32 @@ export async function render(container, ctx) {
   // --- reconnect handling ---
   // When connectivity returns mid-workout we do NOT upload yet: the workout is
   // still in progress and uploading it would finish it prematurely (the /sync
-  // endpoint materializes a finished workout). We just drop the offline pill;
-  // the workout stays local and editable and is uploaded when the user presses
-  // "Terminar". The "Anterior" suggestions remain empty until the workout is
-  // finished and the view reloads online — filling them live would need the
-  // workout on the server, which we deliberately avoid until finish.
-  const onOnline = () => {
+  // endpoint materializes a finished workout). We just drop the offline pill
+  // and refill the "Anterior" (previous set) suggestions, which need the server
+  // but NOT the current workout — they come from past finished workouts.
+  const onOnline = async () => {
     renderOfflineState();
+    if (!repo.isLocal()) return;
+    // Only exercises linked to a server exercise id can have history.
+    const ids = [
+      ...new Set(
+        workout.exercises
+          .map((ex) => ex.exerciseId)
+          .filter((id) => Number.isInteger(id))
+      ),
+    ];
+    if (!ids.length) return;
+    try {
+      const { suggestions } = await api.workouts.suggestions(ids);
+      for (const exercise of workout.exercises) {
+        const prev = suggestions[exercise.exerciseId];
+        if (Array.isArray(prev)) exercise.previousSets = prev;
+      }
+      renderExercises();
+    } catch (error) {
+      if (error.status === 401) ctx.handleUnauthorized();
+      // Otherwise non-fatal: suggestions just stay empty until finish/reload.
+    }
   };
   window.addEventListener('online', onOnline);
 

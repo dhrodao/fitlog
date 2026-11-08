@@ -72,16 +72,28 @@ export function createApp() {
 
   // Rate limiters. Generous windows so a legitimate owner import is never
   // locked out, but enough to blunt brute force / abuse. Keyed by client IP.
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 40,
-    message: 'Demasiados intentos de inicio de sesión, espera unos minutos',
-  });
-  const importLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 60,
-    message: 'Demasiadas operaciones de importación/sincronización, espera un poco',
-  });
+  // Under NODE_ENV=test the limiters are disabled: the E2E browser suite and the
+  // integration suite share one dev user and sign in many times per run, which
+  // would otherwise trip the auth window. The limits stay fully active in
+  // development and production.
+  const noopLimiter = (_req, _res, next) => next();
+  const authLimiter =
+    config.nodeEnv === 'test'
+      ? noopLimiter
+      : rateLimit({
+          windowMs: 15 * 60 * 1000,
+          max: 40,
+          message: 'Demasiados intentos de inicio de sesión, espera unos minutos',
+        });
+  const importLimiter =
+    config.nodeEnv === 'test'
+      ? noopLimiter
+      : rateLimit({
+          windowMs: 60 * 60 * 1000,
+          max: 60,
+          message:
+            'Demasiadas operaciones de importación/sincronización, espera un poco',
+        });
 
   app.get('/api/health', (_req, res) => {
     const result = checkHealth();

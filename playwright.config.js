@@ -6,15 +6,21 @@ import { defineConfig, devices } from '@playwright/test';
 // and a throwaway SQLite database, so the browser can sign in without Google
 // and nothing touches a real database.
 //
-// PORT is overridable so the gate can avoid clashing with a dev server; the DB
+// PORT is overridable so parallel local runs can use distinct servers; the DB
 // path is unique per run. These match the environment the node --test
 // integration suite already uses (ALLOW_DEV_LOGIN=true, no GOOGLE_CLIENT_ID).
 
 const PORT = Number(process.env.E2E_PORT || 3100);
-const DB_PATH = process.env.E2E_DB_PATH || `/tmp/fitlog-e2e-${process.pid}.db`;
+const DB_PATH =
+  process.env.E2E_DB_PATH || `/tmp/fitlog-e2e-${process.pid}.db`;
 
 export default defineConfig({
   testDir: 'e2e',
+  // The suite shares one dev user and one database: tests reset their own data
+  // before running, but must not overlap. Revisit when each worker gets its own
+  // server and database.
+  workers: 1,
+  fullyParallel: false,
   // Fail fast in CI; retry once there to absorb cold-start flakiness.
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
@@ -22,6 +28,17 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'off',
+    // Pin the locale, time zone and motion so date labels, number formatting
+    // and animations do not vary between machines. The stylesheets already
+    // honour prefers-reduced-motion.
+    locale: 'es-ES',
+    timezoneId: 'Europe/Madrid',
+    reducedMotion: 'reduce',
+    // A controlling service worker makes request mocking and cache state
+    // unpredictable. PWA-focused tests opt back in explicitly.
+    serviceWorkers: 'block',
   },
   projects: [
     {
@@ -30,7 +47,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'node server/index.js',
+    // Seed a small fixed catalog through the production sync path before boot
+    // so no external dataset fetch is triggered and contents are deterministic.
+    command: 'node e2e/support/seed-catalog.js && node server/index.js',
     url: `http://127.0.0.1:${PORT}/api/health`,
     // Never attach to a server that is already listening: it could be a dev or
     // real instance and the specs write data.
@@ -43,11 +62,8 @@ export default defineConfig({
       ALLOW_DEV_LOGIN: 'true',
       GOOGLE_CLIENT_ID: '',
       COOKIE_SECURE: 'false',
-      // Keeps the catalog from going stale during a run. NOTE: this does NOT
-      // stop the boot-time catalog fetch on a fresh database (an empty catalog
-      // is always treated as stale by server/index.js), so the first start
-      // still tries to reach the network; the flows under test do not depend
-      // on it.
+      // The seeded catalog is fresh at boot, so the server does not attempt a
+      // background sync. This value keeps it from going stale during a run.
       CATALOG_SYNC_DAYS: '36500',
     },
   },

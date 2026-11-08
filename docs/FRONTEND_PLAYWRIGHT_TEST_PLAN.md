@@ -739,6 +739,10 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 
 ### 5.1 Conventions
 
+* **Implementation status markers** (in the ID cell): `✅` = implemented and
+  green locally (`npm run test:e2e`, Node 18, Chromium); `🟡` = partially
+  implemented (the part that does not need a pending app change is covered).
+  Unmarked = not yet implemented.
 * **IDs are stable identifiers**: `AUTH`, `NAV`, `WRK` (workouts), `CAT`
   (catalog), `RTN` (routines), `HEV` (Hevy), `MEA` (measurements), `STA`
   (statistics), `MOB` (mobile), `OFF` (PWA/offline), `A11Y`. Per
@@ -767,11 +771,11 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
-| AUTH-001 | Authentication | Route guards in both directions | No session; then a session | (a) open `#/workouts` signed out; (b) sign in, open `#/login` | (a) login screen, bottom nav hidden; (b) redirected to home (`Empezar a entrenar` visible) | E2E | P0 | RB | login | S |
-| AUTH-002 | Authentication | Demo sign-in through the real button *(today: partial)* | Signed out, dev login on | Click `Entrar en modo demo` | Toast `Hola, Atleta Demo`; home with greeting heading `Atleta`; nav visible | E2E | P0 | RB | reset | XS |
-| AUTH-003 | Authentication | Session survives reload | Signed in | Reload on home and on `#/profile` | Still authenticated on the same route; no login flash as final state | E2E | P0 | RB | login | XS |
-| AUTH-004 | Authentication | Logout | Signed in | Profile → `Cerrar sesión` → confirm | Toast `Hasta pronto`; login screen; opening `#/` afterwards returns to login; `Cancelar` in the dialog keeps the session | E2E | P0 | RB | login | S |
-| AUTH-005 | Authentication | Expired/invalid session mid-use (**message needs app change AC-2**, D-2) | Signed in on home | `context.clearCookies()`; click the `Entrenar` tab | Redirected to login (no error screen loop) and a toast `Tu sesión ha caducado. Vuelve a entrar.` is shown; before AC-2 only the redirect can be asserted | E2E | P0 | RB | login | S |
+| AUTH-001 ✅ | Authentication | Route guards in both directions | No session; then a session | (a) open `#/workouts` signed out; (b) sign in, open `#/login` | (a) login screen, bottom nav hidden; (b) redirected to home (`Empezar a entrenar` visible) | E2E | P0 | RB | login | S |
+| AUTH-002 ✅ | Authentication | Demo sign-in through the real button | Signed out, dev login on | Click `Entrar en modo demo` | Toast `Hola, Atleta Demo`; home with greeting heading `Atleta`; nav visible | E2E | P0 | RB | reset | XS |
+| AUTH-003 ✅ | Authentication | Session survives reload | Signed in | Reload on home and on `#/profile` | Still authenticated on the same route; no login flash as final state | E2E | P0 | RB | login | XS |
+| AUTH-004 ✅ | Authentication | Logout | Signed in | Profile → `Cerrar sesión` → confirm | Toast `Hasta pronto`; login screen; opening `#/` afterwards returns to login; `Cancelar` in the dialog keeps the session | E2E | P0 | RB | login | S |
+| AUTH-005 🟡 | Authentication | Expired/invalid session mid-use (**message needs app change AC-2**, D-2) | Signed in on home | `context.clearCookies()`; click the `Entrenar` tab | Redirected to login (no error screen loop) and a toast `Tu sesión ha caducado. Vuelve a entrar.` is shown; before AC-2 only the redirect can be asserted | E2E | P0 | RB | login | S |
 | AUTH-006 | Authentication | Demo sign-in failure | Signed out | Mock `POST /api/auth/dev` → 500 (and 404); click demo button | Inline danger notice with the message; button usable again (not stuck in `Entrando…`); still on login | E2E | P1 | MK | — | S |
 | AUTH-007 | Authentication | Demo button only when the server says so (**needs app change AC-1**, D-1) | Signed out | (a) Mock `/api/auth/config` → `{googleEnabled:false, devLoginEnabled:false}`; (b) mock `/api/auth/config` → 500 | (a) Notice `El acceso no está configurado…`, no demo button; (b) **no demo button**, an explicit "could not check access" state with a retry that, once the mock is removed, shows the normal login | E2E | P1 | MK | — | XS |
 | AUTH-008 | Authentication | Google sign-in success (stubbed) | Config mock enables Google; GIS script stubbed | Click the stub Google button | `/api/auth/google` handled by delegating to `POST /api/auth/dev` (real cookie); lands on home authenticated; reload keeps session | E2E | P1 | RB+MK | login | M |
@@ -784,10 +788,10 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
-| NAV-001 | Navigation | **Route sweep smoke**: every top-level route renders | Signed in | Visit `#/`, `#/routines`, `#/routines/new`, `#/workouts`, `#/exercises`, `#/measurements`, `#/profile` (and `#/workout/active` with none) | Each shows its own heading/topbar, no `No se pudo cargar`, **zero page errors / console errors** | E2E | P0 | RB | login, console | S |
-| NAV-002 | Navigation | Bottom nav | Signed in | Click `Inicio`, `Entrenar`, `Perfil` | URL hash and view change each time; correct tab is `.active` and, after AC-8, has `aria-current="page"`; labelled `Navegación principal` | E2E | P0 | RB | login | S |
+| NAV-001 ✅ | Navigation | **Route sweep smoke**: every top-level route renders | Signed in | Visit `#/`, `#/routines`, `#/routines/new`, `#/workouts`, `#/exercises`, `#/measurements`, `#/profile` (and `#/workout/active` with none) | Each shows its own heading/topbar, no `No se pudo cargar`, **zero page errors / console errors** | E2E | P0 | RB | login, console | S |
+| NAV-002 ✅ | Navigation | Bottom nav | Signed in | Click `Inicio`, `Entrenar`, `Perfil` | URL hash and view change each time; correct tab is `.active` and, after AC-8, has `aria-current="page"`; labelled `Navegación principal` | E2E | P0 | RB | login | S |
 | NAV-003 | Navigation | Back / forward | Seeded routine | routines → routine detail → browser back → forward | Correct view each step; no duplicate or lost state | E2E | P1 | RB | mine, reset | S |
-| NAV-004 | Navigation | Unknown hash | Signed in | Open `#/does-not-exist` | Redirect to home | E2E | P1 | RB | login | XS |
+| NAV-004 ✅ | Navigation | Unknown hash | Signed in | Open `#/does-not-exist` | Redirect to home | E2E | P1 | RB | login | XS |
 | NAV-005 | Navigation | Invalid-state screens | Signed in, no active workout | Open `#/workouts/999999`; open `#/workout/active` | `No se pudo cargar el entrenamiento` + `Volver`; `No hay entrenamiento activo` + `Ir a entrenamientos` | E2E | P1 | RB | reset | S |
 | NAV-006 | Navigation | Load failure and recovery | Signed in | Mock `GET /api/stats/overview` → 500; open home; unroute; click `Reintentar` | `No se pudo cargar` + `Reintentar`; after unroute the retry renders the home content | E2E | P1 | MK→RB | login | S |
 | NAV-007 | Navigation | Loading indicator | Signed in | Delay `/api/stats/overview` ~1 s | `Cargando…` loader visible, then replaced by content | E2E | P2 | MK | login | S |
@@ -797,7 +801,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
-| WRK-001 | Workouts | Start an empty workout *(today: covered, no cleanup)* | Signed in, no active workout | `Entrenar` → `Empezar Entrenamiento Vacío` | Active screen: `Sin ejercicios` hint, `Añadir ejercicio`, timer; home now shows the `Entrenamiento en curso` banner instead of `Empezar a entrenar` | E2E | P0 | RB | reset | S |
+| WRK-001 ✅ | Workouts | Start an empty workout | Signed in, no active workout | `Entrenar` → `Empezar Entrenamiento Vacío` | Active screen: `Sin ejercicios` hint, `Añadir ejercicio`, timer; home now shows the `Entrenamiento en curso` banner instead of `Empezar a entrenar` | E2E | P0 | RB | reset | S |
 | WRK-002 | Workouts | **Core loop**: log and finish a workout | Seeded custom exercise (`mine`) | Start empty → `Añadir ejercicio` → tab `Mis ejercicios` → pick → `Agregar Serie` → kg `60`, reps `8` → check → `Terminar` | Toast `¡Entrenamiento guardado!`; detail page shows totals (1 serie, 480 kg); the same workout is first in history and in home `Historial reciente`; nav dot/banner gone | E2E | P0 | RB | reset, mine | L |
 | WRK-003 | Workouts | Edits persist (debounce + flush paths) | Active workout with 1 set | Type reps; wait for save indicator to clear; reload. Variant: type then immediately navigate to home and back | Value present after reload in both variants; `Guardando…` indicator appears then hides | E2E | P0 | RB | reset, mine | M |
 | WRK-004 | Workouts | Finish with no completed sets | Active workout, 0 completed | `Terminar` → dialog `Terminar sin series` → `Cancelar`, then again → `Terminar` | Cancel keeps the workout active; confirm finishes and opens detail | E2E | P0 | RB | reset | S |
@@ -822,13 +826,13 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
-| CAT-001 | Catalog | Browse list and category chips | Seeded catalog (`cat`) | Training → `Explorar` | Heading `Ejercicios`; cards and chips (`Todos` + categories with counts) from the seed | E2E | P1 | RB | cat | M |
-| CAT-002 | Catalog | Search and empty result | `cat` | Type a seeded name; then a nonsense term | Matching card(s) only; then `Sin resultados` / `Prueba con otro término o categoría.` | E2E | P1 | RB | cat | S |
-| CAT-003 | Catalog | Category filter | `cat` | Click a category chip; then `Todos` | Only that category's cards; chip `.active`; `Todos` restores | E2E | P1 | RB | cat | S |
+| CAT-001 ✅ | Catalog | Browse list and category chips | Seeded catalog (`cat`) | Training → `Explorar` | Heading `Ejercicios`; cards and chips (`Todos` + categories with counts) from the seed | E2E | P1 | RB | cat | M |
+| CAT-002 ✅ | Catalog | Search and empty result | `cat` | Type a seeded name; then a nonsense term | Matching card(s) only; then `Sin resultados` / `Prueba con otro término o categoría.` | E2E | P1 | RB | cat | S |
+| CAT-003 ✅ | Catalog | Category filter | `cat` | Click a category chip; then `Todos` | Only that category's cards; chip `.active`; `Todos` restores | E2E | P1 | RB | cat | S |
 | CAT-004 | Catalog | Detail and add to my exercises | `cat` | Open a card → `Añadir a mis ejercicios`; then open any workout picker → tab `Mis ejercicios` | Toast `<name> añadido a tus ejercicios`; modal closes; exercise listed under `Mis ejercicios` | E2E | P1 | RB | cat, reset | M |
-| CAT-005 | Catalog | Infinite scroll | ≥ 41 seeded rows in one category | Scroll sentinel into view | Second page appended without duplicates; sentinel disappears at the end | E2E | P2 | RB | cat | M |
+| CAT-005 ✅ | Catalog | Infinite scroll | ≥ 41 seeded rows in one category | Scroll sentinel into view | Second page appended without duplicates; sentinel disappears at the end | E2E | P2 | RB | cat | M |
 | CAT-006 | Catalog | Picker: tabs, muscle filter, pick | Active workout; `cat` + `mine` | `Añadir ejercicio` → search; `Todos los músculos` → pick a group; switch tabs; pick an item | Results follow filters; muscle button shows the group; pick closes the sheet and the exercise appears in the workout (toast `<name> añadido`) | E2E | P1 | RB | cat, mine, reset | M |
-| CAT-007 | Catalog | API failure states | Signed in | Mock `/api/exercises/search` → 500; mock detail 404 | Inline danger notice in results; detail modal shows an inline notice | E2E | P1 | MK | login | S |
+| CAT-007 ✅ | Catalog | API failure states | Signed in | Mock `/api/exercises/search` → 500; mock detail 404 | Inline danger notice in results; detail modal shows an inline notice | E2E | P1 | MK | login | S |
 
 ### 5.6 Routines (E)
 
@@ -1216,7 +1220,15 @@ change `public/` (the §8.0 batches do, and follow the shell hash +
 `CACHE_VERSION` rule of `AGENTS.md`); owner reviews before
 commit.
 
-### M0 — Foundation hardening
+### M0 — Foundation hardening — **Completed**
+* **Status:** Completed. Config deltas, `e2e/fixtures/` (`index.js`, `api.js`,
+  `guards.js`, `data.js`, `workout-actions.js`), catalog seeding
+  (`e2e/support/seed-catalog.js` + `catalog.fixture.json`) are in place.
+  `npm run test:e2e` passes 17/17 locally (Node 18, Chromium) and is stable
+  across two consecutive runs. The auth/import HTTP rate limiters are disabled
+  under `NODE_ENV=test` so the shared dev user can sign in many times per run
+  without tripping the 40-request window (`server/app.js`). Docker/CI items stay
+  deferred per §9.0 D-15.
 * **Objective:** make the existing setup deterministic, isolated and diagnosable.
 * **Scenarios:** none new (re-home the 2 existing tests as WRK-001 and a
   part of AUTH-002 in M1).
@@ -1234,7 +1246,15 @@ commit.
   an artifact (owner-verified on the runner).
 * **DoD:** common DoD + zero requests to non-test hosts recorded in a full run.
 
-### M1 — Authentication & smoke
+### M1 — Authentication & smoke — **Completed**
+* **Status:** Completed. Delivered: AUTH-001 (`auth/route-guards.spec.js`),
+  AUTH-002 (`auth/demo-sign-in.spec.js`), AUTH-003 (`auth/session-reload.spec.js`),
+  AUTH-004 (`auth/logout.spec.js`), AUTH-005 redirect
+  (`auth/expired-session.spec.js`; the AC-2 toast is still pending), NAV-001
+  (`smoke/route-sweep.spec.js`), NAV-002 and NAV-004 (`smoke/navigation.spec.js`),
+  WRK-001 (`workouts/start-workout.spec.js`). All tagged `@smoke` where the plan
+  asks for it and green locally. AUTH-011 (cross-context sessions) not yet
+  written.
 * **Objective:** a `@smoke` set that proves boot, auth and guards.
 * **Scenarios:** AUTH-001, 002, 003, 004, 005, 011 · NAV-001, 002, 004 · WRK-001.
 * **Infra:** `login` fixture; console guard active; tag `@smoke`.
@@ -1260,7 +1280,12 @@ commit.
   `onSettled` hide and see WRK-003/002 fail.
 * **DoD:** common DoD; WRK-002 asserts detail, history and home agree.
 
-### M3 — Routines & exercise catalog
+### M3 — Routines & exercise catalog — **In progress**
+* **Status:** In progress. The catalog half is delivered (`catalog/catalog.spec.js`):
+  CAT-001 (list + chips with counts), CAT-002 (search + empty state), CAT-003
+  (category filter), CAT-005 (infinite scroll to 45 with no duplicates) and
+  CAT-007 (search 500 + detail 404 inline notices), all green locally. Still
+  pending: CAT-004 and CAT-006 (picker-based), and all of RTN-001–009.
 * **Objective:** cover creating and reusing plans and finding exercises.
 * **Scenarios:** RTN-001–009 · CAT-001–006.
 * **Infra:** `seedRoutine`, seeded catalog (45-row category for CAT-005), picker

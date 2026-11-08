@@ -39,6 +39,13 @@ jobs:
           # checkout can't clean it (EACCES). We also run as the runner's own
           # UID/GID (belt and braces) and point HOME/npm cache at the writable
           # copy, so nothing root-owned is ever produced.
+          #
+          # better-sqlite3 is a native addon. On this slim image prebuild-install
+          # cannot auto-detect the libc (it reports an empty value) and so fails
+          # to match its prebuilt binary, then falls back to node-gyp, which
+          # needs a compiler the image does not ship. We therefore install with
+          # --ignore-scripts and fetch the prebuilt binary explicitly with
+          # `prebuild-install --libc glibc`, so nothing is compiled.
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp \
@@ -50,6 +57,8 @@ jobs:
               cd /tmp/build
               rm -rf node_modules
               find server public test -name "*.js" -print0 | xargs -0 -n1 node --check
-              npm ci
+              npm ci --ignore-scripts
+              ( cd node_modules/better-sqlite3 \
+                && ../.bin/prebuild-install --runtime node --libc glibc )
               npm test
             '

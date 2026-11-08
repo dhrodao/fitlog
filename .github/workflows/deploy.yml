@@ -45,6 +45,12 @@ jobs:
           # the runner's UID/GID with a writable HOME/npm cache, so npm never
           # writes root-owned files into /opt/fitlog. Tests use a throwaway
           # SQLite DB in the container, so the ./data bind mount is untouched.
+          #
+          # better-sqlite3 is a native addon whose prebuilt binary
+          # prebuild-install cannot auto-match on this image (empty libc
+          # detection → node-gyp fallback → needs an absent compiler). Install
+          # with --ignore-scripts and fetch the prebuilt binary explicitly with
+          # `prebuild-install --libc glibc`; nothing is compiled.
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp \
@@ -55,7 +61,9 @@ jobs:
               cp -r /src /tmp/build
               cd /tmp/build
               rm -rf node_modules
-              npm ci
+              npm ci --ignore-scripts
+              ( cd node_modules/better-sqlite3 \
+                && ../.bin/prebuild-install --runtime node --libc glibc )
               npm test
             '
 
@@ -91,7 +99,9 @@ jobs:
               cp -r /src /tmp/build
               cd /tmp/build
               rm -rf node_modules
-              npm ci
+              npm ci --ignore-scripts
+              ( cd node_modules/better-sqlite3 \
+                && ../.bin/prebuild-install --runtime node --libc glibc )
               npm run backup:db
               npm run migrate
             '

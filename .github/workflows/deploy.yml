@@ -46,12 +46,19 @@ jobs:
           # writes root-owned files into /opt/fitlog. Tests use a throwaway
           # SQLite DB in the container, so the ./data bind mount is untouched.
           #
-          # better-sqlite3 is a native addon whose prebuilt binary
-          # prebuild-install cannot auto-match on this image (empty libc
-          # detection → node-gyp fallback → needs an absent compiler). Install
-          # with --ignore-scripts and fetch the prebuilt binary explicitly with
-          # `prebuild-install --libc glibc`; nothing is compiled.
+          # --network=host: this host's Docker bridge network has NO Internet
+          # (same reason the image build uses --network=host), so without it
+          # npm and the prebuild download cannot reach the network at all.
+          #
+          # better-sqlite3 is a native addon. We install with --ignore-scripts
+          # and fetch its prebuilt binary explicitly, so nothing is compiled
+          # (the slim image ships no compiler). prebuild-install downloads the
+          # binary from GitHub releases; GitHub occasionally answers 5xx/times
+          # out from this host, and prebuild-install neither retries nor errors
+          # clearly (it masks a failed download as "No prebuilt binaries
+          # found"), so we fall back to the npmmirror mirror of the asset.
           docker run --rm \
+            --network=host \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp \
             -e npm_config_cache=/tmp/.npm \
@@ -62,8 +69,16 @@ jobs:
               cd /tmp/build
               rm -rf node_modules
               npm ci --ignore-scripts
-              ( cd node_modules/better-sqlite3 \
-                && ../.bin/prebuild-install --runtime node --libc glibc )
+              cd node_modules/better-sqlite3
+              # Fetch the prebuilt binary. Try GitHub releases (canonical)
+              # first; it intermittently answers 5xx/times out from this host,
+              # and prebuild-install neither retries nor errors clearly (it
+              # masks a failed download as "No prebuilt binaries found"). On
+              # failure, fall back to the npmmirror mirror of the same asset.
+              mirror="https://registry.npmmirror.com/-/binary/better-sqlite3/v{version}/{name}-v{version}-{runtime}-v{abi}-{platform}{libc}-{arch}.tar.gz"
+              ../.bin/prebuild-install --runtime node --libc glibc \
+                || ../.bin/prebuild-install --runtime node --libc glibc --download "$mirror"
+              cd /tmp/build
               npm test
             '
 
@@ -85,6 +100,7 @@ jobs:
           # and BACKUP_DIR point at the mounted volumes.
           mkdir -p "$PROD_DIR/data" "$PROD_DIR/backups"
           docker run --rm \
+            --network=host \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp \
             -e npm_config_cache=/tmp/.npm \
@@ -100,8 +116,13 @@ jobs:
               cd /tmp/build
               rm -rf node_modules
               npm ci --ignore-scripts
-              ( cd node_modules/better-sqlite3 \
-                && ../.bin/prebuild-install --runtime node --libc glibc )
+              cd node_modules/better-sqlite3
+              # GitHub releases first, npmmirror mirror as fallback (see the
+              # test-gate step for why GitHub is flaky from this host).
+              mirror="https://registry.npmmirror.com/-/binary/better-sqlite3/v{version}/{name}-v{version}-{runtime}-v{abi}-{platform}{libc}-{arch}.tar.gz"
+              ../.bin/prebuild-install --runtime node --libc glibc \
+                || ../.bin/prebuild-install --runtime node --libc glibc --download "$mirror"
+              cd /tmp/build
               npm run backup:db
               npm run migrate
             '

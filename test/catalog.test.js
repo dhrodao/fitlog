@@ -338,6 +338,68 @@ test('registra la fuente del catálogo y alterna entre free-exercise-db y hevy',
   assert.equal(getCatalogSource(), 'free-exercise-db');
 });
 
+test('al cambiar de fuente re-enlaza por nombre y repara imágenes huérfanas', async () => {
+  // Seed the catalog from a free-exercise-db-style dataset and link a user
+  // exercise to one of its ids, baking the image route into exercises.image_url
+  // (this is what the app does when you add from the catalog).
+  await syncCatalog({ force: true, dataset });
+
+  const user = db
+    .prepare(
+      "INSERT INTO users (google_sub, name, created_at) VALUES ('test:img', 'Imagen', '2026-01-01T00:00:00.000Z')"
+    )
+    .run();
+  const userId = user.lastInsertRowid;
+
+  // Matches a name in the hevy dataset below -> should be re-linked + repaired.
+  db.prepare(
+    `INSERT INTO exercises (user_id, catalog_id, name, category, image_url, is_custom, created_at)
+     VALUES (?, NULL, 'Barbell Deadlift', 'Espalda', '/api/exercises/image/Barbell_Deadlift/0', 0, '2026-01-01T00:00:00.000Z')`
+  ).run(userId);
+
+  // Has no counterpart in the hevy dataset -> its dead URL must be cleared.
+  db.prepare(
+    `INSERT INTO exercises (user_id, catalog_id, name, category, image_url, is_custom, created_at)
+     VALUES (?, NULL, 'Extinct Lift', 'Otros', '/api/exercises/image/Extinct_Lift/0', 0, '2026-01-01T00:00:00.000Z')`
+  ).run(userId);
+
+  // Switch the catalog source to hevy: same display names, different ids.
+  const hevyDataset = [
+    {
+      id: 'AA11BB22',
+      name: 'Barbell Deadlift',
+      primaryMuscles: ['lower back'],
+      secondaryMuscles: ['hamstrings'],
+      equipment: 'barbell',
+      instructions: [],
+      category: 'strength',
+      images: ['AA11BB22/0.jpg'],
+    },
+  ];
+  await syncCatalog({ force: true, dataset: hevyDataset, source: 'hevy' });
+
+  const deadlift = db
+    .prepare("SELECT * FROM exercises WHERE user_id = ? AND name = 'Barbell Deadlift'")
+    .get(userId);
+  assert.equal(deadlift.catalog_id, 'AA11BB22');
+  assert.equal(deadlift.image_url, '/api/exercises/image/AA11BB22/0');
+
+  const extinct = db
+    .prepare("SELECT * FROM exercises WHERE user_id = ? AND name = 'Extinct Lift'")
+    .get(userId);
+  assert.equal(extinct.image_url, null);
+
+  // No user exercise is left pointing at a catalog id that does not exist.
+  const orphan = db
+    .prepare("SELECT image_url FROM exercises WHERE image_url LIKE '/api/exercises/image/%'")
+    .all()
+    .find((row) => {
+      const id = /^\/api\/exercises\/image\/([^/]+)\//.exec(row.image_url)?.[1];
+      return id && !db.prepare('SELECT 1 FROM exercise_catalog WHERE id = ?').get(id);
+    });
+  assert.equal(orphan, undefined);
+});
+
 test.after(() => {
   db.close();
   for (const suffix of ['', '-wal', '-shm']) {

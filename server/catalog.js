@@ -199,13 +199,13 @@ export function linkUserExercises() {
   const getCatalogImage = db.prepare(
     'SELECT image_url FROM exercise_catalog WHERE id = ?'
   );
-  const rows = db
-    .prepare('SELECT id, name FROM exercises WHERE catalog_id IS NULL')
-    .all();
   const update = db.prepare(
     `UPDATE exercises
         SET catalog_id = ?, image_url = COALESCE(image_url, ?)
       WHERE id = ?`
+  );
+  const relink = db.prepare(
+    'UPDATE exercises SET catalog_id = ?, image_url = ? WHERE id = ?'
   );
   const updateImage = db.prepare(
     'UPDATE exercises SET image_url = ? WHERE id = ?'
@@ -214,20 +214,79 @@ export function linkUserExercises() {
   const problems = [];
   let linked = 0;
 
-  for (const row of rows) {
-    const alias = aliases[normalizeExerciseName(row.name)];
-    if (!alias) continue;
+  // Index the current catalog by normalized name so unlinked exercises can be
+  // matched to it directly. This is what keeps exercises attached across a
+  // source switch (e.g. free-exercise-db -> hevy): the alias freeIds point at
+  // the old source's ids, but the names still match the new catalog.
+  const catalogByName = new Map();
+  for (const row of db
+    .prepare('SELECT id, name, image_url FROM exercise_catalog')
+    .all()) {
+    const key = normalizeName(row.name);
+    if (!catalogByName.has(key)) catalogByName.set(key, row);
+  }
 
-    const catalogRow = getCatalogImage.get(alias.freeId);
-    if (!catalogRow) {
-      problems.push(`freeId inexistente: ${alias.freeId} (${row.name})`);
-      continue;
+  const rows = db
+    .prepare('SELECT id, name FROM exercises WHERE catalog_id IS NULL')
+    .all();
+
+  for (const row of rows) {
+    // Prefer the curated alias mapping; fall back to a direct name match
+    // against the current catalog.
+    const alias = aliases[normalizeName(row.name)];
+    let catalogId = null;
+    let catalogImage = null;
+
+    if (alias) {
+      const catalogRow = getCatalogImage.get(alias.freeId);
+      if (catalogRow) {
+        catalogId = alias.freeId;
+        catalogImage = catalogRow.image_url;
+      } else {
+        problems.push(`freeId inexistente: ${alias.freeId} (${row.name})`);
+      }
     }
 
-    const imageUrl = catalogRow.image_url
-      ? catalogImageUrl(alias.freeId, 0)
-      : null;
-    linked += update.run(alias.freeId, imageUrl, row.id).changes;
+    if (!catalogId) {
+      const byName = catalogByName.get(normalizeName(row.name));
+      if (byName) {
+        catalogId = byName.id;
+        catalogImage = byName.image_url;
+      }
+    }
+
+    if (!catalogId) continue;
+
+    const imageUrl = catalogImage ? catalogImageUrl(catalogId, 0) : null;
+    linked += update.run(catalogId, imageUrl, row.id).changes;
+  }
+
+  // Repair rows whose image_url points at a catalog image route for an id that
+  // is no longer in the catalog (e.g. a free-exercise-db id left over after
+  // switching the catalog source to hevy). Those URLs 404; re-link them to the
+  // current catalog by name, or clear the broken URL so the UI shows the
+  // placeholder instead of a dead image.
+  const brokenImage = db
+    .prepare(
+      `SELECT id, name, image_url, catalog_id FROM exercises
+        WHERE image_url LIKE '/api/exercises/image/%'`
+    )
+    .all();
+  const catalogExists = db.prepare(
+    'SELECT 1 FROM exercise_catalog WHERE id = ?'
+  );
+  for (const row of brokenImage) {
+    const match = /^\/api\/exercises\/image\/([^/]+)\//.exec(row.image_url);
+    const imageId = match ? decodeURIComponent(match[1]) : null;
+    if (imageId && catalogExists.get(imageId)) continue; // still valid
+
+    const byName = catalogByName.get(normalizeName(row.name));
+    if (byName && byName.image_url) {
+      relink.run(byName.id, catalogImageUrl(byName.id, 0), row.id);
+    } else {
+      // No image available in the current catalog: drop the dead URL.
+      updateImage.run(null, row.id);
+    }
   }
 
   // Migrate rows linked by older syncs that still point at the CDN directly.

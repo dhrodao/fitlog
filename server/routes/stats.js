@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { listWorkouts } from '../services/workouts.js';
 import { bestE1rm, personalRecords } from '../services/strength.js';
+import { getCatalogExercise } from '../catalog.js';
 
 const router = Router();
 
@@ -134,10 +135,12 @@ router.get('/exercise/:exerciseId', (req, res) => {
   // Fetch the individual completed sets per finished session. We group them in
   // JS so the e1RM is computed PER SET (Epley), not from a session's heaviest
   // weight crossed with its highest reps — those can belong to different sets.
+  // The per-set rows are also what the "Historial" tab renders (one line per
+  // set: weight × reps), so we keep them around, not just the aggregates.
   const setRows = db
     .prepare(
-      `SELECT w.id AS workout_id, w.started_at, w.duration_seconds,
-         s.weight_kg, s.reps
+      `SELECT w.id AS workout_id, w.name AS workout_name, w.started_at,
+         w.duration_seconds, we.superset_group, s.weight_kg, s.reps
        FROM workouts w
        JOIN workout_exercises we ON we.workout_id = w.id
        JOIN workout_sets s ON s.workout_exercise_id = we.id
@@ -154,8 +157,10 @@ router.get('/exercise/:exerciseId', (req, res) => {
     if (!session) {
       session = {
         workoutId: row.workout_id,
+        name: row.workout_name,
         date: row.started_at,
         durationSeconds: row.duration_seconds || 0,
+        supersetGroup: row.superset_group,
         sets: [],
       };
       sessionsById.set(row.workout_id, session);
@@ -186,8 +191,12 @@ router.get('/exercise/:exerciseId', (req, res) => {
     const e1rm = bestE1rm(session.sets);
     return {
       workoutId: session.workoutId,
+      name: session.name,
       date: session.date,
       durationSeconds: session.durationSeconds,
+      superset: session.supersetGroup != null,
+      // One entry per completed set, in logged order, for the Historial tab.
+      sets: session.sets.map((s) => ({ weightKg: s.weightKg, reps: s.reps })),
       maxWeight: maxWeight > 0 ? maxWeight : null,
       volume,
       reps,
@@ -199,6 +208,25 @@ router.get('/exercise/:exerciseId', (req, res) => {
   // Documented personal records across all sessions (see services/strength.js).
   const prs = personalRecords(sessions);
 
+  // Catalog detail (muscles, equipment, instructions, …) for the "Indicaciones"
+  // tab. Only available when the user's exercise is linked to a catalog entry;
+  // custom exercises with no catalog_id simply return detail: null.
+  const detail = exercise.catalog_id
+    ? (() => {
+        const catalog = getCatalogExercise(exercise.catalog_id);
+        if (!catalog) return null;
+        return {
+          muscles: catalog.muscles,
+          equipment: catalog.equipment,
+          instructions: catalog.instructions,
+          level: catalog.level,
+          force: catalog.force,
+          mechanic: catalog.mechanic,
+          imageUrl: catalog.imageUrl,
+        };
+      })()
+    : null;
+
   res.json({
     exercise: {
       id: exercise.id,
@@ -207,6 +235,7 @@ router.get('/exercise/:exerciseId', (req, res) => {
       imageUrl: exercise.image_url,
     },
     history,
+    detail,
     bestWeight: prs.maxWeight,
     estimated1rm: prs.bestE1rm,
     prs,

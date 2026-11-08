@@ -1,5 +1,5 @@
 import { api, errorMessage } from '../api.js';
-import { lineChart, attachLineChart } from '../charts.js';
+import { openExerciseDetail } from '../exercise-detail.js';
 import {
   confirmDialog,
   connectionNeeded,
@@ -9,10 +9,8 @@ import {
   formatNumber,
   formatTime,
   formatVolume,
-  formatWeight,
   icon,
   openActionSheet,
-  openModal,
   toast,
 } from '../ui.js';
 
@@ -43,10 +41,13 @@ function groupExercises(exercises) {
 
 function exerciseBlock(exercise, { inSuperset = false } = {}) {
   const done = exercise.sets.filter((set) => set.completed).length;
+  const tappable = exercise.exerciseId != null;
   return `
     <div class="detail-exercise ${inSuperset ? 'in-superset' : ''}">
       ${inSuperset ? `<span class="superset-chip">${icon('layers', 12)} Superset</span>` : ''}
-      <div class="head">
+      ${tappable
+        ? `<button type="button" class="head exercise-open" data-exercise-detail="${exercise.exerciseId}" data-exercise-name="${esc(exercise.name)}">`
+        : '<div class="head">'}
         <span class="exercise-thumb ${exercise.imageUrl ? '' : 'gray'}">
           ${exercise.imageUrl ? `<img src="${esc(exercise.imageUrl)}" alt="" referrerpolicy="no-referrer" />` : icon('dumbbell', 22)}
         </span>
@@ -54,95 +55,12 @@ function exerciseBlock(exercise, { inSuperset = false } = {}) {
           <div class="n">${esc(exercise.name)}</div>
           <div class="s">${done}/${exercise.sets.length} series · ${esc(exercise.category || '')}</div>
         </div>
-      </div>
+        ${tappable ? `<span class="exercise-open-chevron">${icon('chevronRight', 16)}</span>` : ''}
+      ${tappable ? '</button>' : '</div>'}
       <div class="set-chips">${exercise.sets.map(setChip).join('')}</div>
       ${exercise.notes ? `<div class="text-xs text-muted">${icon('info', 12)} ${esc(exercise.notes)}</div>` : ''}
-      ${
-        exercise.exerciseId != null
-          ? `<button type="button" class="link-btn progress-link" data-progress="${exercise.exerciseId}" data-progress-name="${esc(exercise.name)}">
-               ${icon('chart', 14)} Ver progresión
-             </button>`
-          : ''
-      }
     </div>
   `;
-}
-
-// --- per-exercise progression (read-only, available for every workout) ---
-
-// e1RM shown here is an Epley ESTIMATE from each logged set, not a tested max;
-// the UI labels it as "estimado" so it is never read as a true one-rep max.
-function progressionContent(stats) {
-  const history = Array.isArray(stats.history) ? stats.history : [];
-  const prs = stats.prs || {};
-
-  const chart =
-    history.length < 2
-      ? '<div class="chart-empty">Necesitas al menos dos entrenamientos con este ejercicio para ver la progresión</div>'
-      : lineChart({
-          data: history,
-          valueKey: 'e1rm',
-          labelKey: 'date',
-          height: 170,
-          formatValue: (value) => formatWeight(value),
-          interactive: true,
-          tooltipRows: (item) => [
-            [formatDate(item.date), ''],
-            ['1RM estimado', formatWeight(item.e1rm)],
-            ['Peso máx.', formatWeight(item.maxWeight)],
-            ['Volumen', `${formatVolume(item.volume || 0)} kg`],
-          ],
-        });
-
-  const prCell = (label, value) => `
-    <div class="pr-cell">
-      <span class="pr-value">${esc(value)}</span>
-      <span class="pr-label">${esc(label)}</span>
-    </div>`;
-
-  const prGrid = `
-    <div class="pr-grid">
-      ${prCell('Peso máximo', formatWeight(prs.maxWeight))}
-      ${prCell('1RM estimado', formatWeight(prs.bestE1rm))}
-      ${prCell('Reps máx.', prs.maxReps != null ? formatNumber(prs.maxReps) : '—')}
-      ${prCell('Volumen máx. por sesión', prs.maxVolume != null ? `${formatVolume(prs.maxVolume)} kg` : '—')}
-    </div>`;
-
-  return `
-    <div class="progression">
-      <div class="progression-chart" data-chart>${chart}</div>
-      <div class="pr-section">
-        <div class="pr-head">Récords personales</div>
-        ${prGrid}
-        <p class="pr-note">${icon('info', 12)} El 1RM es un valor <b>estimado</b> (fórmula de Epley), no una marca real.</p>
-      </div>
-    </div>
-  `;
-}
-
-// Opens a read-only modal with the exercise progression. `exerciseId` is the
-// exercises-table id (exercise.exerciseId in the workout detail), which the
-// stats endpoint expects — not the workout_exercise row id (exercise.id).
-async function openProgression(ctx, exerciseId, name) {
-  const modal = openModal({
-    title: name || 'Progresión',
-    subtitle: '1RM estimado a lo largo del tiempo',
-    content: `<div class="progression-loading">${icon('clock', 20)} Cargando…</div>`,
-  });
-
-  try {
-    const stats = await api.stats.exercise(exerciseId);
-    modal.body.innerHTML = progressionContent(stats);
-    attachLineChart(modal.body.querySelector('[data-chart]'));
-  } catch (error) {
-    if (error.status === 401) {
-      modal.close();
-      ctx.handleUnauthorized();
-      return;
-    }
-    modal.body.innerHTML = `<div class="chart-empty">${esc(errorMessage(error))}</div>`;
-    toast(errorMessage(error), 'error');
-  }
 }
 
 // --- editable mode markup (mirrors the active-workout set editing) ---
@@ -323,15 +241,15 @@ export async function render(container, ctx, params) {
     </div>
   `;
 
-    // Read-only progression: available for every workout (including Hevy).
+    // Read-only exercise detail: available for every workout (including Hevy).
     // Bound to the freshly rendered `.view` (replaced on each renderView call),
     // so the listener never stacks across re-renders of the detail.
     container.querySelector('.view')?.addEventListener('click', (event) => {
-      const trigger = event.target.closest('[data-progress]');
+      const trigger = event.target.closest('[data-exercise-detail]');
       if (!trigger) return;
-      const exerciseId = Number(trigger.dataset.progress);
+      const exerciseId = Number(trigger.dataset.exerciseDetail);
       if (!Number.isFinite(exerciseId)) return;
-      openProgression(ctx, exerciseId, trigger.dataset.progressName);
+      openExerciseDetail(ctx, { exerciseId, name: trigger.dataset.exerciseName });
     });
 
     container.querySelector('[data-menu]')?.addEventListener('click', () => {

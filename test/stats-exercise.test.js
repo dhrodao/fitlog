@@ -67,6 +67,27 @@ test('per-exercise stats: per-set e1RM, documented PRs and owner scoping', async
     assert.equal(s1.reps, 2 + 15);
   });
 
+  await t.test('history rows expose the per-set detail for the Historial tab', () => {
+    const s1 = body.history[0];
+    // The workout name and a superset flag are carried for the session header.
+    assert.equal(s1.name, 'Sesion 1');
+    assert.equal(s1.superset, false);
+    // Every completed set is returned in logged order with weight and reps.
+    assert.deepEqual(s1.sets, [
+      { weightKg: 120, reps: 2 },
+      { weightKg: 60, reps: 15 },
+    ]);
+    const s2 = body.history[1];
+    assert.deepEqual(s2.sets, [
+      { weightKg: 80, reps: 5 },
+      { weightKg: 70, reps: 8 },
+    ]);
+  });
+
+  await t.test('a custom (non-catalog) exercise has no catalog detail', () => {
+    assert.equal(body.detail, null);
+  });
+
   await t.test('prs block has the documented records', () => {
     assert.ok(body.prs, 'prs block present');
     // Heaviest single set across all sessions.
@@ -114,4 +135,57 @@ test('per-exercise stats: per-set e1RM, documented PRs and owner scoping', async
     // User B must NOT reach user A's exercise stats: owner scoping -> 404.
     await b.get(`/api/stats/exercise/${exercise.id}`).set('Cookie', cookie).expect(404);
   });
+});
+
+test('per-exercise stats: catalog-linked exercise returns the guide detail', async () => {
+  await loginDev(agent);
+
+  // Seed a single catalog entry and create a user exercise linked to it. The
+  // detail block feeds the "Indicaciones" tab: translated muscles/equipment and
+  // the step-by-step instructions.
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO exercise_catalog
+       (id, name, category, muscles, primary_muscles, secondary_muscles,
+        equipment, instructions, level, force, mechanic,
+        image_url, image_url_2, thumbnail_url, description, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    'Hip_Adduction_Machine',
+    'Hip Adduction (Machine)',
+    'Piernas',
+    JSON.stringify(['adductors']),
+    JSON.stringify(['adductors']),
+    JSON.stringify([]),
+    JSON.stringify(['machine']),
+    JSON.stringify(['Siéntate en la máquina.', 'Junta las piernas.']),
+    'beginner',
+    'push',
+    'isolated',
+    '/api/exercises/image/Hip_Adduction_Machine/0',
+    null,
+    '/api/exercises/image/Hip_Adduction_Machine/0',
+    'Siéntate en la máquina.\n\nJunta las piernas.',
+    now
+  );
+
+  const created = await agent
+    .post('/api/exercises/from-catalog')
+    .send({ catalogId: 'Hip_Adduction_Machine' })
+    .expect(201);
+  const exerciseId = created.body.exercise.id;
+
+  const res = await agent.get(`/api/stats/exercise/${exerciseId}`).expect(200);
+  const detail = res.body.detail;
+
+  assert.ok(detail, 'catalog-linked exercise exposes a detail block');
+  // Muscles and equipment are translated to Spanish by the catalog serializer.
+  assert.deepEqual(detail.muscles, ['Aductores']);
+  assert.deepEqual(detail.equipment, ['Máquina']);
+  // Instructions are returned as an ordered list of steps.
+  assert.deepEqual(detail.instructions, [
+    'Siéntate en la máquina.',
+    'Junta las piernas.',
+  ]);
+  assert.equal(detail.level, 'beginner');
 });

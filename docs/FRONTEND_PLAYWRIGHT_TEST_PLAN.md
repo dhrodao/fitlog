@@ -201,7 +201,7 @@ offline-vs-service-worker interaction, and several fixture mechanics are marked
   `fit-rest-timer` (+ theme); IndexedDB (`public/js/offline/*`) holds the active
   workout snapshot per user, a catalog cache and a routines cache. `logout()`
   calls `clearOfflineData()` (wipes the active-workout and catalog stores).
-* **Service worker (`public/sw.js`, `fitlog-v28`)**: precaches the full shell,
+* **Service worker (`public/sw.js`, `fitlog-v31`)**: precaches the full shell,
   network-first navigations (fallback to cached `/index.html`), stale-while-
   revalidate static assets, **never** caches `/api/`, `skipWaiting` +
   `clients.claim`; the page reloads once on `controllerchange` only when
@@ -219,7 +219,10 @@ offline-vs-service-worker interaction, and several fixture mechanics are marked
    kg / reps (500 ms debounced write per set) → check button (flushes
    immediately, starts the rest timer) → `Terminar` (confirm if 0 completed
    sets) → `POST …/finish` → toast `¡Entrenamiento guardado!` → `#/workouts/:id`.
-   `Descartar entrenamiento` → danger confirm → home.
+   `Descartar entrenamiento` → danger confirm → home. On the active screen the
+   exercise name/image (`[data-exercise-detail]`) opens the same read-only
+   exercise detail modal (Resumen / Historial / Indicaciones), separate from the
+   ⋯ exercise menu.
 3. **Routines** — `Nueva Rutina` → editor (name, folder, description, add
    exercises via picker, targets, reorder/remove) → `Guardar` → routine detail;
    from the list: `Empezar Rutina`, ⋯ menu (Empezar / Ver / Editar / Duplicar /
@@ -228,7 +231,10 @@ offline-vs-service-worker interaction, and several fixture mechanics are marked
    detail shows summary + exercises; ⋯ menu: *Editar entrenamiento*
    (edit mode → *Terminar edición*, set/exercise delete), *Ver rutina*,
    *Eliminar entrenamiento* (confirm). Hevy-imported workouts are read-only.
-   Progression chart modal via `[data-progress]`.
+   Tapping an exercise's name/image (`[data-exercise-detail]`) opens the
+   read-only **exercise detail** modal with tabs *Resumen* / *Historial* /
+   *Indicaciones* (`public/js/exercise-detail.js`); the old "Ver progresión"
+   link is gone, the whole head is the handle now.
 5. **Catalog browse** — `#/exercises`: search (280 ms debounce), category chips,
    infinite scroll (`IntersectionObserver`, page 40), detail modal →
    `Añadir a mis ejercicios`.
@@ -288,7 +294,9 @@ offline-vs-service-worker interaction, and several fixture mechanics are marked
   (`[data-start-empty]`, `[data-add-exercise]`, `[data-add-set]`, `[data-toggle]`,
   `[data-finish]`, `[data-discard]`, `[data-field="weightKg|reps"]`,
   `[data-set-id]`, `[data-we-id]`, `[data-save]`, `[data-retry]`, `[data-link]`,
-  `[data-sync-*]`, `[data-tab]`, `[data-pick]` …). These are stable because
+  `[data-sync-*]`, `[data-tab]`, `[data-pick]`, `[data-exercise-detail]` (opens
+  the exercise detail modal; carries the exercises-table id, with
+  `[data-exercise-name]` for the title) …). These are stable because
   production code depends on them.
 * **Accessible names present**: icon-only buttons have `aria-label`
   (`Cerrar`, `Volver`, `Opciones`, `Terminar entrenamiento`, `Minimizar`,
@@ -505,7 +513,12 @@ set; previous-set suggestion (`[data-prev-fill]`) and prefill; rest timer
 (toggle, skip, +15 s); reorder, replace, superset create/remove (server-only);
 remove exercise (no confirm); finish (confirm when 0 completed sets); discard
 (danger confirm); history with month grouping and pagination; workout detail
-with progression chart modal; **edit finished workout** (⋯ → *Editar
+with the read-only **exercise detail** modal (tabs *Resumen* with the
+progression chart + personal records, *Historial* with every logged session and
+its sets, *Indicaciones* with the catalog muscles/equipment/steps when the
+exercise is catalog-linked), opened by tapping the exercise name/image
+(`[data-exercise-detail]`) on both the finished-workout detail and the active
+screen; **edit finished workout** (⋯ → *Editar
 entrenamiento*, set/exercise delete, *Terminar edición*) and **delete workout**
 (confirm); Hevy-imported workouts read-only.
 
@@ -814,13 +827,15 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | WRK-011 | Workouts | Previous-set suggestion & prefill | A finished workout with the same exercise (`hist`) | New workout → add same exercise → click the `Anterior` value | Previous `kg × reps` shown; click fills both inputs and the totals update | E2E | P1 | RB | hist, mine | M |
 | WRK-012 | Workouts | Set save fails | Active workout, 1 set | Mock `PATCH /api/workouts/*/sets/*` → 500; edit reps | Error toast; `Guardando…` stays visible (edit not silently dropped); after unroute and another edit it clears | E2E | P1 | RB+MK | reset, mine | S |
 | WRK-013 | Workouts | Finish fails | Active workout with a completed set | Mock `POST …/finish` → 500; click finish | Error toast; user stays on active screen; finish button usable again | E2E | P1 | RB+MK | reset, mine | S |
-| WRK-014 | Workouts | Workout detail & progression chart | ≥ 2 finished workouts of one exercise (`hist`) | Open history card → detail → exercise progression link | Totals, exercises and sets match the seed; modal with a `Gráfico de progreso` image opens and closes | E2E | P1 | RB | hist | M |
+| WRK-014 | Workouts | Workout detail & exercise detail modal | ≥ 2 finished workouts of one exercise (`hist`) | Open history card → detail → tap the exercise name/image | Totals, exercises and sets match the seed; the exercise detail modal opens with the *Resumen* tab showing a `Gráfico de progreso` image and the personal-record grid, and closes | E2E | P1 | RB | hist | M |
 | WRK-015 | Workouts | History empty state | No workouts (`reset`) | Open `#/workouts` and home | `Sin entrenamientos` (+ `Empezar`) / `Sin entrenamientos aún` | E2E | P1 | RB | reset | XS |
 | WRK-016 | Workouts | Edit numeric values of a finished workout (**needs app change AC-6**, D-8) | Finished workout | ⋯ → `Editar entrenamiento` → weight `72,5` then `72.5`; `5kg`; `-3`; reps `8.4`; `Listo`; reload | Same rules as the active screen: comma and point both give 72.5; `5kg` flagged (`input-error`) and not saved; negative → `0`; reps rounded to an integer; values survive reload and totals in the detail update | E2E | P1 | RB | hist | S |
 | WRK-017 | Workouts | Edit finished workout: name / location / notes and exercise removal (**removal confirm needs AC-4**, D-6) | Finished workout with 2 exercises | ⋯ → `Editar entrenamiento`; fill name, `Ubicación`, `Notas`; leave field; trash on one exercise → cancel, then confirm; `Listo` | Detail shows the new name/location/notes; they survive reload; history card shows the new name; exercise removal asks for confirmation (cancel keeps it, confirm removes it and updates totals); deleting a single set stays immediate | E2E | P1 | RB | hist | M |
 | WRK-018 | Workouts | History pagination | 25 workouts (`hist`) | Open history; click `Cargar más` | First 20 then all 25, grouped by month headings, button disappears | E2E | P1 | RB | hist | M |
 | WRK-019 | Workouts | Delete finished workout | Finished workout | ⋯ → `Eliminar entrenamiento` → cancel; again → confirm | Cancel keeps; confirm toasts `Entrenamiento eliminado`, history no longer lists it, home totals update | E2E | P1 | RB | hist | S |
 | WRK-020 | Workouts | Reorder / superset / replace (server-only) | Active workout, 3 exercises | Reorder via sheet and `Guardar orden`; add to superset and remove; replace one | Order persists after reload; `Superset` chip shown/removed; replaced exercise name updates | E2E | P2 | RB | reset, mine | M |
+| WRK-021 | Workouts | Exercise detail — Historial and Indicaciones tabs | ≥ 2 finished workouts of a catalog-linked exercise (`hist`, `cat`) | Open a finished workout → tap the exercise name/image → switch to `Historial`, then `Indicaciones` | `Historial` lists each session (name + date) with one line per set (`kg × reps`) newest first; `Indicaciones` shows translated muscles/equipment chips and the numbered steps; a custom (non-catalog) exercise hides the `Indicaciones` tab | E2E | P1 | RB | hist, cat | M |
+| WRK-022 | Workouts | Exercise detail opens from the active screen | Active workout with a catalog-linked exercise (`mine`/`cat`) | On the active screen tap the exercise name/image | The same detail modal opens (Resumen/Historial/Indicaciones) without triggering the ⋯ exercise menu; closing it leaves the workout editable | E2E | P2 | RB | reset, cat | S |
 
 ### 5.5 Exercise catalog (D)
 
@@ -924,9 +939,9 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | Priority | Count | Notes |
 |---|---|---|
 | P0 | 17 | AUTH-001–005, NAV-001–002, WRK-001–005, RTN-001–002, OFF-002, OFF-004–005 |
-| P1 | 67 | Bulk of the value; implemented milestone by milestone |
-| P2 | 15 | Optional; do only if cheap or after a regression |
-| **Total** | **99** | Counted from the tables above. Not all are meant to exist at once — see the roadmap (P0 + a curated P1 subset is the realistic target) |
+| P1 | 68 | Bulk of the value; implemented milestone by milestone |
+| P2 | 16 | Optional; do only if cheap or after a regression |
+| **Total** | **101** | Counted from the tables above. Not all are meant to exist at once — see the roadmap (P0 + a curated P1 subset is the realistic target) |
 
 ---
 
@@ -1268,7 +1283,7 @@ commit.
 
 ### M2 — Core workout loop
 * **Objective:** protect the app's main purpose and its data integrity.
-* **Scenarios:** WRK-002, 003, 004, 005, 006, 007, 008, 009, 010, 020.
+* **Scenarios:** WRK-002, 003, 004, 005, 006, 007, 008, 009, 010, 020, 022.
 * **Infra:** `seedExercise`, action helpers (`startEmptyWorkout`,
   `addExerciseFromPicker`, `completeSet`), `clock` for the rest timer, and the
   **`webkit` project** (D-12) running only `@smoke` + the core loop (WRK-002),
@@ -1298,7 +1313,7 @@ commit.
 
 ### M4 — History, workout edit, measurements, statistics
 * **Objective:** cover data viewing/editing and the date-sensitive features.
-* **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019 · MEA-001–009 · STA-001, 002.
+* **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019, 021 · MEA-001–009 · STA-001, 002.
   (WRK-016 and the confirm part of WRK-017 need AC-6 / AC-4 first.)
 * **Infra:** `seedWorkouts`/`seedMeasurements` with fixed dates; `clock`;
   non-UTC `timezoneId` case.
@@ -1379,8 +1394,8 @@ commit.
 * **Validation:** full suite passes with `--workers=4` ×5 consecutive runs.
 * **DoD:** common DoD.
 
-**Scheduling coverage check:** M1 (10) + M2 (10) + M3 (15) + M4 (18) + M5 (13) +
-M6 (13) + M7 (6) + M8 (9) + M9 (4) + M10 (1) = **99**.
+**Scheduling coverage check:** M1 (10) + M2 (11) + M3 (15) + M4 (19) + M5 (13) +
+M6 (13) + M7 (6) + M8 (9) + M9 (4) + M10 (1) = **101**.
 
 ---
 

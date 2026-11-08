@@ -1,5 +1,6 @@
 import { api, errorMessage } from '../api.js';
 import { openExercisePicker } from '../exercise-picker.js';
+import { openExerciseDetail } from '../exercise-detail.js';
 import { attachSwipeToDelete } from '../swipe.js';
 import { createWriteScheduler } from '../pending-writes.js';
 import {
@@ -105,17 +106,22 @@ function groupExercises(exercises) {
 }
 
 function exerciseBlock(exercise, { inSuperset = false } = {}) {
+  const tappable = exercise.exerciseId != null;
   return `
     <div class="exercise-block ${inSuperset ? 'in-superset' : ''}" data-we-id="${exercise.id}">
       ${inSuperset ? `<span class="superset-chip">${icon('layers', 12)} Superset</span>` : ''}
       <div class="exercise-block-head">
-        <span class="exercise-thumb ${exercise.imageUrl ? '' : 'gray'}">
-          ${exercise.imageUrl ? `<img src="${esc(exercise.imageUrl)}" alt="" referrerpolicy="no-referrer" />` : icon('dumbbell', 22)}
-        </span>
-        <div class="info">
-          <div class="name">${esc(exercise.name)}</div>
-          <div class="prev">${esc(exercise.category || '')}</div>
-        </div>
+        ${tappable
+          ? `<button type="button" class="exercise-open-main" data-exercise-detail="${exercise.exerciseId}" data-exercise-name="${esc(exercise.name)}">`
+          : '<div class="exercise-open-main">'}
+          <span class="exercise-thumb ${exercise.imageUrl ? '' : 'gray'}">
+            ${exercise.imageUrl ? `<img src="${esc(exercise.imageUrl)}" alt="" referrerpolicy="no-referrer" />` : icon('dumbbell', 22)}
+          </span>
+          <div class="info">
+            <div class="name">${esc(exercise.name)}</div>
+            <div class="prev">${esc(exercise.category || '')}</div>
+          </div>
+        ${tappable ? '</button>' : '</div>'}
         <button type="button" class="icon-btn" data-exercise-menu aria-label="Opciones del ejercicio">
           ${icon('more', 19)}
         </button>
@@ -757,6 +763,18 @@ export async function render(container, ctx) {
     if (!block) return;
     // Preserve ids as-is (string for local, numeric-as-string for server).
     const weId = block.dataset.weId;
+
+    // Tap on the exercise name/image opens its read-only detail (Resumen /
+    // Historial / Indicaciones). Uses the exercises-table id the stats endpoint
+    // expects, not the workout_exercise row id.
+    const detailTrigger = event.target.closest('[data-exercise-detail]');
+    if (detailTrigger) {
+      const exerciseId = Number(detailTrigger.dataset.exerciseDetail);
+      if (Number.isFinite(exerciseId)) {
+        openExerciseDetail(ctx, { exerciseId, name: detailTrigger.dataset.exerciseName });
+      }
+      return;
+    }
 
     const prevFill = event.target.closest('[data-prev-fill]');
     if (prevFill) {

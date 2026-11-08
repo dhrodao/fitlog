@@ -40,13 +40,22 @@ jobs:
           # UID/GID (belt and braces) and point HOME/npm cache at the writable
           # copy, so nothing root-owned is ever produced.
           #
+          # --network=host: this host's Docker bridge network has NO Internet
+          # (same reason the image build uses --network=host), so without it
+          # npm and the prebuild download cannot reach the network at all.
+          #
           # better-sqlite3 is a native addon. On this slim image prebuild-install
           # cannot auto-detect the libc (it reports an empty value) and so fails
           # to match its prebuilt binary, then falls back to node-gyp, which
           # needs a compiler the image does not ship. We therefore install with
           # --ignore-scripts and fetch the prebuilt binary explicitly with
           # `prebuild-install --libc glibc`, so nothing is compiled.
+          # prebuild-install downloads from GitHub releases; GitHub occasionally
+          # answers 5xx/times out from this host, and prebuild-install neither
+          # retries nor errors clearly (it masks a failed download as "No
+          # prebuilt binaries found"), so we fall back to the npmmirror mirror.
           docker run --rm \
+            --network=host \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp \
             -e npm_config_cache=/tmp/.npm \
@@ -58,7 +67,10 @@ jobs:
               rm -rf node_modules
               find server public test -name "*.js" -print0 | xargs -0 -n1 node --check
               npm ci --ignore-scripts
-              ( cd node_modules/better-sqlite3 \
-                && ../.bin/prebuild-install --runtime node --libc glibc )
+              cd node_modules/better-sqlite3
+              mirror="https://registry.npmmirror.com/-/binary/better-sqlite3/v{version}/{name}-v{version}-{runtime}-v{abi}-{platform}{libc}-{arch}.tar.gz"
+              ../.bin/prebuild-install --runtime node --libc glibc \
+                || ../.bin/prebuild-install --runtime node --libc glibc --download "$mirror"
+              cd /tmp/build
               npm test
             '

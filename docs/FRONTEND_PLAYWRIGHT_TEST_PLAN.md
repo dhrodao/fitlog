@@ -590,7 +590,7 @@ immediately — Q-6, a behaviour to pin down, not a missing feature).
   type only one field and assert the other is filled and the typed one is kept;
   type `0` and assert it stays `0`. Because the filled values feed the record
   check, a set auto-filled above the previous best also shows the trophy and
-  the `¡Récord batido!` toast (assert once, here or in WRK-023). Assert
+  the `¡Récord batido!` toast (a gold `.toast.record` with the trophy icon, not the green success toast; assert once, here or in WRK-023). Assert
   persistence by reloading, not by reading the inputs alone.
 
 ### 4.D Exercise catalog

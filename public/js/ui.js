@@ -237,6 +237,16 @@ export function setLoading(button, loading, label) {
 
 let toastStack = null;
 
+// Icon per toast type. A new type (and its CSS class) only needs an entry here;
+// anything not listed falls back to the default icon.
+const TOAST_ICONS = {
+  success: 'check',
+  error: 'info',
+  // Personal-record celebration: trophy, styled gold like the record chip.
+  record: 'trophy',
+};
+const DEFAULT_TOAST_ICON = 'sparkles';
+
 export function toast(message, type = 'default') {
   if (!toastStack) {
     toastStack = document.createElement('div');
@@ -246,7 +256,7 @@ export function toast(message, type = 'default') {
 
   const node = document.createElement('div');
   node.className = `toast ${type}`;
-  const iconName = type === 'success' ? 'check' : type === 'error' ? 'info' : 'sparkles';
+  const iconName = TOAST_ICONS[type] ?? DEFAULT_TOAST_ICON;
   node.innerHTML = `${icon(iconName, 16)}<span>${esc(message)}</span>`;
   toastStack.append(node);
 

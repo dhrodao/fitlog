@@ -1015,6 +1015,12 @@ dialog::backdrop {
 .toast.success { color: var(--success); }
 .toast.error { color: var(--danger); }
 
+/* Same gold as the record chip (.set-chip.record): text, trophy and border. */
+.toast.record {
+  color: var(--warning);
+  border-color: rgba(255, 214, 10, 0.28);
+}
+
 .toast.out {
   animation: toast-out 0.2s ease forwards;
 }

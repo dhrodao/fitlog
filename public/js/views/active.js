@@ -900,7 +900,7 @@ export async function render(container, ctx) {
       const recordIds = exercise ? paintRecords(exercise, block) : new Set();
       const isRecord = set.completed && recordIds.has(String(setId));
       if (set.completed) haptic(isRecord ? [12, 40, 18] : 12);
-      if (isRecord) toast('¡Récord batido!', 'success');
+      if (isRecord) toast('¡Récord batido!', 'record');
       renderStats();
       // Route through the scheduler and flush immediately: this serialises the
       // completion write against any in-flight weight/reps write for the same

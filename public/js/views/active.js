@@ -40,6 +40,40 @@ function computeTotals(workout) {
   return { volume, sets };
 }
 
+// Epley estimate, mirroring the server's per-set 1RM record definition.
+function epley1rm(weightKg, reps) {
+  const w = Number(weightKg);
+  const r = Number(reps);
+  if (!Number.isFinite(w) || !Number.isFinite(r) || w <= 0 || r <= 0) return 0;
+  if (r === 1) return w;
+  return w * (1 + r / 30);
+}
+
+// Completed sets that beat the exercise's all-time best, walking them in order
+// so each record must also beat the ones before it in this workout. Mirrors the
+// server's workoutRecords per-set logic. Exercises with no previous bests (e.g.
+// created offline) cannot know their history, so they never flag records.
+function recordSetIds(exercise) {
+  const ids = new Set();
+  if (!exercise.previousBests) return ids;
+  let weight = Number(exercise.previousBests.weight) || 0;
+  let e1rm = Number(exercise.previousBests.e1rm) || 0;
+  for (const set of exercise.sets) {
+    if (!set.completed) continue;
+    const w = Number(set.weightKg) || 0;
+    const r = Number(set.reps) || 0;
+    const e = epley1rm(w, r);
+    const beatsWeight = w > 0 && w > weight;
+    const beatsE1rm = e > e1rm;
+    if (beatsWeight || beatsE1rm) {
+      ids.add(String(set.id));
+      weight = Math.max(weight, w);
+      e1rm = Math.max(e1rm, e);
+    }
+  }
+  return ids;
+}
+
 function prevSet(previousSets, index) {
   return previousSets?.[index] || previousSets?.[previousSets.length - 1] || null;
 }
@@ -63,7 +97,10 @@ function setRow(exercise, set, index) {
         </button>
       </div>
       <div class="set-row ${set.completed ? 'completed' : ''}" data-set-handle>
-        <div class="set-num">${index + 1}</div>
+        <div class="set-num">
+          <span>${index + 1}</span>
+          <span class="set-record" data-record title="Récord personal" aria-label="Récord personal"${set.record ? '' : ' hidden'}>${icon('trophy', 10)}</span>
+        </div>
         <button type="button" class="set-prev" data-prev-fill aria-label="Usar datos de la serie anterior">
           ${esc(prevLabel(exercise.previousSets, index))}
         </button>
@@ -478,6 +515,21 @@ export async function render(container, ctx) {
     return exercise?.sets.find((set) => sameId(set.id, setId));
   };
 
+  // Recompute the record flag of every set in an exercise and paint its trophy.
+  // Returns the record ids so the caller can react to the set just toggled.
+  const paintRecords = (exercise, block) => {
+    const ids = recordSetIds(exercise);
+    for (const set of exercise.sets) set.record = ids.has(String(set.id));
+    if (block) {
+      block.querySelectorAll('[data-set-id]').forEach((wrapper) => {
+        const set = exercise.sets.find((item) => sameId(item.id, wrapper.dataset.setId));
+        const badge = wrapper.querySelector('[data-record]');
+        if (badge) badge.hidden = !set?.record;
+      });
+    }
+    return ids;
+  };
+
   // Map a set id back to its exercise so the scheduler can read live values.
   const findSetById = (setId) => {
     for (const exercise of workout.exercises) {
@@ -754,6 +806,11 @@ export async function render(container, ctx) {
       if (corrected) field.value = String(value);
     }
     set[field.dataset.field] = value;
+    // Editing a completed set can change whether it (or a later one) is a record.
+    if (set.completed) {
+      const exercise = getExercise(weId);
+      if (exercise) paintRecords(exercise, block);
+    }
     renderStats();
     persistSet(weId, setId);
   });
@@ -810,10 +867,15 @@ export async function render(container, ctx) {
       wrapper.querySelector('[data-set-handle]')?.classList.toggle('completed', set.completed);
       toggle.classList.toggle('checked', set.completed);
       if (set.completed) {
-        haptic(12);
         // Start the rest countdown from this set's planned rest (or a default).
         startRestTimer(set.restSeconds);
       }
+      // Completing a set can change the record status of this and later sets.
+      const exercise = getExercise(weId);
+      const recordIds = exercise ? paintRecords(exercise, block) : new Set();
+      const isRecord = set.completed && recordIds.has(String(setId));
+      if (set.completed) haptic(isRecord ? [12, 40, 18] : 12);
+      if (isRecord) toast('¡Récord batido!', 'success');
       renderStats();
       // Route through the scheduler and flush immediately: this serialises the
       // completion write against any in-flight weight/reps write for the same

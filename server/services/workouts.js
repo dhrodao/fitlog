@@ -57,13 +57,18 @@ export function workoutTotals(workoutId) {
   };
 }
 
-// Count how many of a workout's exercises set a personal record. An exercise
-// counts once if, within this workout, it beats the previous best in ANY of:
-// heaviest completed set (weight), best per-set estimated 1RM (Epley), or
+// Personal records for a workout. `count` is the number of exercises that set
+// a record; `setIds` are the individual completed sets that beat the previous
+// best in weight or estimated 1RM (Epley), including earlier sets of the same
+// workout, so the summary can flag the sets that advanced the record.
+//
+// An exercise counts once if, within this workout, it beats the previous best
+// in ANY of: heaviest completed set (weight), best per-set estimated 1RM, or
 // single-session volume (sum of weight*reps of its completed sets). Rep PRs are
-// intentionally excluded from the badge: more reps at a lighter weight would
-// inflate the count. The per-exercise detail view still shows all record types.
-export function prCount(userId, workout) {
+// intentionally excluded from the count: more reps at a lighter weight would
+// inflate it. Session volume is not attributable to one set, so it never marks
+// a set as a record. The per-exercise detail view still shows all record types.
+export function workoutRecords(userId, workout) {
   const exerciseIds = db
     .prepare(
       'SELECT DISTINCT exercise_id FROM workout_exercises WHERE workout_id = ?'
@@ -73,10 +78,11 @@ export function prCount(userId, workout) {
 
   // Completed sets of one exercise within a single workout.
   const setsForWorkout = db.prepare(
-    `SELECT s.weight_kg AS weightKg, s.reps AS reps
+    `SELECT s.id AS id, s.weight_kg AS weightKg, s.reps AS reps
      FROM workout_sets s
      JOIN workout_exercises we ON we.id = s.workout_exercise_id
-     WHERE we.workout_id = ? AND we.exercise_id = ? AND s.completed = 1`
+     WHERE we.workout_id = ? AND we.exercise_id = ? AND s.completed = 1
+     ORDER BY we.position ASC, s.set_number ASC, s.id ASC`
   );
   // Completed sets of one exercise across all earlier finished workouts, keyed
   // by workout so session volume can be computed per previous session.
@@ -105,12 +111,16 @@ export function prCount(userId, workout) {
     sets.reduce((sum, s) => sum + (Number(s.weightKg) || 0) * (Number(s.reps) || 0), 0);
 
   let count = 0;
+  const setIds = new Set();
+  const previousBestsByExercise = new Map();
   for (const exerciseId of exerciseIds) {
     const thisSets = setsForWorkout.all(workout.id, exerciseId);
+    const prevRows = previousSets.all(exerciseId, userId, workout.started_at);
+    const initialBests = bests(prevRows);
+    previousBestsByExercise.set(exerciseId, { ...initialBests });
     if (!thisSets.length) continue;
 
-    const prevRows = previousSets.all(exerciseId, userId, workout.started_at);
-    const prevBests = bests(prevRows);
+    let prevBests = { ...initialBests };
     // Previous best single-session volume for this exercise.
     const prevVolumeByWorkout = new Map();
     for (const row of prevRows) {
@@ -129,9 +139,29 @@ export function prCount(userId, workout) {
     const beatsE1rm = cur.e1rm > 0 && cur.e1rm > prevBests.e1rm;
     const beatsVolume = curVolume > 0 && curVolume > prevMaxVolume;
     if (beatsWeight || beatsE1rm || beatsVolume) count += 1;
+
+    for (const set of thisSets) {
+      const w = Number(set.weightKg) || 0;
+      const r = Number(set.reps) || 0;
+      const e1rm = epley1rm(w, r);
+      const setBeatsWeight = w > 0 && w > prevBests.weight;
+      const setBeatsE1rm = e1rm > prevBests.e1rm;
+      if (setBeatsWeight || setBeatsE1rm) {
+        setIds.add(set.id);
+
+        // A later set must beat this one too, so keep the running best without
+        // ever lowering either dimension (a weight PR can have a lower e1RM).
+        prevBests.weight = Math.max(prevBests.weight, w);
+        prevBests.e1rm = Math.max(prevBests.e1rm, e1rm);
+      }
+    }
   }
 
-  return count;
+  return { count, setIds, previousBestsByExercise };
+}
+
+export function prCount(userId, workout) {
+  return workoutRecords(userId, workout).count;
 }
 
 export function getPreviousSets(userId, exerciseId, beforeIso, excludeWorkoutId = null) {
@@ -205,13 +235,17 @@ export function getWorkoutExercises(workoutId) {
 
 export function getWorkoutDetail(userId, workoutId) {
   const workout = assertWorkout(userId, workoutId);
+  const records = workoutRecords(userId, workout);
   const exercises = getWorkoutExercises(workoutId).map((row) => {
     const sets = db
       .prepare(
         'SELECT * FROM workout_sets WHERE workout_exercise_id = ? ORDER BY set_number ASC, id ASC'
       )
       .all(row.workout_exercise_id)
-      .map(serializeSet);
+      .map((setRow) => ({
+        ...serializeSet(setRow),
+        record: records.setIds.has(setRow.id),
+      }));
 
     const previousSets = getPreviousSets(
       userId,
@@ -230,6 +264,12 @@ export function getWorkoutDetail(userId, workoutId) {
       supersetGroup: row.superset_group,
       sets,
       previousSets,
+      // All-time bests from earlier finished workouts, used by the active view
+      // to flag a record the moment a set is completed (no extra round trip).
+      previousBests: records.previousBestsByExercise.get(row.id) || {
+        weight: 0,
+        e1rm: 0,
+      },
       targetSets: sets.length,
     };
   });
@@ -253,7 +293,7 @@ export function getWorkoutDetail(userId, workoutId) {
     active,
     summary: {
       ...totals,
-      records: active ? 0 : prCount(userId, workout),
+      records: active ? 0 : records.count,
     },
     exercises,
   };

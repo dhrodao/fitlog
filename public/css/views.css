@@ -1364,6 +1364,17 @@
   color: var(--success);
 }
 
+.set-chip.record {
+  background: var(--warning-soft);
+  border-color: rgba(255, 214, 10, 0.28);
+  color: var(--warning);
+}
+
+.set-record {
+  display: inline-flex;
+  align-items: center;
+}
+
 .profile-head {
   display: flex;
   align-items: center;

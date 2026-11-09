@@ -16,7 +16,10 @@ import {
 
 function setChip(set) {
   const weight = set.weightKg != null ? `${formatNumber(set.weightKg, 1)}kg` : '—';
-  return `<span class="set-chip ${set.completed ? 'done' : ''}">${weight} × ${set.reps ?? '—'}</span>`;
+  const record = set.record
+    ? `<span class="set-record" title="Récord personal" aria-label="Récord personal">${icon('trophy', 11)}</span>`
+    : '';
+  return `<span class="set-chip ${set.completed ? 'done' : ''} ${set.record ? 'record' : ''}">${record}${weight} × ${set.reps ?? '—'}</span>`;
 }
 
 function groupExercises(exercises) {

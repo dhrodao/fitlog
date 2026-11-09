@@ -711,6 +711,10 @@
 }
 
 .bottom-nav {
+  /* Geometry shared with the sliding indicator; the compact state overrides it. */
+  --nav-pad-x: 10px;
+  --nav-gap: 4px;
+  --nav-item-h: 58px;
   position: fixed;
   z-index: 40;
   left: 50%;
@@ -721,8 +725,8 @@
   display: flex;
   align-items: center;
   justify-content: space-around;
-  gap: 4px;
-  padding: 8px 10px;
+  gap: var(--nav-gap);
+  padding: 8px var(--nav-pad-x);
   background: rgba(18, 19, 23, 0.82);
   border: 1px solid var(--border-strong);
   border-radius: 26px;
@@ -743,8 +747,10 @@
 
 /* Compact state while scrolling down */
 .bottom-nav.scrolled {
+  --nav-pad-x: 8px;
+  --nav-item-h: 40px;
   height: var(--nav-height-compact);
-  padding: 4px 8px;
+  padding: 4px var(--nav-pad-x);
   border-radius: 22px;
   width: min(calc(100% - 44px), 460px);
   bottom: calc(10px + var(--safe-bottom));
@@ -806,7 +812,31 @@
 
 .nav-item.active {
   color: var(--accent);
+}
+
+/* Pill behind the active tab. It is one persistent element that slides to the
+   active item (--nav-index, set from app.js) instead of each item painting its
+   own background, so a route change reads as the highlight moving. */
+.nav-indicator {
+  position: absolute;
+  top: 50%;
+  left: var(--nav-pad-x);
+  width: calc((100% - 2 * var(--nav-pad-x) - 2 * var(--nav-gap)) / 3);
+  height: var(--nav-item-h);
+  border-radius: 18px;
   background: var(--accent-soft);
+  pointer-events: none;
+  transform: translate(calc(var(--nav-index, 0) * (100% + var(--nav-gap))), -50%);
+  transition:
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    left 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease;
+}
+
+.bottom-nav:not([data-active]) .nav-indicator {
+  opacity: 0;
 }
 
 .nav-item.active svg {

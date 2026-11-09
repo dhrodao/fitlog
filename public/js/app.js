@@ -194,15 +194,21 @@ const ctx = {
   },
 };
 
-function navItem(name, label, path, iconName, active) {
+function navItem(name, label, path, iconName) {
   return `
-    <a class="nav-item ${active ? 'active' : ''}" href="#${path}" data-link="${path}" aria-label="${label}">
+    <a class="nav-item" href="#${path}" data-link="${path}" data-nav="${name}" aria-label="${label}">
       ${icon(iconName, 23, 2)}
       <span>${label}</span>
       <span class="nav-dot ${name === 'active' && state.activeWorkout ? '' : 'hidden'}"></span>
     </a>
   `;
 }
+
+const NAV_ITEMS = [
+  ['home', 'Inicio', '/', 'home'],
+  ['training', 'Entrenar', '/routines', 'dumbbell'],
+  ['profile', 'Perfil', '/profile', 'user'],
+];
 
 function updateNav(routeName) {
   document.documentElement.dataset.route = routeName;
@@ -214,12 +220,23 @@ function updateNav(routeName) {
 
   const trainingActive = ['routines', 'routine', 'routine-new', 'routine-edit', 'active', 'history', 'workout'].includes(routeName);
   const profileActive = ['profile', 'measurements', 'exercises'].includes(routeName);
+  const activeName = routeName === 'home' ? 'home' : trainingActive ? 'training' : profileActive ? 'profile' : null;
 
-  nav.innerHTML = [
-    navItem('home', 'Inicio', '/', 'home', routeName === 'home'),
-    navItem('training', 'Entrenar', '/routines', 'dumbbell', trainingActive),
-    navItem('profile', 'Perfil', '/profile', 'user', profileActive),
-  ].join('');
+  // Build the items once and update them in place afterwards: a persistent
+  // indicator can only slide to the new tab if the elements survive the route
+  // change (re-rendering with innerHTML would destroy it mid-transition).
+  if (!nav.querySelector('.nav-indicator')) {
+    nav.innerHTML =
+      '<span class="nav-indicator" aria-hidden="true"></span>' +
+      NAV_ITEMS.map((item) => navItem(...item)).join('');
+  }
+  NAV_ITEMS.forEach(([name], index) => {
+    const link = nav.querySelector(`[data-nav="${name}"]`);
+    link.classList.toggle('active', name === activeName);
+    if (name === activeName) nav.style.setProperty('--nav-index', String(index));
+  });
+  if (activeName) nav.dataset.active = activeName;
+  else delete nav.dataset.active;
   nav.classList.remove('hidden');
   shell.classList.remove('no-nav');
 }

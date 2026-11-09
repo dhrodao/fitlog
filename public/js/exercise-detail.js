@@ -70,7 +70,7 @@ function summaryTab(stats) {
       <div class="pr-section">
         <div class="pr-head">Récords personales</div>
         ${prGrid}
-        <p class="pr-note">${icon('info', 12)} El 1RM es un valor <b>estimado</b> (fórmula de Epley), no una marca real.</p>
+        <p class="pr-note">${icon('info', 12)}<span>El 1RM es un valor <b>estimado</b> (fórmula de Epley), no una marca real.</span></p>
       </div>
     </div>
   `;

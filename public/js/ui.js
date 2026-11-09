@@ -1,16 +1,61 @@
-// Subtle haptic feedback for key actions. No-ops where the Vibration API is
-// unavailable (iOS Safari, desktop) or when the user prefers reduced motion.
+// Subtle haptic feedback for key actions. Uses the Vibration API where it
+// exists (Android). iOS Safari has no navigator.vibrate, so there we fall back
+// to ticking a native switch (see iosTick). No-ops on desktop or when the user
+// prefers reduced motion.
 // `pattern` is an ms duration or an array accepted by navigator.vibrate.
 const reducedMotion =
   typeof window !== 'undefined' &&
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// iPhone/iPod/iPad, including iPadOS which reports itself as a Mac.
+const isIOS =
+  typeof navigator !== 'undefined' &&
+  (/iP(hone|od|ad)/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
+// Safari on iOS 17.4+ plays a light tick when a native `switch` checkbox is
+// toggled by a user gesture. Clicking an off-screen label toggles one without
+// showing anything. Not an official haptics API: it only works from a gesture
+// handler and gives a fixed tick (no duration or intensity), so it can stop
+// working in a future iOS release. Older iOS just does nothing.
+function iosTick() {
+  if (!document.body) return;
+  const label = document.createElement('label');
+  label.setAttribute('aria-hidden', 'true');
+  label.style.cssText =
+    'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.setAttribute('switch', '');
+  input.tabIndex = -1;
+  label.append(input);
+  document.body.append(label);
+  label.click();
+  label.remove();
+}
+
+// Approximate a vibration pattern with ticks: one at the start of every
+// vibrate segment (even positions; odd ones are pauses).
+function iosHaptic(pattern) {
+  const segments = Array.isArray(pattern) ? pattern : [pattern];
+  let offset = 0;
+  segments.forEach((ms, index) => {
+    if (index % 2 === 0) {
+      if (offset === 0) iosTick();
+      else setTimeout(iosTick, offset);
+    }
+    offset += Number(ms) || 0;
+  });
+}
+
 export function haptic(pattern = 10) {
   if (reducedMotion) return;
   try {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
       navigator.vibrate(pattern);
+    } else if (isIOS) {
+      iosHaptic(pattern);
     }
   } catch {
     /* ignore: haptics are best-effort */

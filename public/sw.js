@@ -62,7 +62,7 @@ const PRECACHE = [
 // inject a release id, so a test computes the same hash from the files on disk
 // and fails if it drifts from this constant — forcing a deliberate bump here
 // (and with it CACHE_VERSION) whenever a shell file changes.
-const SHELL_HASH = 'f8b5a44f1623400a';
+const SHELL_HASH = '7573ef7d4728573e';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

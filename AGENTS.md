@@ -87,7 +87,7 @@ The test suite is the deploy gate (runs in CI before anything is rebuilt), so
 - `docs/` — internal planning/technical docs. **Do not cite these in code or
   commits** (see golden rule 4).
 - `.github/workflows/deploy.yml` — self-hosted, pull-based deploy.
-- `docker-compose.yml` — `app` + optional `cloudflared`.
+- `docker-compose.yml` — `app` only (the tunnel/reverse proxy runs elsewhere).
 
 ## The PWA shell cache — ALWAYS honor this
 
@@ -143,8 +143,7 @@ via the `APP_IMAGE` compose variable (`${APP_IMAGE:-fitness-app:local}` locally)
 
 Invariants to preserve when editing `deploy.yml` / `docker-compose.yml`:
 
-- Never touch the `cloudflared` service or the `./data` bind mount during a
-  deploy; the SQLite DB lives in `./data` and must survive.
+- Never touch the `./data` bind mount during a deploy; the SQLite DB lives in `./data` and must survive.
 - The host's Docker **bridge network has no Internet** — builds use
   `--network=host` (and compose `build.network: host`). Keep that.
 - `.env` and `./data` are untracked and must stay that way.

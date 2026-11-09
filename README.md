@@ -171,37 +171,21 @@ docker compose start app
 data; the recovery time objective is a few minutes (copy one file and restart).
 Tighten the RPO by scheduling the backup more frequently.
 
-## Expose it with Cloudflare Tunnel (optional)
+## HTTPS and reverse proxy
 
-The Compose file includes a `cloudflared` service that publishes the app over
-HTTPS without opening any inbound ports.
+The Compose file only runs the app; it does not start any tunnel or reverse
+proxy. Publish it over HTTPS with whatever fronts it in your infrastructure (for
+example a Cloudflare Tunnel running on another host) and point that proxy to
+`http://<app-host>:3000` (the app runs on the host network).
 
-1. In the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/)
-   go to **Networks → Tunnels → Create a tunnel** (type *Cloudflared*).
-2. Name the tunnel and copy its **token**.
-3. Under the tunnel's **Public Hostname** tab, add a hostname (e.g.
-   `fitlog.yourdomain.com`) pointing to the service `http://localhost:3000`
-   (the app runs on the host network).
-4. Put the token in `.env`:
-   ```
-   TUNNEL_TOKEN=eyJ...your-token...
-   ```
-5. Start everything:
-   ```bash
-   docker compose up -d
-   ```
+Behind that proxy, set in `.env`:
+- `COOKIE_SECURE=true` (forced on in production anyway).
+- `PUBLIC_URL` to the public HTTPS URL.
+- Add that URL to the **Authorized JavaScript origins** in Google Cloud so the
+  Google login works.
 
-The `cloudflared` container also uses `network_mode: host` so it can reach both
-Cloudflare's edge (outbound) and the app at `http://localhost:3000`.
-
-When serving through the tunnel, set in `.env`:
-- `COOKIE_SECURE=true` (traffic is HTTPS end to end at the edge).
-- Add your tunnel hostname (e.g. `https://fitlog.yourdomain.com`) to the
-  **Authorized JavaScript origins** in Google Cloud so the Google login works.
-
-If you do not use the tunnel, leave `TUNNEL_TOKEN` empty; the `cloudflared`
-service will just keep retrying and the app still works locally. To skip it
-entirely, start only the app: `docker compose up -d app`.
+Session cookies are `Secure` in production, so signing in only works through the
+HTTPS URL (or `localhost`), not over plain `http://<lan-ip>:3000`.
 
 ## Automatic deploy on push (optional)
 
@@ -227,8 +211,8 @@ On push to `main` (or via the **Run workflow** button — `workflow_dispatch`) i
    backup, not the only path.)
 4. Builds the `app` image tagged with the commit SHA (`fitness-app:<sha>`),
    recording the image the container is currently running so it can be restored
-   if the new one fails. Only the `app` service is recreated; the `cloudflared`
-   service and the `./data` bind mount are left untouched.
+   if the new one fails. Only the `app` service is recreated; the `./data` bind mount
+   is left untouched.
 5. Probes `GET /api/health` on the new image (up to 60 s). If it becomes
    healthy, the deploy succeeds. If it does not, the job dumps the last 60 lines
    of logs and **rolls back** to the previous image (then fails the job so the
@@ -317,7 +301,7 @@ From the **Profile** view:
   you save a workout in Hevy, Hevy POSTs `{ "workoutId": "..." }`; Fitlog
   acknowledges immediately (Hevy requires a 200 within 5 s) and runs an
   incremental sync in the background. The app must be reachable over HTTPS
-  (e.g. via the Cloudflare Tunnel described above).
+  (e.g. via the reverse proxy / tunnel described above).
 
 Exercise names from Hevy are matched to the free-exercise-db catalog (directly
 or after stripping the trailing `(Equipment)` suffix); unmatched names are kept

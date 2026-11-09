@@ -155,7 +155,7 @@ jobs:
           url="http://127.0.0.1:${PORT}/api/health"
 
           # Recreate only the app container from the freshly built tag. The
-          # cloudflared service and the ./data bind mount are left untouched.
+          # ./data bind mount is left untouched.
           APP_IMAGE="$NEW_IMAGE" docker compose up -d --no-build app
 
           echo "Probing ${url} ..."

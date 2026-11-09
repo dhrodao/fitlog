@@ -509,7 +509,10 @@ finished-offline workout that has not been uploaded; resolved by D-7 (AC-5).
 
 **Implemented (testable now).** Start empty / from routine; add exercise
 (catalog, own); add/delete set; edit kg/reps with decimal comma/point; check
-set; previous-set suggestion (`[data-prev-fill]`) and prefill; rest timer
+set; previous-set suggestion (`[data-prev-fill]`) and prefill; the live
+**record trophy** badge (`[data-record]`, `Récord personal`) that appears on a
+completed set once it beats the exercise's previous best (weight or estimated
+1RM) and hides otherwise; rest timer
 (toggle, skip, +15 s); reorder, replace, superset create/remove (server-only);
 remove exercise (no confirm); finish (confirm when 0 completed sets); discard
 (danger confirm); history with month grouping and pagination; workout detail
@@ -566,6 +569,19 @@ immediately — Q-6, a behaviour to pin down, not a missing feature).
 * Failure injection (mocked): `PATCH …/sets/*` → 500 keeps `Guardando…` visible
   and shows the error toast; `POST …/finish` → 500 leaves the user on the active
   screen with the button restored.
+* Record trophy (WRK-023): the active screen flags a record from
+  `exercise.previousBests`, so a brand-new custom exercise never shows one on its
+  first session — seed a finished workout first (`hist`), then in a new workout
+  log one set below that best and one above it. Assert the trophy
+  (`[data-record]`) is **visible** on the set that beats the best and **hidden**
+  (not merely absent) on the other, and that unchecking the record set hides it.
+  Assert visibility with `toBeVisible`/`toBeHidden` rather than the attribute, so
+  it guards the CSS regression where a `display` rule on `.set-record` beat the
+  `hidden` attribute and the trophy never hid. **When this scenario is
+  implemented, delete `test/active-e1rm-parity.test.js`**: that unit test is a
+  stopgap that pins the view's reimplemented `epley1rm` to the server's copy; the
+  stronger, less fragile guarantee is this end-to-end check, which exercises the
+  real record-flagging path in the browser.
 
 ### 4.D Exercise catalog
 
@@ -836,6 +852,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | WRK-020 | Workouts | Reorder / superset / replace (server-only) | Active workout, 3 exercises | Reorder via sheet and `Guardar orden`; add to superset and remove; replace one | Order persists after reload; `Superset` chip shown/removed; replaced exercise name updates | E2E | P2 | RB | reset, mine | M |
 | WRK-021 | Workouts | Exercise detail — Historial and Indicaciones tabs | ≥ 2 finished workouts of a catalog-linked exercise (`hist`, `cat`) | Open a finished workout → tap the exercise name/image → switch to `Historial`, then `Indicaciones` | `Historial` lists each session (name + date) with one line per set (`kg × reps`) newest first; `Indicaciones` shows translated muscles/equipment chips and the numbered steps; a custom (non-catalog) exercise hides the `Indicaciones` tab | E2E | P1 | RB | hist, cat | M |
 | WRK-022 | Workouts | Exercise detail opens from the active screen | Active workout with a catalog-linked exercise (`mine`/`cat`) | On the active screen tap the exercise name/image | The same detail modal opens (Resumen/Historial/Indicaciones) without triggering the ⋯ exercise menu; closing it leaves the workout editable | E2E | P2 | RB | reset, cat | S |
+| WRK-023 | Workouts | Live record trophy shows only for a set that beats the previous best | A finished workout with the exercise so it has a previous best (`hist`, `mine`) | New workout → add the same exercise → add two sets: one below the previous best and one above it → mark both complete | The trophy badge (`[data-record]`, `Récord personal`) is **visible** on the set that beats the best and **hidden** on the set that does not; unchecking the record set hides its trophy. Guards the CSS regression where `.set-record`'s `display` overrode the `hidden` attribute and the trophy never hid. **On implementing this, delete the stopgap unit test `test/active-e1rm-parity.test.js`** | E2E | P1 | RB | reset, mine, hist | M |
 
 ### 5.5 Exercise catalog (D)
 
@@ -939,9 +956,9 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | Priority | Count | Notes |
 |---|---|---|
 | P0 | 17 | AUTH-001–005, NAV-001–002, WRK-001–005, RTN-001–002, OFF-002, OFF-004–005 |
-| P1 | 68 | Bulk of the value; implemented milestone by milestone |
+| P1 | 69 | Bulk of the value; implemented milestone by milestone |
 | P2 | 16 | Optional; do only if cheap or after a regression |
-| **Total** | **101** | Counted from the tables above. Not all are meant to exist at once — see the roadmap (P0 + a curated P1 subset is the realistic target) |
+| **Total** | **102** | Counted from the tables above. Not all are meant to exist at once — see the roadmap (P0 + a curated P1 subset is the realistic target) |
 
 ---
 
@@ -1313,7 +1330,7 @@ commit.
 
 ### M4 — History, workout edit, measurements, statistics
 * **Objective:** cover data viewing/editing and the date-sensitive features.
-* **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019, 021 · MEA-001–009 · STA-001, 002.
+* **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019, 021, 023 · MEA-001–009 · STA-001, 002.
   (WRK-016 and the confirm part of WRK-017 need AC-6 / AC-4 first.)
 * **Infra:** `seedWorkouts`/`seedMeasurements` with fixed dates; `clock`;
   non-UTC `timezoneId` case.
@@ -1394,8 +1411,8 @@ commit.
 * **Validation:** full suite passes with `--workers=4` ×5 consecutive runs.
 * **DoD:** common DoD.
 
-**Scheduling coverage check:** M1 (10) + M2 (11) + M3 (15) + M4 (19) + M5 (13) +
-M6 (13) + M7 (6) + M8 (9) + M9 (4) + M10 (1) = **101**.
+**Scheduling coverage check:** M1 (10) + M2 (11) + M3 (15) + M4 (20) + M5 (13) +
+M6 (13) + M7 (6) + M8 (9) + M9 (4) + M10 (1) = **102**.
 
 ---
 

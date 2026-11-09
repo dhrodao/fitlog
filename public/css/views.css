@@ -1375,6 +1375,10 @@
   align-items: center;
 }
 
+.set-record[hidden] {
+  display: none;
+}
+
 .profile-head {
   display: flex;
   align-items: center;

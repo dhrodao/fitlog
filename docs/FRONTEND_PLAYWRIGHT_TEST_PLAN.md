@@ -509,7 +509,9 @@ finished-offline workout that has not been uploaded; resolved by D-7 (AC-5).
 
 **Implemented (testable now).** Start empty / from routine; add exercise
 (catalog, own); add/delete set; edit kg/reps with decimal comma/point; check
-set; previous-set suggestion (`[data-prev-fill]`) and prefill; the live
+set; previous-set suggestion (`[data-prev-fill]`) and prefill; completing a set
+with empty kg/reps **auto-fills** them from the previous session (per field; a
+typed value, including `0`, is kept); the live
 **record trophy** badge (`[data-record]`, `Récord personal`) that appears on a
 completed set once it beats the exercise's previous best (weight or estimated
 1RM) and hides otherwise; rest timer
@@ -582,6 +584,14 @@ immediately — Q-6, a behaviour to pin down, not a missing feature).
   stopgap that pins the view's reimplemented `epley1rm` to the server's copy; the
   stronger, less fragile guarantee is this end-to-end check, which exercises the
   real record-flagging path in the browser.
+* Auto-fill on completion (WRK-024): needs the same seeded history as the
+  trophy (`previousSets` come from the last finished workout). Check the set
+  with both fields empty and assert both inputs now show the previous values;
+  type only one field and assert the other is filled and the typed one is kept;
+  type `0` and assert it stays `0`. Because the filled values feed the record
+  check, a set auto-filled above the previous best also shows the trophy and
+  the `¡Récord batido!` toast (assert once, here or in WRK-023). Assert
+  persistence by reloading, not by reading the inputs alone.
 
 ### 4.D Exercise catalog
 
@@ -852,7 +862,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | WRK-020 | Workouts | Reorder / superset / replace (server-only) | Active workout, 3 exercises | Reorder via sheet and `Guardar orden`; add to superset and remove; replace one | Order persists after reload; `Superset` chip shown/removed; replaced exercise name updates | E2E | P2 | RB | reset, mine | M |
 | WRK-021 | Workouts | Exercise detail — Historial and Indicaciones tabs | ≥ 2 finished workouts of a catalog-linked exercise (`hist`, `cat`) | Open a finished workout → tap the exercise name/image → switch to `Historial`, then `Indicaciones` | `Historial` lists each session (name + date) with one line per set (`kg × reps`) newest first; `Indicaciones` shows translated muscles/equipment chips and the numbered steps; a custom (non-catalog) exercise hides the `Indicaciones` tab | E2E | P1 | RB | hist, cat | M |
 | WRK-022 | Workouts | Exercise detail opens from the active screen | Active workout with a catalog-linked exercise (`mine`/`cat`) | On the active screen tap the exercise name/image | The same detail modal opens (Resumen/Historial/Indicaciones) without triggering the ⋯ exercise menu; closing it leaves the workout editable | E2E | P2 | RB | reset, cat | S |
-| WRK-023 | Workouts | Live record trophy shows only for a set that beats the previous best | A finished workout with the exercise so it has a previous best (`hist`, `mine`) | New workout → add the same exercise → add two sets: one below the previous best and one above it → mark both complete | The trophy badge (`[data-record]`, `Récord personal`) is **visible** on the set that beats the best and **hidden** on the set that does not; unchecking the record set hides its trophy. Guards the CSS regression where `.set-record`'s `display` overrode the `hidden` attribute and the trophy never hid. **On implementing this, delete the stopgap unit test `test/active-e1rm-parity.test.js`** | E2E | P1 | RB | reset, mine, hist | M |
+| WRK-023 | Workouts | Live record trophy shows only for a set that beats the previous best | A finished workout with the exercise so it has a previous best (`hist`, `mine`) | New workout → add the same exercise → add two sets: one below the previous best and one above it → mark both complete | The trophy badge (`[data-record]`, `Récord personal`) is **visible** on the set that beats the best and **hidden** on the set that does not; unchecking the record set hides its trophy; completing the record set shows the toast `¡Récord batido!` (and not for a non-record set). Guards the CSS regression where `.set-record`'s `display` overrode the `hidden` attribute and the trophy never hid. **On implementing this, delete the stopgap unit test `test/active-e1rm-parity.test.js`** | E2E | P1 | RB | reset, mine, hist | M |
 | WRK-024 | Workouts | Completing a set auto-fills empty kg/reps from the previous session | A finished workout with the exercise (`hist`, `mine`) | New workout → add the same exercise → add a set and leave kg/reps empty → check it; repeat typing only the weight, and typing an explicit `0` | The empty fields take the previous session's values (inputs and totals update, persisted after reload); a field the user filled is kept (only the empty one is filled); an explicit `0` is not overwritten; without history nothing is filled and the set still completes | E2E | P1 | RB | reset, mine, hist | M |
 
 ### 5.5 Exercise catalog (D)

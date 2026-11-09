@@ -85,6 +85,25 @@ function prevLabel(previousSets, index) {
   return `${weight} × ${prev.reps ?? '—'}`;
 }
 
+// Copy the previous session's kg/reps for this set position into the model and
+// its inputs. With onlyMissing, fields that already hold a value (including an
+// explicit 0) or that are flagged invalid are left alone. Returns true when
+// anything changed.
+function applyPrevious(exercise, set, wrapper, { onlyMissing = false } = {}) {
+  const previous = prevSet(exercise.previousSets, exercise.sets.indexOf(set));
+  if (!previous) return false;
+  let changed = false;
+  for (const [key, field] of [['weightKg', 'weightKg'], ['reps', 'reps']]) {
+    if (previous[key] == null) continue;
+    const input = wrapper.querySelector(`[data-field="${field}"]`);
+    if (onlyMissing && (set[key] != null || input?.classList.contains('input-error'))) continue;
+    set[key] = previous[key];
+    if (input) input.value = String(previous[key]);
+    changed = true;
+  }
+  return changed;
+}
+
 function setRow(exercise, set, index) {
   const previous = prevSet(exercise.previousSets, index);
   const weightPlaceholder = previous?.weightKg != null ? formatNumber(previous.weightKg, 1) : '0';
@@ -840,17 +859,7 @@ export async function render(container, ctx) {
       const exercise = getExercise(weId);
       const set = getSet(weId, setId);
       if (!exercise || !set) return;
-      const index = exercise.sets.indexOf(set);
-      const previous =
-        exercise.previousSets?.[index] ||
-        exercise.previousSets?.[exercise.previousSets.length - 1];
-      if (!previous) return;
-      if (previous.weightKg != null) set.weightKg = previous.weightKg;
-      if (previous.reps != null) set.reps = previous.reps;
-      const weightInput = wrapper.querySelector('[data-field="weightKg"]');
-      const repsInput = wrapper.querySelector('[data-field="reps"]');
-      if (weightInput && set.weightKg != null) weightInput.value = String(set.weightKg);
-      if (repsInput && set.reps != null) repsInput.value = String(set.reps);
+      if (!applyPrevious(exercise, set, wrapper)) return;
       haptic(8);
       renderStats();
       persistSet(weId, setId);
@@ -866,6 +875,13 @@ export async function render(container, ctx) {
       set.completed = !set.completed;
       wrapper.querySelector('[data-set-handle]')?.classList.toggle('completed', set.completed);
       toggle.classList.toggle('checked', set.completed);
+      // Completing a set with empty kg/reps takes them from the previous
+      // session, as if "Anterior" had been tapped. Done before the record check
+      // so the filled values count. The write below persists them.
+      const filledExercise = getExercise(weId);
+      if (set.completed && filledExercise) {
+        applyPrevious(filledExercise, set, wrapper, { onlyMissing: true });
+      }
       if (set.completed) {
         // Start the rest countdown from this set's planned rest (or a default).
         startRestTimer(set.restSeconds);

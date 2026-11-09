@@ -886,6 +886,22 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The save / offline notices share one reserved line. They are hidden with
+   `visibility` instead of `display: none`, so showing or hiding them never
+   changes the header height (which made the whole screen jump on every edit). */
+.save-slot {
+  display: grid;
+}
+
+.save-slot > .save-state {
+  grid-area: 1 / 1;
+}
+
+.save-slot > .save-state[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
 .finish-check {
   display: flex;
   align-items: center;

@@ -26,6 +26,9 @@ const DEFAULT_BASE_BACKOFF = 1000;
  * @param {number} [options.baseBackoff] Base backoff in ms (exponential).
  * @param {(error: Error, key: string|number) => void} [options.onError]
  *        Called when a write fails after exhausting retries (value stays dirty).
+ * @param {(error: Error, key: string|number) => void} [options.onRetry]
+ *        Called each time a write fails and a retry is scheduled (the
+ *        connection is struggling). isRetrying() is true from then on.
  * @param {() => void} [options.onSettled]
  *        Called after each write promise settles (success, give-up, or after
  *        all retries), once it has left the in-flight set. Use it to refresh
@@ -37,6 +40,7 @@ export function createWriteScheduler({
   maxRetries = DEFAULT_MAX_RETRIES,
   baseBackoff = DEFAULT_BASE_BACKOFF,
   onError = null,
+  onRetry = null,
   onSettled = null,
 } = {}) {
   if (typeof write !== 'function') {
@@ -58,6 +62,7 @@ export function createWriteScheduler({
       .catch(async (error) => {
         if (attempt < maxRetries) {
           retrying.add(key);
+          onRetry?.(error, key);
           await delay(baseBackoff * 2 ** attempt);
           retrying.delete(key);
           return runWrite(key, attempt + 1);
@@ -108,6 +113,11 @@ export function createWriteScheduler({
     /** True while any edit is debouncing, retrying or being written. */
     hasPending() {
       return timers.size > 0 || pending.size > 0 || retrying.size > 0;
+    },
+
+    /** True while a failed write is waiting to be retried. */
+    isRetrying() {
+      return retrying.size > 0;
     },
   };
 }

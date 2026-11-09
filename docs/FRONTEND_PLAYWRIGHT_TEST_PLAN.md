@@ -568,7 +568,7 @@ immediately — Q-6, a behaviour to pin down, not a missing feature).
   `localStorage`.
 * Validation: non-numeric weight (`5kg`) → field flagged and not persisted
   (assert after reload); negative → clamped to `0`; reps rounded to integer.
-* Failure injection (mocked): `PATCH …/sets/*` → 500 keeps `Guardando…` visible
+* Failure injection (mocked): `PATCH …/sets/*` → 500 shows `Reintentando guardar…` (`[data-save-state]`) while the write is retried
   and shows the error toast; `POST …/finish` → 500 leaves the user on the active
   screen with the button restored.
 * Record trophy (WRK-023): the active screen flags a record from
@@ -842,7 +842,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 |---|---|---|---|---|---|---|---|---|---|---|
 | WRK-001 ✅ | Workouts | Start an empty workout | Signed in, no active workout | `Entrenar` → `Empezar Entrenamiento Vacío` | Active screen: `Sin ejercicios` hint, `Añadir ejercicio`, timer; home now shows the `Entrenamiento en curso` banner instead of `Empezar a entrenar` | E2E | P0 | RB | reset | S |
 | WRK-002 | Workouts | **Core loop**: log and finish a workout | Seeded custom exercise (`mine`) | Start empty → `Añadir ejercicio` → tab `Mis ejercicios` → pick → `Agregar Serie` → kg `60`, reps `8` → check → `Terminar` | Toast `¡Entrenamiento guardado!`; detail page shows totals (1 serie, 480 kg); the same workout is first in history and in home `Historial reciente`; nav dot/banner gone | E2E | P0 | RB | reset, mine | L |
-| WRK-003 | Workouts | Edits persist (debounce + flush paths) | Active workout with 1 set | Type reps; wait for save indicator to clear; reload. Variant: type then immediately navigate to home and back | Value present after reload in both variants; `Guardando…` indicator appears then hides | E2E | P0 | RB | reset, mine | M |
+| WRK-003 | Workouts | Edits persist (debounce + flush paths) | Active workout with 1 set | Type reps; wait for save indicator to clear; reload. Variant: type then immediately navigate to home and back | Value present after reload in both variants; no save notice appears on a normal edit (`[data-save-state]` stays hidden) | E2E | P0 | RB | reset, mine | M |
 | WRK-004 | Workouts | Finish with no completed sets | Active workout, 0 completed | `Terminar` → dialog `Terminar sin series` → `Cancelar`, then again → `Terminar` | Cancel keeps the workout active; confirm finishes and opens detail | E2E | P0 | RB | reset | S |
 | WRK-005 | Workouts | Discard | Active workout | `Descartar entrenamiento` → cancel; again → confirm | Cancel keeps it; confirm toasts `Entrenamiento descartado`, goes home, banner gone, `GET /api/workouts/active` returns none | E2E | P0 | RB | reset | S |
 | WRK-006 | Workouts | One active workout rule (**message needs app change AC-9**, D-13) | Active workout exists | From training view click `Empezar Entrenamiento Vacío` and, separately, `Empezar Rutina`; open the banner from home | No second workout; user lands on the existing active screen and sees a toast `Ya tienes un entrenamiento en curso`; banner opens the same workout | E2E | P1 | RB | reset | S |

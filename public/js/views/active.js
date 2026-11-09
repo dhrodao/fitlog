@@ -366,8 +366,10 @@ export async function render(container, ctx) {
           <div class="active-title">
             <div class="t" data-title>${esc(workout.name)}</div>
             <div class="s" data-timer>${formatClock(workout.durationSeconds)}</div>
-            <div class="s save-state" data-save-state hidden aria-live="polite">Guardando…</div>
-            <div class="s save-state" data-offline-state hidden aria-live="polite">Sin conexión · se sincronizará</div>
+            <div class="save-slot">
+              <div class="s save-state" data-save-state hidden aria-live="polite">Reintentando guardar…</div>
+              <div class="s save-state" data-offline-state hidden aria-live="polite">Sin conexión · se sincronizará</div>
+            </div>
           </div>
           <button type="button" class="icon-btn surface" data-rest-toggle aria-label="Temporizador de descanso">
             ${icon('timer', 20)}
@@ -558,9 +560,12 @@ export async function render(container, ctx) {
     return null;
   };
 
+  // Only surface the save state when a write is failing and being retried.
+  // A normal save takes a few ms; flashing a "saving" label on every edit was
+  // noise (and made the header jump), so connection trouble is all we show.
   const updateSaveState = () => {
     const el = container.querySelector('[data-save-state]');
-    if (el) el.hidden = !setWrites.hasPending();
+    if (el) el.hidden = !setWrites.isRetrying();
   };
 
   // Per-set write scheduler: one debounce per set, and flush()
@@ -588,6 +593,7 @@ export async function render(container, ctx) {
       }
     },
     onSettled: updateSaveState,
+    onRetry: updateSaveState,
     onError: (error) => {
       if (error.status !== 401) toast(errorMessage(error), 'error');
     },

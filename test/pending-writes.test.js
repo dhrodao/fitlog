@@ -88,6 +88,43 @@ test('active-set persistence scheduler', async (t) => {
     assert.equal(s.hasPending(), false, 'no pending work after a successful retry');
   });
 
+  await t.test('isRetrying and onRetry only reflect a failing write, not a normal one', async () => {
+    let attempts = 0;
+    const retries = [];
+    let retryingDuringBackoff = null;
+    const s = createWriteScheduler({
+      wait: 5,
+      baseBackoff: 20,
+      maxRetries: 3,
+      write: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('flaky');
+      },
+      onRetry: (e) => retries.push(e.message),
+    });
+
+    s.schedule(1);
+    await tick(15); // debounce fired, first attempt failed, now in backoff
+    retryingDuringBackoff = s.isRetrying();
+    await tick(60);
+
+    assert.equal(retryingDuringBackoff, true, 'isRetrying is true while waiting to retry');
+    assert.deepEqual(retries, ['flaky'], 'onRetry fires once for the failed attempt');
+    assert.equal(s.isRetrying(), false, 'isRetrying clears once the retry succeeds');
+
+    // A write that succeeds first time never reports a retry.
+    const quiet = [];
+    const ok = createWriteScheduler({
+      wait: 5,
+      write: async () => {},
+      onRetry: () => quiet.push('retry'),
+    });
+    ok.schedule(1);
+    await tick(15);
+    assert.equal(ok.isRetrying(), false);
+    assert.equal(quiet.length, 0, 'no retry notice for a normal save');
+  });
+
   await t.test('completing a set flushes the latest typed value', async () => {
     const snapshots = [];
     const set = { weightKg: 60, reps: 8, completed: false };

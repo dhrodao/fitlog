@@ -33,6 +33,9 @@ const paths = {
   chevronLeft: '<path d="m15 6-6 6 6 6"/>',
   chevronRight: '<path d="m9 6 6 6-6 6"/>',
   arrowLeft: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
+  arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  backspace:
+    '<path d="M9.5 5H19a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9.5L3.5 12Z"/><path d="m12.5 9.5 5 5M17.5 9.5l-5 5"/>',
   arrowUp: '<path d="M12 19V5M6 11l6-6 6 6"/>',
   arrowDown: '<path d="M12 5v14M6 13l6 6 6-6"/>',
   check: '<path d="m5 12.5 4.2 4.2L19 7"/>',

@@ -13,6 +13,7 @@ import {
   openActionSheet,
   toast,
 } from '../ui.js';
+import { createSetKeypad, isTouchKeypad } from '../keypad.js';
 
 function setChip(set) {
   const weight = set.weightKg != null ? `${formatNumber(set.weightKg, 1)}kg` : '—';
@@ -69,15 +70,19 @@ function exerciseBlock(exercise, { inSuperset = false } = {}) {
 // --- editable mode markup (mirrors the active-workout set editing) ---
 
 function editSetRow(set, index) {
+  // On touch devices the on-screen keypad replaces the system keyboard. The
+  // weight field is plain text there: a number input would drop a trailing "."
+  // while the decimal is still being typed.
+  const touch = isTouchKeypad();
   return `
     <div class="set-row ${set.completed ? 'completed' : ''}" data-set-id="${set.id}">
       <div class="set-num">${index + 1}</div>
       <div class="set-cell">
-        <input class="number-input" type="number" inputmode="decimal" step="0.5" min="0" placeholder="0"
+        <input class="number-input" type="${touch ? 'text' : 'number'}" inputmode="${touch ? 'none' : 'decimal'}" step="0.5" min="0" placeholder="0"
           value="${set.weightKg != null ? esc(String(set.weightKg)) : ''}" data-field="weightKg" aria-label="Peso en kg" />
       </div>
       <div class="set-cell">
-        <input class="number-input" type="number" inputmode="numeric" min="0" placeholder="0"
+        <input class="number-input" type="number" inputmode="${touch ? 'none' : 'numeric'}" min="0" placeholder="0"
           value="${set.reps != null ? esc(String(set.reps)) : ''}" data-field="reps" aria-label="Repeticiones" />
       </div>
       <button type="button" class="check-btn ${set.completed ? 'checked' : ''}" data-toggle aria-label="Completar serie">
@@ -173,10 +178,17 @@ export async function render(container, ctx, params) {
   // Imported workouts are read-only: a later Hevy sync would overwrite any edit.
   const readOnly = workout.source === 'hevy';
   let editing = false;
+  // On-screen numeric keypad of the set editor (touch devices only).
+  let keypad = null;
+  const closeKeypad = () => {
+    keypad?.destroy();
+    keypad = null;
+  };
 
   // ---------- read-only (summary) view ----------
 
   function renderView() {
+    closeKeypad();
     const summary = workout.summary || {};
     container.innerHTML = `
     <div class="view">
@@ -351,6 +363,7 @@ export async function render(container, ctx, params) {
   }
 
   function renderEdit() {
+    closeKeypad();
     container.innerHTML = `
     <div class="view" style="gap:14px">
       <div class="topbar">
@@ -399,6 +412,7 @@ export async function render(container, ctx, params) {
 
     // --- set field edits (weight / reps) ---
     const exercisesEl = container.querySelector('[data-exercises]');
+    if (isTouchKeypad()) keypad = createSetKeypad({ scope: exercisesEl });
 
     exercisesEl.addEventListener('change', async (event) => {
       const field = event.target.closest('[data-field]');
@@ -410,7 +424,7 @@ export async function render(container, ctx, params) {
       const set = getSet(weId, setId);
       if (!set) return;
       const raw = field.value;
-      let value = raw === '' ? null : Number(raw);
+      let value = raw === '' ? null : Number(String(raw).replace(',', '.'));
       if (value != null) {
         const invalid = !Number.isFinite(value) || value < 0;
         if (invalid) value = 0;
@@ -514,4 +528,7 @@ export async function render(container, ctx, params) {
   }
 
   renderView();
+
+  // Remove the on-screen keypad (it lives on <body>) when leaving the view.
+  return closeKeypad;
 }

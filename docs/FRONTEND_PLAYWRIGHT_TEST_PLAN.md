@@ -864,6 +864,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | WRK-022 | Workouts | Exercise detail opens from the active screen | Active workout with a catalog-linked exercise (`mine`/`cat`) | On the active screen tap the exercise name/image | The same detail modal opens (Resumen/Historial/Indicaciones) without triggering the ⋯ exercise menu; closing it leaves the workout editable | E2E | P2 | RB | reset, cat | S |
 | WRK-023 | Workouts | Live record trophy shows only for a set that beats the previous best | A finished workout with the exercise so it has a previous best (`hist`, `mine`) | New workout → add the same exercise → add two sets: one below the previous best and one above it → mark both complete | The trophy badge (`[data-record]`, `Récord personal`) is **visible** on the set that beats the best and **hidden** on the set that does not; unchecking the record set hides its trophy; completing the record set shows the toast `¡Récord batido!` (and not for a non-record set). Guards the CSS regression where `.set-record`'s `display` overrode the `hidden` attribute and the trophy never hid. **On implementing this, delete the stopgap unit test `test/active-e1rm-parity.test.js`** | E2E | P1 | RB | reset, mine, hist | M |
 | WRK-024 | Workouts | Completing a set auto-fills empty kg/reps from the previous session | A finished workout with the exercise (`hist`, `mine`) | New workout → add the same exercise → add a set and leave kg/reps empty → check it; repeat typing only the weight, and typing an explicit `0` | The empty fields take the previous session's values (inputs and totals update, persisted after reload); a field the user filled is kept (only the empty one is filled); an explicit `0` is not overwritten; without history nothing is filled and the set still completes | E2E | P1 | RB | reset, mine, hist | M |
+| WRK-025 ✅ | Workouts | On-screen numeric keypad on touch devices | Touch-emulated context (`hasTouch`, `isMobile`); active workout with two exercises (`mine`); a finished workout opened with `Editar entrenamiento` | Tap `Kg` → type digits, `.`, `+`/`−`, backspace → arrow key; type reps → check key; repeat through every set; tap elsewhere / `Ocultar teclado`. Variant: desktop (no touch) | The system keyboard is suppressed (`inputmode="none"`) and the bottom nav hides while the keypad is open; Kg → Reps of the same set; the check key completes the set and focuses Kg of the next set, then of the first set of the next exercise, and closes after the last set; `+`/`−` step 2.5 kg / 1 rep; a completed set is never un-completed by the keypad; the same keypad works in the finished-workout editor, where typed values are saved when leaving the field and the check request carries the typed reps; on desktop no keypad and `inputmode` stays `decimal` / `numeric` | E2E | P1 | RB | reset, mine | M |
 
 ### 5.5 Exercise catalog (D)
 
@@ -967,9 +968,9 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | Priority | Count | Notes |
 |---|---|---|
 | P0 | 17 | AUTH-001–005, NAV-001–002, WRK-001–005, RTN-001–002, OFF-002, OFF-004–005 |
-| P1 | 70 | Bulk of the value; implemented milestone by milestone |
+| P1 | 71 | Bulk of the value; implemented milestone by milestone |
 | P2 | 16 | Optional; do only if cheap or after a regression |
-| **Total** | **103** | Counted from the tables above. Not all are meant to exist at once — see the roadmap (P0 + a curated P1 subset is the realistic target) |
+| **Total** | **104** | Counted from the tables above. Not all are meant to exist at once — see the roadmap (P0 + a curated P1 subset is the realistic target) |
 
 ---
 
@@ -1341,7 +1342,7 @@ commit.
 
 ### M4 — History, workout edit, measurements, statistics
 * **Objective:** cover data viewing/editing and the date-sensitive features.
-* **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019, 021, 023, 024 · MEA-001–009 · STA-001, 002.
+* **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019, 021, 023, 024, 025 · MEA-001–009 · STA-001, 002.
   (WRK-016 and the confirm part of WRK-017 need AC-6 / AC-4 first.)
 * **Infra:** `seedWorkouts`/`seedMeasurements` with fixed dates; `clock`;
   non-UTC `timezoneId` case.
@@ -1422,8 +1423,8 @@ commit.
 * **Validation:** full suite passes with `--workers=4` ×5 consecutive runs.
 * **DoD:** common DoD.
 
-**Scheduling coverage check:** M1 (10) + M2 (11) + M3 (15) + M4 (21) + M5 (13) +
-M6 (13) + M7 (6) + M8 (9) + M9 (4) + M10 (1) = **103**.
+**Scheduling coverage check:** M1 (10) + M2 (11) + M3 (15) + M4 (22) + M5 (13) +
+M6 (13) + M7 (6) + M8 (9) + M9 (4) + M10 (1) = **104**.
 
 ---
 

@@ -24,6 +24,7 @@ import {
   toast,
 } from '../ui.js';
 import { parseDecimalInput, INVALID } from '../format.js';
+import { createSetKeypad, isTouchKeypad } from '../keypad.js';
 import { createRestTimer } from '../rest-timer.js';
 
 function computeTotals(workout) {
@@ -108,6 +109,8 @@ function setRow(exercise, set, index) {
   const previous = prevSet(exercise.previousSets, index);
   const weightPlaceholder = previous?.weightKg != null ? formatNumber(previous.weightKg, 1) : '0';
   const repsPlaceholder = previous?.reps != null ? String(previous.reps) : '0';
+  // On touch devices the on-screen keypad replaces the system keyboard.
+  const touch = isTouchKeypad();
   return `
     <div class="set-swipe" data-set-id="${set.id}">
       <div class="set-swipe-bg" aria-hidden="true">
@@ -124,12 +127,12 @@ function setRow(exercise, set, index) {
           ${esc(prevLabel(exercise.previousSets, index))}
         </button>
         <div class="set-cell">
-          <input class="number-input" type="text" inputmode="decimal" placeholder="${esc(weightPlaceholder)}"
+          <input class="number-input" type="text" inputmode="${touch ? 'none' : 'decimal'}" placeholder="${esc(weightPlaceholder)}"
             enterkeyhint="next"
             value="${set.weightKg != null ? esc(String(set.weightKg)) : ''}" data-field="weightKg" aria-label="Peso en kg" />
         </div>
         <div class="set-cell">
-          <input class="number-input" type="number" inputmode="numeric" min="0" placeholder="${esc(repsPlaceholder)}"
+          <input class="number-input" type="number" inputmode="${touch ? 'none' : 'numeric'}" min="0" placeholder="${esc(repsPlaceholder)}"
             enterkeyhint="done"
             value="${set.reps != null ? esc(String(set.reps)) : ''}" data-field="reps" aria-label="Repeticiones" />
         </div>
@@ -1081,6 +1084,12 @@ export async function render(container, ctx) {
     }
   });
 
+  // On-screen numeric keypad on touch devices; see createSetKeypad for how the
+  // action key walks through the sets.
+  const keypad = isTouchKeypad()
+    ? createSetKeypad({ scope: container.querySelector('[data-exercises]') })
+    : null;
+
   // Flush pending set writes when the tab is hidden or the page is being
   // unloaded (backgrounding on mobile, closing the PWA, hard reload). This is
   // best-effort: the requests use keepalive-friendly absolute values so a later
@@ -1141,6 +1150,7 @@ export async function render(container, ctx) {
     window.removeEventListener('pagehide', flushOnHide);
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('online', onOnline);
+    keypad?.destroy();
     // Flush (do NOT cancel) pending set writes on navigation so edits made
     // right before leaving the view are persisted instead of dropped.
     setWrites.flush();

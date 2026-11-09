@@ -1506,3 +1506,100 @@ dialog::backdrop {
     animation-duration: 1.4s;
   }
 }
+
+/* On-screen numeric keypad for the Kg / Reps inputs (touch devices only). It
+   sits above the bottom nav (z 40) and below modals (z 100). While it is open
+   the nav is hidden and the page gets room to scroll the edited row into view. */
+.keypad {
+  position: fixed;
+  z-index: 60;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 10px 8px calc(10px + var(--safe-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--border-strong);
+  border-radius: 20px 20px 0 0;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(105%);
+  visibility: hidden;
+  transition:
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.26s;
+}
+
+.keypad.open {
+  transform: translateY(0);
+  visibility: visible;
+  transition:
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s;
+}
+
+.keypad-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.keypad-key:active {
+  background: var(--border-strong);
+}
+
+/* Utility keys (hide, +, -, delete) read as secondary to the digits. */
+.keypad-key[data-key="hide"],
+.keypad-key[data-key="inc"],
+.keypad-key[data-key="dec"],
+.keypad-key[data-key="backspace"] {
+  background: var(--surface-2);
+}
+
+.keypad-action {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.keypad-action:active {
+  background: var(--accent);
+  filter: brightness(0.9);
+}
+
+.keypad-action.is-done {
+  background: var(--success);
+  color: #04130a;
+}
+
+.keypad-action.is-done:active {
+  background: var(--success);
+}
+
+/* Reps are whole numbers: keep the grid but blank the decimal key. */
+.keypad[data-field="reps"] [data-key="."] {
+  visibility: hidden;
+}
+
+html.keypad-open .bottom-nav {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+html.keypad-open .app-shell {
+  padding-bottom: calc(var(--keypad-h, 280px) + 24px);
+}

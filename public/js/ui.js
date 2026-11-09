@@ -15,22 +15,21 @@ const isIOS =
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
 
 // Safari on iOS 17.4+ plays a light tick when a native `switch` checkbox is
-// toggled by a user gesture. Clicking an off-screen label toggles one without
-// showing anything. Not an official haptics API: it only works from a gesture
-// handler and gives a fixed tick (no duration or intensity), so it can stop
-// working in a future iOS release. Older iOS just does nothing.
+// toggled by a user gesture. Clicking a label toggles one without showing
+// anything; it is kept `display: none` and in <head>, the form the libraries
+// that rely on this trick use. Not an official haptics API: it only works from
+// a gesture handler and gives a fixed tick (no duration or intensity), so it
+// can stop working in a future iOS release. Older iOS just does nothing.
 function iosTick() {
-  if (!document.body) return;
+  if (!document.head) return;
   const label = document.createElement('label');
   label.setAttribute('aria-hidden', 'true');
-  label.style.cssText =
-    'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+  label.style.display = 'none';
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.setAttribute('switch', '');
-  input.tabIndex = -1;
   label.append(input);
-  document.body.append(label);
+  document.head.append(label);
   label.click();
   label.remove();
 }

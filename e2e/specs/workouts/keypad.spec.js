@@ -83,6 +83,35 @@ test.describe('On-screen keypad on a touch device', () => {
     await expect(setA2.locator('[data-field="weightKg"]')).toBeFocused();
     await expect(keypad).toHaveClass(/open/);
 
+    // The rest countdown started by that completion stays visible, docked
+    // right above the keypad rather than hidden behind it.
+    const rest = page.locator('[data-rest-timer]');
+    await expect(rest).toBeVisible();
+    const restBox = await rest.boundingBox();
+    const keypadBox = await keypad.boundingBox();
+    expect(restBox.y + restBox.height).toBeLessThanOrEqual(keypadBox.y);
+    const centerHit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-rest-timer]') != null, {
+      x: restBox.x + restBox.width / 2,
+      y: restBox.y + restBox.height / 2,
+    });
+    expect(centerHit, 'the rest timer is not covered by the keypad').toBe(true);
+
+    // It is also usable: +15s and skip work without closing the keypad or
+    // taking the focus away from the field being edited.
+    const restSeconds = async () => {
+      const [m, s] = (await page.locator('[data-rest-count]').innerText()).split(':').map(Number);
+      return m * 60 + s;
+    };
+    const before = await restSeconds();
+    await page.locator('[data-rest-add]').tap();
+    await expect.poll(restSeconds).toBeGreaterThanOrEqual(before + 10);
+    await expect(keypad).toHaveClass(/open/);
+    await expect(setA2.locator('[data-field="weightKg"]')).toBeFocused();
+    await page.locator('[data-rest-skip]').tap();
+    await expect(rest).toBeHidden();
+    await expect(keypad).toHaveClass(/open/);
+    await expect(setA2.locator('[data-field="weightKg"]')).toBeFocused();
+
     // Walk every remaining set in order. Completing a set must land on Kg of
     // the next one: the next set of the exercise or, after its last set, the
     // first set of the next exercise. After the very last set the keypad closes.

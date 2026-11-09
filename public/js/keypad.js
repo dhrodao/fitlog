@@ -50,9 +50,15 @@ function keyMarkup(key) {
  * @param {(input: HTMLInputElement) => void} options.onAction
  *        The big action key was pressed on `input`: the view decides what comes
  *        next (focus another field, complete the set, hide the keypad).
+ * @param {string} [options.keepOpenOn]  CSS selector of other UI that works
+ *        together with the keypad (e.g. the rest timer docked above it). Taps
+ *        on it neither close the keypad nor take the focus away from the field.
+ *        Without this the keypad would close on pointerdown, the docked element
+ *        would drop back to its normal place and the click would land on
+ *        whatever is underneath.
  * @returns {{ hide(): void, destroy(): void, focusField(el: HTMLElement): void }}
  */
-export function createKeypad({ scope, onAction }) {
+export function createKeypad({ scope, onAction, keepOpenOn = null }) {
   const root = document.documentElement;
   const el = document.createElement('div');
   el.className = 'keypad';
@@ -91,11 +97,14 @@ export function createKeypad({ scope, onAction }) {
   }
 
   // Scroll just enough that the edited row sits between the sticky header and
-  // the keypad.
+  // whatever covers the bottom of the screen: the keypad and, when running, the
+  // rest timer docked above it.
   function ensureVisible(input) {
     const row = input.closest('.set-row') || input;
     const rect = row.getBoundingClientRect();
-    const keypadTop = window.innerHeight - el.offsetHeight;
+    const rest = document.querySelector('.rest-timer:not([hidden])');
+    const covered = el.offsetHeight + (rest ? rest.offsetHeight + 10 : 0);
+    const keypadTop = window.innerHeight - covered;
     const headBottom = document.querySelector('.active-head')?.getBoundingClientRect().bottom ?? 0;
     if (rect.bottom > keypadTop - 12) {
       window.scrollBy({ top: rect.bottom - keypadTop + 12, behavior: 'smooth' });
@@ -182,12 +191,19 @@ export function createKeypad({ scope, onAction }) {
   scope.addEventListener('focusin', onFocusIn);
 
   // A tap anywhere that is neither the keypad nor a field closes it.
+  const isKept = (target) => Boolean(keepOpenOn && target.closest?.(keepOpenOn));
   const onOutside = (event) => {
     if (!active) return;
-    if (el.contains(event.target) || event.target.closest?.('[data-field]')) return;
+    if (el.contains(event.target) || event.target.closest?.('[data-field]') || isKept(event.target)) return;
     hide();
   };
   document.addEventListener('pointerdown', onOutside, true);
+  // Keep the field focused while the companion UI is tapped (a mousedown on a
+  // button would otherwise move the focus to it).
+  const onMouseDown = (event) => {
+    if (active && isKept(event.target)) event.preventDefault();
+  };
+  document.addEventListener('mousedown', onMouseDown, true);
 
   return {
     hide,
@@ -206,6 +222,7 @@ export function createKeypad({ scope, onAction }) {
     destroy() {
       scope.removeEventListener('focusin', onFocusIn);
       document.removeEventListener('pointerdown', onOutside, true);
+      document.removeEventListener('mousedown', onMouseDown, true);
       hide();
       el.remove();
     },
@@ -229,6 +246,8 @@ export function createKeypad({ scope, onAction }) {
 export function createSetKeypad({ scope }) {
   const keypad = createKeypad({
     scope,
+    // The rest timer docks above the keypad and must stay tappable.
+    keepOpenOn: '.rest-timer',
     onAction(input) {
       const row = input.closest('[data-set-id]');
       if (!row) {

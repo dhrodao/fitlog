@@ -1607,5 +1607,13 @@ html.keypad-open .bottom-nav {
 }
 
 html.keypad-open .app-shell {
-  padding-bottom: calc(var(--keypad-h, 280px) + 24px);
+  /* Room for the keypad plus the rest timer docked above it. */
+  padding-bottom: calc(var(--keypad-h, 280px) + 100px);
+}
+
+/* The rest countdown starts when a set is completed from the keypad, so it must
+   stay visible: dock it right above the keypad instead of behind it. */
+html.keypad-open .rest-timer {
+  z-index: 61;
+  bottom: calc(var(--keypad-h, 280px) + 10px);
 }

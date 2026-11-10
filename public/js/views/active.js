@@ -20,7 +20,6 @@ import {
   icon,
   openActionSheet,
   openModal,
-  setLoading,
   toast,
 } from '../ui.js';
 import { parseDecimalInput, INVALID } from '../format.js';
@@ -1086,7 +1085,9 @@ export async function render(container, ctx) {
       if (choice === null) return; // user cancelled: do not finish
       routineAction = choice;
     }
-    setLoading(button, true, '');
+    // finish-check is an icon-only button, so show just the spinner (no label).
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner"></span>';
     try {
       // Persist any pending set edits before finishing so the last change is
       // never lost in the debounce window.
@@ -1108,7 +1109,7 @@ export async function render(container, ctx) {
       toast('¡Entrenamiento guardado!', 'success');
       ctx.navigate(`/workouts/${finished.id}`);
     } catch (error) {
-      setLoading(button, false);
+      button.disabled = false;
       button.innerHTML = icon('check', 20);
       if (error.status === 401) ctx.handleUnauthorized();
       else toast(errorMessage(error), 'error');

@@ -967,6 +967,22 @@ dialog::backdrop {
 
 .modal-actions .btn {
   flex: 1;
+  /* Allow buttons to shrink below their content width so a long label wraps or
+     is clipped by its own box instead of overflowing the modal. */
+  min-width: 0;
+}
+
+/* Three or more actions (e.g. Cancelar / Mantener original / Sobreescribir
+   rutina) do not fit side by side on a narrow modal, so stack them. The primary
+   action sits last in the DOM; column-reverse puts it on top where it is the
+   obvious default. */
+.modal-actions.stacked {
+  flex-direction: column-reverse;
+}
+
+.modal-actions.stacked .btn {
+  flex: none;
+  width: 100%;
 }
 
 .sheet-handle {

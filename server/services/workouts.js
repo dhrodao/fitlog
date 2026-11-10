@@ -233,6 +233,115 @@ export function getWorkoutExercises(workoutId) {
     .all(workoutId);
 }
 
+// Ordered list of exercise ids for a workout, matching the display order.
+function workoutExerciseIds(workoutId) {
+  return db
+    .prepare(
+      `SELECT exercise_id FROM workout_exercises
+       WHERE workout_id = ?
+       ORDER BY position ASC, id ASC`
+    )
+    .all(workoutId)
+    .map((row) => row.exercise_id);
+}
+
+// Ordered list of exercise ids for a routine.
+function routineExerciseIds(routineId) {
+  return db
+    .prepare(
+      `SELECT exercise_id FROM routine_exercises
+       WHERE routine_id = ?
+       ORDER BY position ASC, id ASC`
+    )
+    .all(routineId)
+    .map((row) => row.exercise_id);
+}
+
+// Whether a workout's exercise structure has drifted from the routine it was
+// started from. We compare the ordered list of exercise ids, which captures
+// adding, removing, replacing and reordering exercises — the changes that make
+// the finished workout stop matching its source routine. Weights, reps and the
+// number of logged sets are normal per-session data and are not considered.
+// Returns false when the workout is not tied to a routine or the routine is
+// gone (nothing to overwrite or detach from).
+export function routineStructureDiffers(workout) {
+  if (!workout.routine_id) return false;
+  const routine = db
+    .prepare('SELECT id FROM routines WHERE id = ?')
+    .get(workout.routine_id);
+  if (!routine) return false;
+  const workoutIds = workoutExerciseIds(workout.id);
+  const routineIds = routineExerciseIds(workout.routine_id);
+  if (workoutIds.length !== routineIds.length) return true;
+  return workoutIds.some((id, index) => id !== routineIds[index]);
+}
+
+// Replace a routine's exercises with the workout's current exercises, keeping
+// the routine's existing per-exercise targets where the exercise is still
+// present (matched by exercise id and ordinal, so repeated exercises keep their
+// own targets). New exercises fall back to the workout's logged set count and
+// the default rep target. Routines do not model supersets, so grouping is not
+// written back. Runs inside the caller's finish transaction.
+function overwriteRoutineFromWorkout(workout) {
+  const routineId = workout.routine_id;
+  // Preserve the old targets, keyed by "exerciseId#occurrence" so a routine
+  // with the same exercise twice keeps each slot's own target.
+  const previous = db
+    .prepare(
+      `SELECT exercise_id, target_sets, target_reps, notes
+       FROM routine_exercises
+       WHERE routine_id = ?
+       ORDER BY position ASC, id ASC`
+    )
+    .all(routineId);
+  const seen = new Map();
+  const prevByKey = new Map();
+  for (const row of previous) {
+    const occurrence = seen.get(row.exercise_id) || 0;
+    seen.set(row.exercise_id, occurrence + 1);
+    prevByKey.set(`${row.exercise_id}#${occurrence}`, row);
+  }
+
+  const exercises = db
+    .prepare(
+      `SELECT we.id AS we_id, we.exercise_id,
+              (SELECT COUNT(*) FROM workout_sets s WHERE s.workout_exercise_id = we.id) AS set_count
+       FROM workout_exercises we
+       WHERE we.workout_id = ?
+       ORDER BY we.position ASC, we.id ASC`
+    )
+    .all(workout.id);
+
+  db.prepare('DELETE FROM routine_exercises WHERE routine_id = ?').run(routineId);
+
+  const insert = db.prepare(
+    `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps, notes)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  );
+  const used = new Map();
+  exercises.forEach((row, position) => {
+    const occurrence = used.get(row.exercise_id) || 0;
+    used.set(row.exercise_id, occurrence + 1);
+    const prev = prevByKey.get(`${row.exercise_id}#${occurrence}`);
+    const targetSets = prev
+      ? prev.target_sets
+      : Math.min(Math.max(Number(row.set_count) || 3, 1), 20);
+    insert.run(
+      routineId,
+      row.exercise_id,
+      position,
+      targetSets,
+      prev ? prev.target_reps : '8-12',
+      prev ? prev.notes : null
+    );
+  });
+
+  db.prepare('UPDATE routines SET updated_at = ? WHERE id = ?').run(
+    nowIso(),
+    routineId
+  );
+}
+
 export function getWorkoutDetail(userId, workoutId) {
   const workout = assertWorkout(userId, workoutId);
   const records = workoutRecords(userId, workout);
@@ -286,6 +395,10 @@ export function getWorkoutDetail(userId, workoutId) {
     location: workout.location,
     notes: workout.notes,
     routineId: workout.routine_id,
+    // True when the live exercise structure no longer matches the routine the
+    // workout was started from, so the active view can offer to overwrite the
+    // routine or detach on finish instead of linking to a stale routine.
+    routineDirty: routineStructureDiffers(workout),
     source: workout.source || null,
     startedAt: workout.started_at,
     finishedAt: workout.finished_at,
@@ -662,18 +775,37 @@ export function finishWorkout(userId, workoutId, input = {}) {
   );
   const duration = toPositiveInt(input.durationSeconds, computed);
 
-  db.prepare(
-    `UPDATE workouts SET finished_at = ?, duration_seconds = ?,
-       notes = COALESCE(?, notes), name = COALESCE(?, name), location = COALESCE(?, location)
-     WHERE id = ?`
-  ).run(
-    finishedAt,
-    duration,
-    input.notes ?? null,
-    input.name ? String(input.name).slice(0, 200) : null,
-    input.location ? String(input.location).slice(0, 200) : null,
-    workoutId
-  );
+  // When the workout was started from a routine and its exercise structure
+  // drifted, the client may ask us to either overwrite the routine with the new
+  // structure or detach the workout from the routine (so "Ver rutina" no longer
+  // points at a routine that no longer matches). The action is ignored when the
+  // structure still matches, so a stale flag can never mutate anything.
+  const routineAction = input.routineAction;
+  const drifted =
+    (routineAction === 'overwrite' || routineAction === 'detach') &&
+    routineStructureDiffers(workout);
+
+  const finish = db.transaction(() => {
+    db.prepare(
+      `UPDATE workouts SET finished_at = ?, duration_seconds = ?,
+         notes = COALESCE(?, notes), name = COALESCE(?, name), location = COALESCE(?, location)
+       WHERE id = ?`
+    ).run(
+      finishedAt,
+      duration,
+      input.notes ?? null,
+      input.name ? String(input.name).slice(0, 200) : null,
+      input.location ? String(input.location).slice(0, 200) : null,
+      workoutId
+    );
+
+    if (drifted && routineAction === 'overwrite') {
+      overwriteRoutineFromWorkout(workout);
+    } else if (drifted && routineAction === 'detach') {
+      db.prepare('UPDATE workouts SET routine_id = NULL WHERE id = ?').run(workoutId);
+    }
+  });
+  finish();
 
   return getWorkoutDetail(userId, workoutId);
 }

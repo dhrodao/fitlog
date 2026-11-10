@@ -317,7 +317,7 @@ export function openModal({
         <button type="button" class="icon-btn" data-close aria-label="Cerrar">${icon('x')}</button>
       </div>
       <div class="modal-body">${content}</div>
-      ${buttons ? `<div class="modal-actions">${buttons}</div>` : ''}
+      ${buttons ? `<div class="modal-actions${actions.length > 2 ? ' stacked' : ''}">${buttons}</div>` : ''}
     </div>
   `;
 

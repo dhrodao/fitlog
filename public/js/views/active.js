@@ -27,6 +27,47 @@ import { parseDecimalInput, INVALID } from '../format.js';
 import { createSetKeypad, isTouchKeypad } from '../keypad.js';
 import { createRestTimer } from '../rest-timer.js';
 
+// When a workout started from a routine has had its exercise structure changed,
+// ask on finish whether to update the routine to match or keep the original.
+// Keeping the original detaches this workout from the routine, so "Ver rutina"
+// from the history does not point at a routine that no longer matches.
+// Resolves to 'overwrite', 'detach', or null when the user cancels.
+function askRoutineDriftChoice() {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const modal = openModal({
+      title: 'Has modificado la rutina',
+      content: `<p class="text-muted" style="font-size:13.5px;line-height:1.5">
+        Los ejercicios de este entreno ya no coinciden con la rutina original.
+        ¿Quieres sobreescribir la rutina con estos ejercicios o mantener la
+        rutina original? Si la mantienes, el entreno se guardará sin vincularse
+        a ella.</p>`,
+      actions: [
+        { label: 'Cancelar', variant: 'btn-secondary', onClick: () => settle(null) },
+        {
+          label: 'Mantener original',
+          variant: 'btn-secondary',
+          onClick: () => settle('detach'),
+        },
+        {
+          label: 'Sobreescribir rutina',
+          variant: 'btn-primary',
+          onClick: () => settle('overwrite'),
+        },
+      ],
+      onClose: () => settle(null),
+    });
+    modal.el.querySelector('[data-close]')?.addEventListener('click', () => {
+      setTimeout(() => settle(null), 0);
+    });
+  });
+}
+
 function computeTotals(workout) {
   let volume = 0;
   let sets = 0;
@@ -1035,13 +1076,23 @@ export async function render(container, ctx) {
       });
       if (!confirmed) return;
     }
+    // If this workout was started from a routine and its exercise structure was
+    // changed, ask whether to overwrite the routine or keep the original
+    // (detaching this workout from it). Only server-backed workouts carry a
+    // routine reference; local/offline ones are uploaded without one.
+    let routineAction;
+    if (!repo.isLocal() && workout.routineId && workout.routineDirty) {
+      const choice = await askRoutineDriftChoice();
+      if (choice === null) return; // user cancelled: do not finish
+      routineAction = choice;
+    }
     setLoading(button, true, '');
     try {
       // Persist any pending set edits before finishing so the last change is
       // never lost in the debounce window.
       await setWrites.flush();
       workout = repo.current;
-      const result = await repo.finish({});
+      const result = await repo.finish(routineAction ? { routineAction } : {});
       if (result.pending) {
         // Finished offline: the workout does not exist on the server yet, so we
         // cannot navigate to /workouts/:id. Keep the snapshot for later sync.

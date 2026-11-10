@@ -516,7 +516,11 @@ typed value, including `0`, is kept); the live
 completed set once it beats the exercise's previous best (weight or estimated
 1RM) and hides otherwise; rest timer
 (toggle, skip, +15 s); reorder, replace, superset create/remove (server-only);
-remove exercise (no confirm); finish (confirm when 0 completed sets); discard
+remove exercise (no confirm); finish (confirm when 0 completed sets; when the
+workout was started from a routine and its exercise structure was changed,
+finish first asks whether to **overwrite the routine** with the new structure
+or **keep the original** and save the workout unlinked from it — three-way
+dialog *Cancelar* / *Mantener original* / *Sobreescribir rutina*); discard
 (danger confirm); history with month grouping and pagination; workout detail
 with the read-only **exercise detail** modal (tabs *Resumen* with the
 progression chart + personal records, *Historial* with every logged session and
@@ -592,6 +596,18 @@ immediately — Q-6, a behaviour to pin down, not a missing feature).
   check, a set auto-filled above the previous best also shows the trophy and
   the `¡Récord batido!` toast (a gold `.toast.record` with the trophy icon, not the green success toast; assert once, here or in WRK-023). Assert
   persistence by reloading, not by reading the inputs alone.
+* Routine drift on finish (WRK-026): start a workout **from a routine** (not an
+  empty one) and change its exercise structure (replace/add/remove/reorder, all
+  server-only). On `Terminar` the three-way dialog appears; assert each branch
+  with the real backend: *Sobreescribir rutina* keeps the workout linked
+  (detail → *Ver rutina* opens the routine) and the routine now lists the new
+  exercises; *Mantener original* saves the workout with **no** *Ver rutina*
+  entry and leaves the routine unchanged; *Cancelar* leaves the workout active.
+  A control case — finish a routine workout **without** structural changes —
+  must show **no** dialog and keep the link. The drift signal is a `routineDirty`
+  flag on the active-workout detail; the finish request carries
+  `routineAction: 'overwrite' | 'detach'`. Weight/reps/added-or-removed sets are
+  **not** structural changes, so logging alone never triggers the dialog.
 
 ### 4.D Exercise catalog
 
@@ -865,6 +881,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | WRK-023 | Workouts | Live record trophy shows only for a set that beats the previous best | A finished workout with the exercise so it has a previous best (`hist`, `mine`) | New workout → add the same exercise → add two sets: one below the previous best and one above it → mark both complete | The trophy badge (`[data-record]`, `Récord personal`) is **visible** on the set that beats the best and **hidden** on the set that does not; unchecking the record set hides its trophy; completing the record set shows the toast `¡Récord batido!` (and not for a non-record set). Guards the CSS regression where `.set-record`'s `display` overrode the `hidden` attribute and the trophy never hid. **On implementing this, delete the stopgap unit test `test/active-e1rm-parity.test.js`** | E2E | P1 | RB | reset, mine, hist | M |
 | WRK-024 | Workouts | Completing a set auto-fills empty kg/reps from the previous session | A finished workout with the exercise (`hist`, `mine`) | New workout → add the same exercise → add a set and leave kg/reps empty → check it; repeat typing only the weight, and typing an explicit `0` | The empty fields take the previous session's values (inputs and totals update, persisted after reload); a field the user filled is kept (only the empty one is filled); an explicit `0` is not overwritten; without history nothing is filled and the set still completes | E2E | P1 | RB | reset, mine, hist | M |
 | WRK-025 ✅ | Workouts | On-screen numeric keypad on touch devices | Touch-emulated context (`hasTouch`, `isMobile`); active workout with two exercises (`mine`); a finished workout opened with `Editar entrenamiento` | Tap `Kg` → type digits, `.`, `+`/`−`, backspace → arrow key; type reps → check key; repeat through every set; tap elsewhere / `Ocultar teclado`. Variant: desktop (no touch) | The system keyboard is suppressed (`inputmode="none"`) and the bottom nav hides while the keypad is open; Kg → Reps of the same set; the check key completes the set and focuses Kg of the next set, then of the first set of the next exercise, and closes after the last set; `+`/`−` step 2.5 kg / 1 rep; a completed set is never un-completed by the keypad; the same keypad works in the finished-workout editor, where typed values are saved when leaving the field and the check request carries the typed reps; on desktop no keypad and `inputmode` stays `decimal` / `numeric` | E2E | P1 | RB | reset, mine | M |
+| WRK-026 | Workouts | Finishing a routine workout whose exercises were changed asks to overwrite or keep the routine | Routine with 2 exercises (`mine`); a spare exercise to swap in | `Empezar Rutina` → replace (or add/remove/reorder) one exercise → `Terminar`; exercise the three dialog branches in separate runs, plus a control run with **no** structural change | With a structural change the dialog *Has modificado la rutina* appears: *Sobreescribir rutina* → detail keeps *Ver rutina* and the routine now lists the workout's exercises; *Mantener original* → finished workout has **no** *Ver rutina* item and the routine is unchanged; *Cancelar* → workout stays active, nothing saved. The control run (sets logged but structure untouched) shows **no** dialog and keeps the link. Drives `routineDirty` on the active detail and `routineAction` on `POST …/finish` | E2E | P1 | RB | reset, mine | M |
 
 ### 5.5 Exercise catalog (D)
 
@@ -968,9 +985,9 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | Priority | Count | Notes |
 |---|---|---|
 | P0 | 17 | AUTH-001–005, NAV-001–002, WRK-001–005, RTN-001–002, OFF-002, OFF-004–005 |
-| P1 | 71 | Bulk of the value; implemented milestone by milestone |
+| P1 | 72 | Bulk of the value; implemented milestone by milestone |
 | P2 | 16 | Optional; do only if cheap or after a regression |
-| **Total** | **104** | Counted from the tables above. Not all are meant to exist at once — see the roadmap (P0 + a curated P1 subset is the realistic target) |
+| **Total** | **105** | Counted from the tables above. Not all are meant to exist at once — see the roadmap (P0 + a curated P1 subset is the realistic target) |
 
 ---
 
@@ -1342,7 +1359,7 @@ commit.
 
 ### M4 — History, workout edit, measurements, statistics
 * **Objective:** cover data viewing/editing and the date-sensitive features.
-* **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019, 021, 023, 024, 025 · MEA-001–009 · STA-001, 002.
+* **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019, 021, 023, 024, 025, 026 · MEA-001–009 · STA-001, 002.
   (WRK-016 and the confirm part of WRK-017 need AC-6 / AC-4 first.)
 * **Infra:** `seedWorkouts`/`seedMeasurements` with fixed dates; `clock`;
   non-UTC `timezoneId` case.
@@ -1423,8 +1440,8 @@ commit.
 * **Validation:** full suite passes with `--workers=4` ×5 consecutive runs.
 * **DoD:** common DoD.
 
-**Scheduling coverage check:** M1 (10) + M2 (11) + M3 (15) + M4 (22) + M5 (13) +
-M6 (13) + M7 (6) + M8 (9) + M9 (4) + M10 (1) = **104**.
+**Scheduling coverage check:** M1 (10) + M2 (11) + M3 (15) + M4 (23) + M5 (13) +
+M6 (13) + M7 (6) + M8 (9) + M9 (4) + M10 (1) = **105**.
 
 ---
 

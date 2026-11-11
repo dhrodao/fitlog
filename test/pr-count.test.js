@@ -1,6 +1,7 @@
-// prCount: a workout exercise counts as a record when it beats the previous
-// best in weight, estimated 1RM, or single-session volume. Rep-only increases
-// do not count. Driven through the real API so it exercises the SQL.
+// prCount: a workout exercise counts as a record when it has at least one set
+// that beats the previous best in weight or estimated 1RM. Volume-only and
+// rep-only increases do not count, so the badge always matches the set trophies.
+// Driven through the real API so it exercises the SQL.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -71,7 +72,7 @@ test('beating estimated 1RM at the same top weight counts', async () => {
   assert.equal(better, 1, 'higher e1RM at equal weight is a record');
 });
 
-test('beating session volume counts even without a weight or e1RM PR', async () => {
+test('session volume alone does not count as a badge record', async () => {
   await loginDev(agent);
   const ex = await createExercise(agent, { name: 'Remo PR', category: 'Espalda' });
 
@@ -84,7 +85,28 @@ test('beating session volume counts even without a weight or e1RM PR', async () 
     { weightKg: 90, reps: 5 },
     { weightKg: 90, reps: 5 },
   ]);
-  assert.equal(volumePR, 1, 'a session-volume PR counts');
+  assert.equal(volumePR, 0, 'a volume-only PR has no set to show and must not inflate the badge');
+});
+
+test('a volume-only PR in another exercise does not inflate the badge', async () => {
+  await loginDev(agent);
+  const volumeEx = await createExercise(agent, { name: 'Remo volumen', category: 'Espalda' });
+  const recordEx = await createExercise(agent, { name: 'Bent Over Row PR', category: 'Espalda' });
+
+  await sessionRecords(volumeEx.id, 'S1', [{ weightKg: 100, reps: 5 }]);
+
+  const w = await startFreeWorkout(agent, 'S2');
+  const volumeWe = await addExercise(agent, w.id, volumeEx.id);
+  for (let i = 0; i < 3; i += 1) {
+    await addSet(agent, w.id, volumeWe.id, { weightKg: 90, reps: 5, completed: true });
+  }
+  const recordWe = await addExercise(agent, w.id, recordEx.id);
+  await addSet(agent, w.id, recordWe.id, { weightKg: 40, reps: 12, completed: true });
+  await addSet(agent, w.id, recordWe.id, { weightKg: 50, reps: 12, completed: true });
+  await addSet(agent, w.id, recordWe.id, { weightKg: 60, reps: 12, completed: true });
+
+  const finished = await finishWorkout(agent, w.id);
+  assert.equal(finished.summary.records, 1, 'only the exercise with visible record sets counts');
 });
 
 test('workout detail flags the sets that beat the previous best', async () => {

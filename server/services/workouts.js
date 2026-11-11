@@ -57,17 +57,15 @@ export function workoutTotals(workoutId) {
   };
 }
 
-// Personal records for a workout. `count` is the number of exercises that set
-// a record; `setIds` are the individual completed sets that beat the previous
-// best in weight or estimated 1RM (Epley), including earlier sets of the same
-// workout, so the summary can flag the sets that advanced the record.
+// Personal records for a workout. `count` is the number of exercises with at
+// least one record set; `setIds` are the individual completed sets that beat
+// the previous best in weight or estimated 1RM (Epley), including earlier sets
+// of the same workout, so the summary and the set trophies always agree.
 //
-// An exercise counts once if, within this workout, it beats the previous best
-// in ANY of: heaviest completed set (weight), best per-set estimated 1RM, or
-// single-session volume (sum of weight*reps of its completed sets). Rep PRs are
-// intentionally excluded from the count: more reps at a lighter weight would
-// inflate it. Session volume is not attributable to one set, so it never marks
-// a set as a record. The per-exercise detail view still shows all record types.
+// Session-volume PRs are shown in the per-exercise detail view but excluded
+// here: they cannot be attributed to a set, so counting them would make the
+// workout badge claim a record the user cannot see on any set. Rep PRs are
+// excluded for the same reason (more reps at a lighter weight would inflate it).
 export function workoutRecords(userId, workout) {
   const exerciseIds = db
     .prepare(
@@ -84,10 +82,9 @@ export function workoutRecords(userId, workout) {
      WHERE we.workout_id = ? AND we.exercise_id = ? AND s.completed = 1
      ORDER BY we.position ASC, s.set_number ASC, s.id ASC`
   );
-  // Completed sets of one exercise across all earlier finished workouts, keyed
-  // by workout so session volume can be computed per previous session.
+  // Completed sets of one exercise across all earlier finished workouts.
   const previousSets = db.prepare(
-    `SELECT w.id AS workoutId, s.weight_kg AS weightKg, s.reps AS reps
+    `SELECT s.weight_kg AS weightKg, s.reps AS reps
      FROM workout_sets s
      JOIN workout_exercises we ON we.id = s.workout_exercise_id
      JOIN workouts w ON w.id = we.workout_id
@@ -107,8 +104,6 @@ export function workoutRecords(userId, workout) {
     }
     return { weight, e1rm };
   };
-  const volume = (sets) =>
-    sets.reduce((sum, s) => sum + (Number(s.weightKg) || 0) * (Number(s.reps) || 0), 0);
 
   let count = 0;
   const setIds = new Set();
@@ -121,24 +116,7 @@ export function workoutRecords(userId, workout) {
     if (!thisSets.length) continue;
 
     let prevBests = { ...initialBests };
-    // Previous best single-session volume for this exercise.
-    const prevVolumeByWorkout = new Map();
-    for (const row of prevRows) {
-      prevVolumeByWorkout.set(
-        row.workoutId,
-        (prevVolumeByWorkout.get(row.workoutId) || 0) +
-          (Number(row.weightKg) || 0) * (Number(row.reps) || 0)
-      );
-    }
-    const prevMaxVolume = Math.max(0, ...prevVolumeByWorkout.values());
-
-    const cur = bests(thisSets);
-    const curVolume = volume(thisSets);
-
-    const beatsWeight = cur.weight > 0 && cur.weight > prevBests.weight;
-    const beatsE1rm = cur.e1rm > 0 && cur.e1rm > prevBests.e1rm;
-    const beatsVolume = curVolume > 0 && curVolume > prevMaxVolume;
-    if (beatsWeight || beatsE1rm || beatsVolume) count += 1;
+    let countsAsRecord = false;
 
     for (const set of thisSets) {
       const w = Number(set.weightKg) || 0;
@@ -148,6 +126,7 @@ export function workoutRecords(userId, workout) {
       const setBeatsE1rm = e1rm > prevBests.e1rm;
       if (setBeatsWeight || setBeatsE1rm) {
         setIds.add(set.id);
+        countsAsRecord = true;
 
         // A later set must beat this one too, so keep the running best without
         // ever lowering either dimension (a weight PR can have a lower e1RM).
@@ -155,6 +134,7 @@ export function workoutRecords(userId, workout) {
         prevBests.e1rm = Math.max(prevBests.e1rm, e1rm);
       }
     }
+    if (countsAsRecord) count += 1;
   }
 
   return { count, setIds, previousBestsByExercise };

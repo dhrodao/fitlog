@@ -45,21 +45,26 @@ export async function startEmptyWorkout(page) {
   await expect(page.locator('[data-add-exercise]')).toBeVisible();
 }
 
-export async function addExerciseFromPicker(page, name) {
-  const initialCatalogLoad = page.waitForResponse(
+/**
+ * Waits for the catalog load the picker fires as soon as it opens. Callers
+ * register this before the action that opens the sheet (the request can start
+ * before the sheet is locatable).
+ */
+export function waitForPickerCatalogLoad(page) {
+  return page.waitForResponse(
     (response) =>
       response.request().method() === 'GET' &&
       response.url().includes('/api/exercises/search')
   );
+}
 
-  await page.locator('[data-add-exercise]').click();
+/**
+ * Picks an exercise from an already-open picker sheet by its "Mis ejercicios"
+ * name. Switches to that tab and searches by name so the pick does not depend
+ * on how many custom exercises accumulated across runs.
+ */
+export async function pickExerciseInOpenPicker(page, name) {
   const sheet = page.getByRole('dialog');
-  await expect(
-    sheet.getByRole('heading', { name: 'Añadir ejercicio' })
-  ).toBeVisible();
-  // The picker starts a catalog load as soon as it opens. Wait for it so the
-  // tab switch below is not dropped while that request is still in flight.
-  await initialCatalogLoad;
 
   const mineLoad = page.waitForResponse(
     (response) =>
@@ -69,8 +74,6 @@ export async function addExerciseFromPicker(page, name) {
   await sheet.locator('[data-tab="mine"]').click();
   await mineLoad;
 
-  // Search for the unique name so the pick never depends on how many custom
-  // exercises accumulated in the shared database across runs.
   const filteredLoad = page.waitForResponse(
     (response) =>
       response.request().method() === 'GET' &&
@@ -85,7 +88,26 @@ export async function addExerciseFromPicker(page, name) {
   await item.click();
 
   await expect(page.getByRole('dialog')).toHaveCount(0);
+}
+
+export async function addExerciseFromPicker(page, name) {
+  const initialCatalogLoad = waitForPickerCatalogLoad(page);
+
+  await page.locator('[data-add-exercise]').click();
+  const sheet = page.getByRole('dialog');
+  await expect(
+    sheet.getByRole('heading', { name: 'Añadir ejercicio' })
+  ).toBeVisible();
+  // The picker starts a catalog load as soon as it opens. Wait for it so the
+  // tab switch below is not dropped while that request is still in flight.
+  await initialCatalogLoad;
+
+  await pickExerciseInOpenPicker(page, name);
   await expect(page.locator('[data-exercises]')).toContainText(name);
+}
+
+export async function addExercisesFromPicker(page, names) {
+  for (const name of names) await addExerciseFromPicker(page, name);
 }
 
 export async function addSet(page, block) {

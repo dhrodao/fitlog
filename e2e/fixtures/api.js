@@ -74,6 +74,20 @@ export async function seedWorkout(context, payload) {
   return workout;
 }
 
+export async function startRoutine(context, id) {
+  const response = await context.request.post(`/api/routines/${id}/start`);
+  const { workout } = await json(response, 'start routine');
+  return workout;
+}
+
+export async function finishWorkout(context, id) {
+  const response = await context.request.post(`/api/workouts/${id}/finish`, {
+    data: {},
+  });
+  const { workout } = await json(response, 'finish workout');
+  return workout;
+}
+
 export async function seedMeasurement(context, payload) {
   const response = await context.request.post('/api/measurements', {
     data: payload,

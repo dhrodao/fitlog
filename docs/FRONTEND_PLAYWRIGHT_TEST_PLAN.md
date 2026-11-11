@@ -890,24 +890,24 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | CAT-001 ✅ | Catalog | Browse list and category chips | Seeded catalog (`cat`) | Training → `Explorar` | Heading `Ejercicios`; cards and chips (`Todos` + categories with counts) from the seed | E2E | P1 | RB | cat | M |
 | CAT-002 ✅ | Catalog | Search and empty result | `cat` | Type a seeded name; then a nonsense term | Matching card(s) only; then `Sin resultados` / `Prueba con otro término o categoría.` | E2E | P1 | RB | cat | S |
 | CAT-003 ✅ | Catalog | Category filter | `cat` | Click a category chip; then `Todos` | Only that category's cards; chip `.active`; `Todos` restores | E2E | P1 | RB | cat | S |
-| CAT-004 | Catalog | Detail and add to my exercises | `cat` | Open a card → `Añadir a mis ejercicios`; then open any workout picker → tab `Mis ejercicios` | Toast `<name> añadido a tus ejercicios`; modal closes; exercise listed under `Mis ejercicios` | E2E | P1 | RB | cat, reset | M |
+| CAT-004 ✅ | Catalog | Detail and add to my exercises | `cat` | Open a card → `Añadir a mis ejercicios`; then open any workout picker → tab `Mis ejercicios` | Toast `<name> añadido a tus ejercicios`; modal closes; exercise listed under `Mis ejercicios` | E2E | P1 | RB | cat, reset | M |
 | CAT-005 ✅ | Catalog | Infinite scroll | ≥ 41 seeded rows in one category | Scroll sentinel into view | Second page appended without duplicates; sentinel disappears at the end | E2E | P2 | RB | cat | M |
-| CAT-006 | Catalog | Picker: tabs, muscle filter, pick | Active workout; `cat` + `mine` | `Añadir ejercicio` → search; `Todos los músculos` → pick a group; switch tabs; pick an item | Results follow filters; muscle button shows the group; pick closes the sheet and the exercise appears in the workout (toast `<name> añadido`) | E2E | P1 | RB | cat, mine, reset | M |
+| CAT-006 ✅ | Catalog | Picker: tabs, muscle filter, pick | Active workout; `cat` + `mine` | `Añadir ejercicio` → search; `Todos los músculos` → pick a group; switch tabs; pick an item | Results follow filters; muscle button shows the group; pick closes the sheet and the exercise appears in the workout (toast `<name> añadido`) | E2E | P1 | RB | cat, mine, reset | M |
 | CAT-007 ✅ | Catalog | API failure states | Signed in | Mock `/api/exercises/search` → 500; mock detail 404 | Inline danger notice in results; detail modal shows an inline notice | E2E | P1 | MK | login | S |
 
 ### 5.6 Routines (E)
 
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
-| RTN-001 | Routines | Create a routine | `mine` | `Nueva Rutina` → name, folder → `Añadir ejercicio` (`Mis ejercicios`) → `Guardar` | Toast `Rutina guardada`; routine detail; listed under its folder in the training view with the exercise count | E2E | P0 | RB | reset, mine | M |
-| RTN-002 | Routines | Start a workout from a routine | Routine with 2 exercises | `Empezar Rutina` | Active screen shows both exercises with the routine's target sets; no second start possible | E2E | P0 | RB | reset, mine | M |
-| RTN-003 | Routines | Edit a routine | Routine | ⋯ → `Editar rutina`; rename, change targets, move up/down, remove one, `Guardar` | Changes visible in detail and list after reload | E2E | P1 | RB | reset, mine | M |
-| RTN-004 | Routines | Duplicate | Routine | ⋯ → `Duplicar` | Toast `Rutina duplicada`; a second card with same exercises | E2E | P1 | RB | reset, mine | S |
-| RTN-005 | Routines | Delete with confirmation | Routine | ⋯ → `Eliminar` → cancel; again → confirm | Cancel keeps; confirm toasts `Rutina eliminada`; card gone; past workouts from it still in history | E2E | P1 | RB | reset, mine, hist | S |
-| RTN-006 | Routines | Editor validation | Editor open | Save with empty name; with name but no exercises | Toasts `Ponle un nombre a la rutina` / `Añade al menos un ejercicio`; nothing created (list unchanged) | E2E | P1 | RB | reset | S |
-| RTN-007 | Routines | Dirty-state guard | Editor with a change | Back arrow → dialog `Descartar cambios`; `Seguir editando`, then `Descartar` | First keeps the editor; second leaves to the list; without changes no dialog | E2E | P1 | RB | reset | S |
-| RTN-008 | Routines | Empty states | No routines | Open training view; open a routine with no exercises | `Aún no tienes rutinas` + primary action; `Sin ejercicios todavía` preview | E2E | P1 | RB | reset | XS |
-| RTN-009 | Routines | Folder grouping and collapse persistence | Routines in two folders | Collapse a folder; reload | Groups sorted (named folders first, `Mis rutinas` last); collapsed state persists | E2E | P2 | RB | reset, mine | S |
+| RTN-001 ✅ | Routines | Create a routine | `mine` | `Nueva Rutina` → name, folder → `Añadir ejercicio` (`Mis ejercicios`) → `Guardar` | Toast `Rutina guardada`; routine detail; listed under its folder in the training view with the exercise count | E2E | P0 | RB | reset, mine | M |
+| RTN-002 ✅ | Routines | Start a workout from a routine | Routine with 2 exercises | `Empezar Rutina` | Active screen shows both exercises with the routine's target sets; no second start possible | E2E | P0 | RB | reset, mine | M |
+| RTN-003 ✅ | Routines | Edit a routine | Routine | ⋯ → `Editar rutina`; rename, change targets, move up/down, remove one, `Guardar` | Changes visible in detail and list after reload | E2E | P1 | RB | reset, mine | M |
+| RTN-004 ✅ | Routines | Duplicate | Routine | ⋯ → `Duplicar` | Toast `Rutina duplicada`; a second card with same exercises | E2E | P1 | RB | reset, mine | S |
+| RTN-005 ✅ | Routines | Delete with confirmation | Routine | ⋯ → `Eliminar` → cancel; again → confirm | Cancel keeps; confirm toasts `Rutina eliminada`; card gone; past workouts from it still in history | E2E | P1 | RB | reset, mine, hist | S |
+| RTN-006 ✅ | Routines | Editor validation | Editor open | Save with empty name; with name but no exercises | Toasts `Ponle un nombre a la rutina` / `Añade al menos un ejercicio`; nothing created (list unchanged) | E2E | P1 | RB | reset | S |
+| RTN-007 ✅ | Routines | Dirty-state guard | Editor with a change | Back arrow → dialog `Descartar cambios`; `Seguir editando`, then `Descartar` | First keeps the editor; second leaves to the list; without changes no dialog | E2E | P1 | RB | reset | S |
+| RTN-008 ✅ | Routines | Empty states | No routines | Open training view; open a routine with no exercises | `Aún no tienes rutinas` + primary action; `Sin ejercicios todavía` preview | E2E | P1 | RB | reset | XS |
+| RTN-009 ✅ | Routines | Folder grouping and collapse persistence | Routines in two folders | Collapse a folder; reload | Groups sorted (named folders first, `Mis rutinas` last); collapsed state persists | E2E | P2 | RB | reset, mine | S |
 
 ### 5.7 Hevy integration (F)
 
@@ -1352,12 +1352,13 @@ commit.
   `onSettled` hide and see WRK-003/002 fail.
 * **DoD:** common DoD; WRK-002 asserts detail, history and home agree.
 
-### M3 — Routines & exercise catalog — **In progress**
-* **Status:** In progress. The catalog half is delivered (`catalog/catalog.spec.js`):
-  CAT-001 (list + chips with counts), CAT-002 (search + empty state), CAT-003
-  (category filter), CAT-005 (infinite scroll to 45 with no duplicates) and
-  CAT-007 (search 500 + detail 404 inline notices), all green locally. Still
-  pending: CAT-004 and CAT-006 (picker-based), and all of RTN-001–009.
+### M3 — Routines & exercise catalog — **Completed**
+* **Status:** Completed. Catalog coverage lives in `catalog/catalog.spec.js`
+  (CAT-001, 002, 003, 005, 007) and `catalog/catalog-actions.spec.js` (CAT-004,
+  CAT-006). Routine coverage is split across `routines/routine-lifecycle.spec.js`
+  (RTN-001, 002, 004, 005), `routines/routine-editor.spec.js` (RTN-003, 006, 007)
+  and `routines/routine-folders.spec.js` (RTN-008, 009). The full suite passes
+  46/46 locally and the 11 new tests passed `--repeat-each=10` (110/110).
 * **Objective:** cover creating and reusing plans and finding exercises.
 * **Scenarios:** RTN-001–009 · CAT-001–006.
 * **Infra:** `seedRoutine`, seeded catalog (45-row category for CAT-005), picker

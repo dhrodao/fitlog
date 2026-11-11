@@ -1,5 +1,6 @@
 import { test as base, expect } from '@playwright/test';
 import {
+  finishWorkout,
   getActiveWorkout,
   loginViaApi,
   resetData,
@@ -7,6 +8,7 @@ import {
   seedMeasurement,
   seedRoutine,
   seedWorkout,
+  startRoutine,
 } from './api.js';
 import { collectPageErrors, installExternalHostGuard } from './guards.js';
 
@@ -61,6 +63,8 @@ export const test = base.extend({
       seedRoutine: (payload) => seedRoutine(context, payload),
       seedWorkout: (payload) => seedWorkout(context, payload),
       seedMeasurement: (payload) => seedMeasurement(context, payload),
+      startRoutine: (id) => startRoutine(context, id),
+      finishWorkout: (id) => finishWorkout(context, id),
     });
   },
 });

@@ -60,6 +60,14 @@ export async function seedExercise(context, name, { category = 'Personalizado' }
   return exercise;
 }
 
+export async function seedCatalogExercise(context, catalogId) {
+  const response = await context.request.post('/api/exercises/from-catalog', {
+    data: { catalogId },
+  });
+  const { exercise } = await json(response, 'create catalog exercise');
+  return exercise;
+}
+
 export async function seedRoutine(context, payload) {
   const response = await context.request.post('/api/routines', { data: payload });
   const { routine } = await json(response, 'create routine');

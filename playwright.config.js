@@ -43,15 +43,23 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      // Mobile specs need a touch device descriptor; they run in their own
-      // project below so the desktop suite keeps its pointer/keyboard setup.
-      testIgnore: /[\\/]specs[\\/]mobile[\\/].*\.spec\.js$/,
+      // Mobile specs need a touch device descriptor and PWA specs need an
+      // active service worker; both run in their own projects below so the
+      // desktop suite keeps its pointer/keyboard setup and blocked workers.
+      testIgnore: /[\\/]specs[\\/](mobile|pwa)[\\/].*\.spec\.js$/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'mobile-chromium',
       testMatch: /[\\/]specs[\\/]mobile[\\/].*\.spec\.js$/,
       use: { ...devices['Pixel 7'] },
+    },
+    {
+      name: 'pwa',
+      testMatch: /[\\/]specs[\\/]pwa[\\/].*\.spec\.js$/,
+      // Offline behaviour depends on the service worker serving the shell, so
+      // these specs opt back in explicitly (the rest of the suite blocks it).
+      use: { ...devices['Desktop Chrome'], serviceWorkers: 'allow' },
     },
   ],
   webServer: {

@@ -759,6 +759,13 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
   fall back to blocking via a route handler on the SW-visible origin or to
   `CDPSession` `Network.emulateNetworkConditions`. Until the spike passes,
   OFF-* scenarios are not estimable beyond M.
+* **Spike result (done):** with the pinned Playwright/Chromium,
+  `context.setOffline(true)` does take the service worker's network down, the
+  network-first navigation falls back to the cached shell, and going back online
+  fires the page `online` event that drives `syncFinishedOffline`. The delivered
+  PWA specs rely on this (no `CDPSession` fallback needed). SW-served requests
+  are also not used with `page.route` mocks; the PWA specs only cut/restore
+  connectivity, so the interception caveat above does not apply to them.
 * Offline cold boot (OFF-002): load online once (SW installs and precaches),
   reload so the SW controls the page, set offline, reload → app shell renders
   and, with a session, shows the offline/inline states rather than the login
@@ -961,14 +968,14 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
-| OFF-001 | PWA | SW registers and controls; manifest sane | `sw`, signed in | Load, wait for `serviceWorker.ready`, reload; fetch `/manifest.webmanifest` and icons | Controller present after reload; manifest has name/start_url/icons that resolve (200) | E2E | P1 | SW | sw | S |
+| OFF-001 ✅ | PWA | SW registers and controls; manifest sane | `sw`, signed in | Load, wait for `serviceWorker.ready`, reload; fetch `/manifest.webmanifest` and icons | Controller present after reload; manifest has name/start_url/icons that resolve (200) | E2E | P1 | SW | sw | S |
 | OFF-002 | PWA | **Cold start offline opens the app** (**needs app change AC-3**, D-5) | `sw`, signed in online once (last user remembered), SW controlling, then context offline | `setOffline(true)`; reload / new page | App shell renders and the app opens normally for the remembered user (no login form, no dead `Sin conexión` screen); data sections show their inline `Sin conexión` blocks; an in-progress local workout is reachable. **Before AC-3** run it as a characterization spike: today it shows `Sin conexión` + `Reintentar` | E2E | P0 | SW | sw | M |
-| OFF-003 | PWA | Inline offline states | `sw`, signed in, then offline | Open history, exercises, measurements, profile, workout detail | Each keeps its header and shows `Sin conexión` block with `Reintentar`; no crash, no login redirect | E2E | P1 | SW | sw, login | M |
-| OFF-004 | PWA | **Build and finish a workout offline** | Caches warmed online (start a workout online once and discard it; training view loaded online); then offline | `Empezar Entrenamiento Vacío` → add exercise from cache → add set, kg/reps, check → `Terminar` | `Sin conexión · se sincronizará` pill while active; on finish toast `Entreno guardado localmente…` and navigate home; nothing in server history yet | E2E | P0 | SW | sw, mine, reset | L |
-| OFF-005 | PWA | **Reconnect uploads exactly once** | After OFF-004 | `setOffline(false)` (+ dispatch `online`); then reload and trigger `online` again | Workout appears in history **once** with the right sets; banner/dot cleared; repeated triggers create no duplicate (idempotent sync) | E2E | P0 | SW | OFF-004 | L |
-| OFF-006 | PWA | Server-only actions degrade clearly | `sw`, active **local** workout | Reorder / superset / replace; training `Nueva Rutina` | Toast `No disponible sin conexión` / `Necesitas conexión para crear una rutina`; nothing breaks | E2E | P2 | SW | sw | S |
+| OFF-003 ✅ | PWA | Inline offline states | `sw`, signed in, then offline | Open history, exercises, measurements, profile, workout detail | Each keeps its header and shows `Sin conexión` block with `Reintentar`; no crash, no login redirect | E2E | P1 | SW | sw, login | M |
+| OFF-004 ✅ | PWA | **Build and finish a workout offline** | Caches warmed online (start a workout online once and discard it; training view loaded online); then offline | `Empezar Entrenamiento Vacío` → add exercise from cache → add set, kg/reps, check → `Terminar` | `Sin conexión · se sincronizará` pill while active; on finish toast `Entreno guardado localmente…` and navigate home; nothing in server history yet | E2E | P0 | SW | sw, mine, reset | L |
+| OFF-005 ✅ | PWA | **Reconnect uploads exactly once** | After OFF-004 | `setOffline(false)` (+ dispatch `online`); then reload and trigger `online` again | Workout appears in history **once** with the right sets; banner/dot cleared; repeated triggers create no duplicate (idempotent sync) | E2E | P0 | SW | OFF-004 | L |
+| OFF-006 ✅ | PWA | Server-only actions degrade clearly | `sw`, active **local** workout | Reorder / superset / replace; training `Nueva Rutina` | Toast `No disponible sin conexión` / `Necesitas conexión para crear una rutina`; nothing breaks | E2E | P2 | SW | sw | S |
 | OFF-007 | PWA | SW update takes over once — **Spike / maybe manual** | Old SW controlling page | Serve a changed `sw.js`/`CACHE_VERSION`; reload | New worker activates; page reloads **once**; old caches removed | E2E | P2 | SW | sw | XL |
-| OFF-008 | PWA | Reconnect mid-workout does not finish it | Active local workout, offline then online | Go online while still editing | Workout stays active and local (not uploaded); pill clears only when appropriate; "Anterior" suggestions refill | E2E | P1 | SW | sw, hist | M |
+| OFF-008 ✅ | PWA | Reconnect mid-workout does not finish it | Active local workout, offline then online | Go online while still editing | Workout stays active and local (not uploaded); pill clears only when appropriate; "Anterior" suggestions refill | E2E | P1 | SW | sw, hist | M |
 | OFF-009 | PWA | Logout never silently loses a workout, never leaks data (**needs app change AC-5**, D-7) | Local finished-offline workout exists | (a) go online, log out; (b) stay offline, open logout; confirm; log in as the same user afterwards | (a) workout is uploaded first and appears once in history; (b) the confirm dialog warns that the unsent workout will be lost; cancel keeps everything; after confirm there is no stale active workout/banner for the next session (assert via UI, not internals) | E2E | P1 | SW | sw | M |
 
 ### 5.11 Accessibility (cross-cutting)
@@ -1465,6 +1472,20 @@ commit.
 * **DoD:** common DoD; §7.6 device checklist handed to the owner.
 
 ### M8 — PWA & offline
+* **Status:** In progress. The `pwa` project (service workers allowed) runs only
+  `e2e/specs/pwa/`, and the desktop project now ignores that folder. Delivered:
+  OFF-001 (`pwa/installability.spec.js`), OFF-003 (`pwa/offline-states.spec.js`),
+  OFF-004/005 (`pwa/offline-workout.spec.js`, build → finish offline → upload
+  exactly once) and OFF-008 (same file: reconnecting mid-workout keeps it local
+  and refills the "Anterior" suggestions). OFF-006
+  (`pwa/offline-limits.spec.js`) covers reorder/replace/superset and
+  `Nueva Rutina` while offline. Helpers live in `e2e/fixtures/pwa.js`
+  (service-worker control, `setOffline`/online, catalog-cache warm-up). The
+  spike confirmed `context.setOffline`/`online` events and SW-served shell work
+  under the pinned Chromium. The 5 tests passed `--repeat-each=10` (50/50) and
+  the full suite is 107/107 locally (Node 18, Chromium + Pixel 7 + PWA).
+  Still pending: OFF-002 (needs AC-3), OFF-007 (spike/manual update flow) and
+  OFF-009 (needs AC-5).
 * **Objective:** guard the offline workout feature and shell behaviour.
 * **Scenarios:** OFF-001–009.
 * **Infra:** `pwa` project (SW allowed); offline helper; **spike first** for

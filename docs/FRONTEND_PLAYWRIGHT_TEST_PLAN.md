@@ -319,7 +319,7 @@ offline-vs-service-worker interaction, and several fixture mechanics are marked
 | Toasts have no live region/role. | `ui.js toast()` appends to a bare `div.toast-stack` in `body`; `#app`'s `aria-live` does not contain it. | Toasts must be asserted by text (`.toast` + text); screen-reader announcement is untested/unsupported (A11Y-004). |
 | Picker search input has only a placeholder. | `exercise-picker.js` | Use `getByPlaceholder('Buscar ejercicio...')`. |
 | Active nav item is only a CSS class (`.active`), no `aria-current`. | `app.js navItem` | Assert via class or add `aria-current` later (optional). |
-| The per-set delete button sits in an `aria-hidden` background layer under the row and is revealed by a swipe. | `views/active.js setRow`, `swipe.js` | Not clickable by normal user-style actions on desktop; needs a pointer-drag/touch gesture (MOB-004, Spike). |
+| The per-set delete button sits in an `aria-hidden` background layer under the row and is revealed by a swipe. | `views/active.js setRow`, `swipe.js` | Not clickable by normal user-style actions on desktop; needs a pointer-drag/touch gesture (MOB-004, covered with CDP touch input in the mobile project). |
 | `[data-pick]` carries JSON in the attribute; list items have no per-item accessible name beyond text. | `exercise-picker.js` | Locate by visible exercise name inside the sheet. |
 
 ### 3.3 Locator policy (recommended)
@@ -564,7 +564,7 @@ immediately — Q-6, a behaviour to pin down, not a missing feature).
   `[data-save-state]` hidden), `reload`, assert value restored. A variant types
   and navigates away immediately to cover the "flush on leave" path.
 * Gesture-dependent behaviour (swipe-to-delete a set): implement under the
-  mobile project with `hasTouch` and pointer-event dragging (**Spike**, MOB-004);
+  mobile project with `hasTouch` and CDP touch input (MOB-004);
   do **not** click the `aria-hidden` button with `force`/`dispatchEvent`, which
   would test something no user can do.
 * Rest timer: `page.clock` so the 90 s countdown is controllable; assert
@@ -728,9 +728,9 @@ for users with a stored key, which a fresh test DB never has.
   `Terminar` check button, `Agregar Serie`, rest-timer controls must not be
   covered by the bottom nav or rest-timer bar (assert `toBeVisible` +
   click succeeds; Playwright's actionability check fails on overlap).
-* **Touch**: swipe-to-delete set (MOB-004), pull-to-refresh
-  (`pull-refresh.js`, MOB-005, low priority/Spike: depends on scroll position
-  and touch events).
+* **Touch**: swipe-to-delete set (MOB-004) and pull-to-refresh from the top
+  (`pull-refresh.js`, MOB-005) are driven with CDP touch events in the mobile
+  project; both pass repeatedly.
 
 ### 4.I PWA and offline behaviour
 
@@ -947,12 +947,12 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
-| MOB-001 | Mobile | Core loop at phone viewport | `mobile`, `mine` | WRK-002 flow with touch taps | Completes; no element covered by nav/rest bar; totals correct | E2E | P1 | RB | mobile, reset, mine | M |
-| MOB-002 | Mobile | No horizontal overflow | `mobile` (360×740) | Visit each main route | `scrollWidth <= clientWidth` on all | Visual | P1 | RB | mobile, login | S |
-| MOB-003 | Mobile | Bottom nav vs rest timer vs sheets | `mobile`, active workout | Complete a set (rest bar shows); open picker sheet; open confirm dialog | `Terminar`, `Agregar Serie`, timer controls and dialog buttons all clickable (Playwright actionability) | E2E | P1 | RB | mobile, reset, mine | S |
-| MOB-004 | Mobile | Swipe to delete a set — **Spike** | `mobile` (touch), set row | Drag the row left, tap revealed delete | Set removed, totals update; row springs back if the request fails | E2E | P1 | RB+MK | mobile, reset, mine | L |
-| MOB-005 | Mobile | Pull to refresh — **Spike** | `mobile`, at top of home | Touch-drag down | View reloads (extra `GET /api/stats/overview`) | E2E | P2 | RB | mobile | M |
-| MOB-006 | Mobile | Dialogs/sheets usable on small screens | `mobile` | Open picker, action sheet, confirm; scroll long lists | Content reachable; close via `Cerrar`/Escape/backdrop | E2E | P1 | RB | mobile, mine | S |
+| MOB-001 ✅ | Mobile | Core loop at phone viewport | `mobile`, `mine` | WRK-002 flow with touch taps | Completes; no element covered by nav/rest bar; totals correct | E2E | P1 | RB | mobile, reset, mine | M |
+| MOB-002 ✅ | Mobile | No horizontal overflow | `mobile` (360×740) | Visit each main route | `scrollWidth <= clientWidth` on all | Visual | P1 | RB | mobile, login | S |
+| MOB-003 ✅ | Mobile | Bottom nav vs rest timer vs sheets | `mobile`, active workout | Complete a set (rest bar shows); open picker sheet; open confirm dialog | `Terminar`, `Agregar Serie`, timer controls and dialog buttons all clickable (Playwright actionability) | E2E | P1 | RB | mobile, reset, mine | S |
+| MOB-004 ✅ | Mobile | Swipe to delete a set | `mobile` (touch), set row | Drag the row left, tap revealed delete | Set removed, totals update; row springs back if the request fails | E2E | P1 | RB+MK | mobile, reset, mine | L |
+| MOB-005 ✅ | Mobile | Pull to refresh | `mobile`, at top of home | Touch-drag down | View reloads (extra `GET /api/stats/overview`) | E2E | P2 | RB | mobile | M |
+| MOB-006 ✅ | Mobile | Dialogs/sheets usable on small screens | `mobile` | Open picker, action sheet, confirm; scroll long lists | Content reachable; close via `Cerrar`/Escape/backdrop | E2E | P1 | RB | mobile, mine | S |
 
 ### 5.10 PWA & offline (I)
 
@@ -1443,11 +1443,21 @@ commit.
 * **DoD:** common DoD; Q-3 answered or explicitly deferred (Tier 2 for the API
   path stays out of scope).
 
-### M7 — Mobile viewport
+### M7 — Mobile viewport — **Completed**
+* **Status:** Completed. The `mobile-chromium` project (Pixel 7 descriptor) runs
+  only `e2e/specs/mobile/`; the desktop project ignores that folder. Delivered:
+  MOB-001 (`mobile/core-loop.spec.js`), MOB-002 (`mobile/layout.spec.js`),
+  MOB-003 and MOB-006 (`mobile/overlays.spec.js`), MOB-004
+  (`mobile/swipe-delete.spec.js`, including the failed-request spring-back) and
+  MOB-005 (`mobile/pull-refresh.spec.js`). Touch drags use CDP via
+  `e2e/fixtures/touch.js`, so swipe-to-delete and pull-to-refresh run as real
+  touch sequences instead of forced clicks. The seven mobile tests passed
+  `--repeat-each=10` (70/70) and the full suite is 102/102 locally (Node 18,
+  Chromium + Pixel 7 emulation).
 * **Objective:** the phone experience on emulation.
-* **Scenarios:** MOB-001–006 (MOB-004/005 start with a spike).
-* **Infra:** `mobile-chromium` project; touch-drag helper.
-* **Depends on:** M2. **Complexity:** M (+ spike for gestures).
+* **Scenarios:** MOB-001–006.
+* **Infra:** `mobile-chromium` project; `e2e/fixtures/touch.js` (CDP touch drag).
+* **Depends on:** M2. **Complexity:** M.
 * **Outcome:** core loop and layout rules hold at 360×740; swipe-delete works by
   touch.
 * **Validation:** MOB-002 fails when a view is given a fixed width in a scratch

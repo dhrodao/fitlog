@@ -43,7 +43,15 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      // Mobile specs need a touch device descriptor; they run in their own
+      // project below so the desktop suite keeps its pointer/keyboard setup.
+      testIgnore: /[\\/]specs[\\/]mobile[\\/].*\.spec\.js$/,
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'mobile-chromium',
+      testMatch: /[\\/]specs[\\/]mobile[\\/].*\.spec\.js$/,
+      use: { ...devices['Pixel 7'] },
     },
   ],
   webServer: {

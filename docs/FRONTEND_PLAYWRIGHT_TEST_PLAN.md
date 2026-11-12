@@ -931,15 +931,15 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
-| MEA-001 | Measurements | Create a measurement | Empty | Profile → `Medidas` → weight `72,5` → `Guardar medida` | Toast `Medida guardada`; history row `72,5 kg` newest first; form reset | E2E | P1 | RB | reset | S |
-| MEA-002 | Measurements | Chart threshold | 0, 1, 2 weights | Add weights one by one | `Registra al menos dos pesos…` until the second; then a `Gráfico de progreso` image | E2E | P1 | RB | reset | S |
-| MEA-003 | Measurements | Edit by date | Existing record | Click the row; change weight; `Guardar cambios`; and `Cancelar` path | Title `Editar registro`; same date updated (no duplicate row); cancel resets form | E2E | P1 | RB | reset | S |
-| MEA-004 | Measurements | Delete with confirmation | Existing record | Trash → cancel; confirm | Toast `Medida eliminada`; row gone; chart/empty state updates | E2E | P1 | RB | reset | S |
-| MEA-005 | Measurements | Invalid values | Form | `abc`, `-5` in weight | Field flagged; toast `Revisa los valores numéricos (usa coma o punto)`; nothing saved | E2E | P1 | RB | reset | XS |
-| MEA-006 | Measurements | Comma/point decimals | Form | `72,5`, `72.5`, body fat `18,2` | Stored and shown as numbers (`72,5`, `18,2 % grasa`) | E2E | P1 | RB | reset | XS |
-| MEA-007 | Measurements | At-least-one-measure guard | Form with only a note | Save | Toast `Añade al menos una medida`; no request | E2E | P1 | RB | reset | XS |
-| MEA-008 | Measurements | Empty state | None | Open measurements | `Sin medidas aún`, `Aún sin registros` | E2E | P1 | RB | reset | XS |
-| MEA-009 | Measurements | Default date is local, not UTC | `clock` near local midnight; non-UTC `timezoneId` | Open form | Date input equals the **local** calendar date | E2E | P2 | RB | clock | M |
+| MEA-001 ✅ | Measurements | Create a measurement | Empty | Profile → `Medidas` → weight `72,5` → `Guardar medida` | Toast `Medida guardada`; history row `72,5 kg` newest first; form reset | E2E | P1 | RB | reset | S |
+| MEA-002 ✅ | Measurements | Chart threshold | 0, 1, 2 weights | Add weights one by one | `Registra al menos dos pesos…` until the second; then a `Gráfico de progreso` image | E2E | P1 | RB | reset | S |
+| MEA-003 ✅ | Measurements | Edit by date | Existing record | Click the row; change weight; `Guardar cambios`; and `Cancelar` path | Title `Editar registro`; same date updated (no duplicate row); cancel resets form | E2E | P1 | RB | reset | S |
+| MEA-004 ✅ | Measurements | Delete with confirmation | Existing record | Trash → cancel; confirm | Toast `Medida eliminada`; row gone; chart/empty state updates | E2E | P1 | RB | reset | S |
+| MEA-005 ✅ | Measurements | Invalid values | Form | `abc`, `-5` in weight | Field flagged; toast `Revisa los valores numéricos (usa coma o punto)`; nothing saved | E2E | P1 | RB | reset | XS |
+| MEA-006 ✅ | Measurements | Comma/point decimals | Form | `72,5`, `72.5`, body fat `18,2` | Stored and shown as numbers (`72,5`, `18,2 % grasa`) | E2E | P1 | RB | reset | XS |
+| MEA-007 ✅ | Measurements | At-least-one-measure guard | Form with only a note | Save | Toast `Añade al menos una medida`; no request | E2E | P1 | RB | reset | XS |
+| MEA-008 ✅ | Measurements | Empty state | None | Open measurements | `Sin medidas aún`, `Aún sin registros` | E2E | P1 | RB | reset | XS |
+| MEA-009 ✅ | Measurements | Default date is local, not UTC | `clock` near local midnight; non-UTC `timezoneId` | Open form | Date input equals the **local** calendar date | E2E | P2 | RB | clock | M |
 | STA-001 | Statistics | Home weekly stats, local weeks (**needs app change AC-7**, D-9) | Seeded history at fixed dates (`hist`, `clock`), including one workout at 00:30 Monday Europe/Madrid (= Sunday 23:30 UTC in winter) | Open home; tap a week bar; tap again | Totals match seed; the 00:30-Monday workout counts in the **new** local week; selecting a bar swaps label/stats; second tap restores `Esta semana` | E2E | P1 | RB | hist, clock | M |
 | STA-002 | Statistics | Profile metrics & chart | `hist` | Profile → switch `Duración`/`Volumen`/`Repeticiones`; hover/tap a bar | Chart title follows metric; tooltip shows `Entrenos/Tiempo/Volumen/Series` of that week | E2E | P2 | RB | hist, clock | M |
 
@@ -1377,11 +1377,13 @@ commit.
   (`workouts/workout-detail-edit.spec.js`), WRK-023 (`workouts/records.spec.js`)
   and WRK-026 (`workouts/routine-drift.spec.js`, including the cancel and
   no-change control branches). WRK-025 was already covered by
-  `workouts/keypad.spec.js`. The new tests passed `--repeat-each=10` (130/130).
-  The stopgap `test/active-e1rm-parity.test.js` was removed now that the record
-  path is exercised in the browser. Still pending: WRK-016 (needs AC-6) and the
-  measurements/statistics scenarios (MEA-001–009, STA-001, 002; STA-001 needs
-  AC-7).
+  `workouts/keypad.spec.js`. MEA-001–009 live in
+  `measurements/measurements.spec.js` and
+  `measurements/measurement-validation.spec.js` (local-date default included).
+  The new tests passed `--repeat-each=10` (100/100 for measurements; 130/130 for
+  the earlier batch). The stopgap `test/active-e1rm-parity.test.js` was removed
+  now that the record path is exercised in the browser. Still pending: WRK-016
+  (needs AC-6) and the statistics scenarios (STA-001, 002; STA-001 needs AC-7).
 * **Objective:** cover data viewing/editing and the date-sensitive features.
 * **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019, 021, 023, 024, 025, 026 · MEA-001–009 · STA-001, 002.
   (WRK-016 still needs AC-6; WRK-017's confirm part is covered now that AC-4 has

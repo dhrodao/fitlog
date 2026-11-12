@@ -831,11 +831,11 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | AUTH-003 ✅ | Authentication | Session survives reload | Signed in | Reload on home and on `#/profile` | Still authenticated on the same route; no login flash as final state | E2E | P0 | RB | login | XS |
 | AUTH-004 ✅ | Authentication | Logout | Signed in | Profile → `Cerrar sesión` → confirm | Toast `Hasta pronto`; login screen; opening `#/` afterwards returns to login; `Cancelar` in the dialog keeps the session | E2E | P0 | RB | login | S |
 | AUTH-005 🟡 | Authentication | Expired/invalid session mid-use (**message needs app change AC-2**, D-2) | Signed in on home | `context.clearCookies()`; click the `Entrenar` tab | Redirected to login (no error screen loop) and a toast `Tu sesión ha caducado. Vuelve a entrar.` is shown; before AC-2 only the redirect can be asserted | E2E | P0 | RB | login | S |
-| AUTH-006 | Authentication | Demo sign-in failure | Signed out | Mock `POST /api/auth/dev` → 500 (and 404); click demo button | Inline danger notice with the message; button usable again (not stuck in `Entrando…`); still on login | E2E | P1 | MK | — | S |
+| AUTH-006 ✅ | Authentication | Demo sign-in failure | Signed out | Mock `POST /api/auth/dev` → 500 (and 404); click demo button | Inline danger notice with the message; button usable again (not stuck in `Entrando…`); still on login | E2E | P1 | MK | — | S |
 | AUTH-007 | Authentication | Demo button only when the server says so (**needs app change AC-1**, D-1) | Signed out | (a) Mock `/api/auth/config` → `{googleEnabled:false, devLoginEnabled:false}`; (b) mock `/api/auth/config` → 500 | (a) Notice `El acceso no está configurado…`, no demo button; (b) **no demo button**, an explicit "could not check access" state with a retry that, once the mock is removed, shows the normal login | E2E | P1 | MK | — | XS |
-| AUTH-008 | Authentication | Google sign-in success (stubbed) | Config mock enables Google; GIS script stubbed | Click the stub Google button | `/api/auth/google` handled by delegating to `POST /api/auth/dev` (real cookie); lands on home authenticated; reload keeps session | E2E | P1 | RB+MK | login | M |
-| AUTH-009 | Authentication | Google credential rejected | Same stub | `/api/auth/google` → 403 `Esta cuenta no tiene acceso a esta instancia` (also 401) | Message shown inline; remains on login; can still retry | E2E | P1 | MK | — | S |
-| AUTH-010 | Authentication | Google script cannot load | Config mock enables Google | Abort the GIS script request | Notice `No se pudo cargar el acceso con Google…`; demo button still works | E2E | P1 | MK | ext | S |
+| AUTH-008 ✅ | Authentication | Google sign-in success (stubbed) | Config mock enables Google; GIS script stubbed | Click the stub Google button | `/api/auth/google` handled by delegating to `POST /api/auth/dev` (real cookie); lands on home authenticated; reload keeps session | E2E | P1 | RB+MK | login | M |
+| AUTH-009 ✅ | Authentication | Google credential rejected | Same stub | `/api/auth/google` → 403 `Esta cuenta no tiene acceso a esta instancia` (also 401) | Message shown inline; remains on login; can still retry | E2E | P1 | MK | — | S |
+| AUTH-010 ✅ | Authentication | Google script cannot load | Config mock enables Google | Abort the GIS script request | Notice `No se pudo cargar el acceso con Google…`; demo button still works | E2E | P1 | MK | ext | S |
 | AUTH-011 | Authentication | Independent sessions across contexts | Two browser contexts, both logged in | Log out in A; reload B | B stays authenticated (same user, separate sessions) | E2E | P2 | RB | login | S |
 | AUTH-012 | Authentication | Dev login disabled on the server *(optional second server)* | `webServer` #2 with `ALLOW_DEV_LOGIN=false` | Open login; `POST /api/auth/dev` | Demo button absent; endpoint 404 | E2E | P2 | RB | extra webServer | M |
 
@@ -845,12 +845,12 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 |---|---|---|---|---|---|---|---|---|---|---|
 | NAV-001 ✅ | Navigation | **Route sweep smoke**: every top-level route renders | Signed in | Visit `#/`, `#/routines`, `#/routines/new`, `#/workouts`, `#/exercises`, `#/measurements`, `#/profile` (and `#/workout/active` with none) | Each shows its own heading/topbar, no `No se pudo cargar`, **zero page errors / console errors** | E2E | P0 | RB | login, console | S |
 | NAV-002 ✅ | Navigation | Bottom nav | Signed in | Click `Inicio`, `Entrenar`, `Perfil` | URL hash and view change each time; correct tab is `.active` and, after AC-8, has `aria-current="page"`; labelled `Navegación principal` | E2E | P0 | RB | login | S |
-| NAV-003 | Navigation | Back / forward | Seeded routine | routines → routine detail → browser back → forward | Correct view each step; no duplicate or lost state | E2E | P1 | RB | mine, reset | S |
+| NAV-003 ✅ | Navigation | Back / forward | Seeded routine | routines → routine detail → browser back → forward | Correct view each step; no duplicate or lost state | E2E | P1 | RB | mine, reset | S |
 | NAV-004 ✅ | Navigation | Unknown hash | Signed in | Open `#/does-not-exist` | Redirect to home | E2E | P1 | RB | login | XS |
-| NAV-005 | Navigation | Invalid-state screens | Signed in, no active workout | Open `#/workouts/999999`; open `#/workout/active` | `No se pudo cargar el entrenamiento` + `Volver`; `No hay entrenamiento activo` + `Ir a entrenamientos` | E2E | P1 | RB | reset | S |
-| NAV-006 | Navigation | Load failure and recovery | Signed in | Mock `GET /api/stats/overview` → 500; open home; unroute; click `Reintentar` | `No se pudo cargar` + `Reintentar`; after unroute the retry renders the home content | E2E | P1 | MK→RB | login | S |
-| NAV-007 | Navigation | Loading indicator | Signed in | Delay `/api/stats/overview` ~1 s | `Cargando…` loader visible, then replaced by content | E2E | P2 | MK | login | S |
-| NAV-008 | Navigation | Reload on deep routes | Seeded workout & routine | Reload on `#/workouts/:id`, `#/routines/:id`, `#/exercises`, active workout | Same route re-renders with data | E2E | P1 | RB | hist, mine | S |
+| NAV-005 ✅ | Navigation | Invalid-state screens | Signed in, no active workout | Open `#/workouts/999999`; open `#/workout/active` | `No se pudo cargar el entrenamiento` + `Volver`; `No hay entrenamiento activo` + `Ir a entrenamientos` | E2E | P1 | RB | reset | S |
+| NAV-006 ✅ | Navigation | Load failure and recovery | Signed in | Mock `GET /api/stats/overview` → 500; open home; unroute; click `Reintentar` | `No se pudo cargar` + `Reintentar`; after unroute the retry renders the home content | E2E | P1 | MK→RB | login | S |
+| NAV-007 ✅ | Navigation | Loading indicator | Signed in | Delay `/api/stats/overview` ~1 s | `Cargando…` loader visible, then replaced by content | E2E | P2 | MK | login | S |
+| NAV-008 ✅ | Navigation | Reload on deep routes | Seeded workout & routine | Reload on `#/workouts/:id`, `#/routines/:id`, `#/exercises`, active workout | Same route re-renders with data | E2E | P1 | RB | hist, mine | S |
 
 ### 5.4 Workout management (C) and history
 
@@ -867,8 +867,8 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | WRK-009 ✅ | Workouts | Decimal comma and point | Same | Weight `72,5` then `72.5` | Both stored as 72.5; displayed value/volume consistent after reload | E2E | P1 | RB | reset, mine | XS |
 | WRK-010 ✅ | Workouts | Rest timer | Active workout, 1 set, `clock` | Complete a set; advance 5 s; `+15s`; `Saltar descanso`; toggle `Temporizador de descanso` off, complete another set; reload | `role=status` shows `1:30`→ counts down, `+15s` adds, skip hides; with it off no timer appears; preference persists after reload | E2E | P1 | RB | reset, mine, clock | M |
 | WRK-011 ✅ | Workouts | Previous-set suggestion & prefill | A finished workout with the same exercise (`hist`) | New workout → add same exercise → click the `Anterior` value | Previous `kg × reps` shown in the row and as placeholders; click fills both inputs and the values are persisted | E2E | P1 | RB | hist, mine | M |
-| WRK-012 | Workouts | Set save fails | Active workout, 1 set | Mock `PATCH /api/workouts/*/sets/*` → 500; edit reps | Error toast; `Guardando…` stays visible (edit not silently dropped); after unroute and another edit it clears | E2E | P1 | RB+MK | reset, mine | S |
-| WRK-013 | Workouts | Finish fails | Active workout with a completed set | Mock `POST …/finish` → 500; click finish | Error toast; user stays on active screen; finish button usable again | E2E | P1 | RB+MK | reset, mine | S |
+| WRK-012 ✅ | Workouts | Set save fails | Active workout, 1 set | Mock `PATCH /api/workouts/*/sets/*` → 500; edit reps | The retry indicator (`Reintentando guardar…`) is shown while the write fails, then the error toast appears; after unroute and another edit the indicator clears and the value persists | E2E | P1 | RB+MK | reset, mine | S |
+| WRK-013 ✅ | Workouts | Finish fails | Active workout with a completed set | Mock `POST …/finish` → 500; click finish | Error toast; user stays on active screen; finish button usable again | E2E | P1 | RB+MK | reset, mine | S |
 | WRK-014 ✅ | Workouts | Workout detail & exercise detail modal | ≥ 2 finished workouts of one exercise (`hist`) | Open history card → detail → tap the exercise name/image | Totals, exercises and sets match the seed; the exercise detail modal opens with the *Resumen* tab showing a `Gráfico de progreso` image and the personal-record grid, and closes | E2E | P1 | RB | hist | M |
 | WRK-015 ✅ | Workouts | History empty state | No workouts (`reset`) | Open `#/workouts` and home | `Sin entrenamientos` (+ `Empezar`) / `Sin entrenamientos aún` | E2E | P1 | RB | reset | XS |
 | WRK-016 | Workouts | Edit numeric values of a finished workout (**needs app change AC-6**, D-8) | Finished workout | ⋯ → `Editar entrenamiento` → weight `72,5` then `72.5`; `5kg`; `-3`; reps `8.4`; `Listo`; reload | Same rules as the active screen: comma and point both give 72.5; `5kg` flagged (`input-error`) and not saved; negative → `0`; reps rounded to an integer; values survive reload and totals in the detail update | E2E | P1 | RB | hist | S |
@@ -1397,7 +1397,16 @@ commit.
   then 25 rows.
 * **DoD:** common DoD; AC-6 and AC-7 landed before WRK-016 / STA-001 are written.
 
-### M5 — Failure states & Google stub
+### M5 — Failure states & Google stub — **In progress**
+* **Status:** In progress. Delivered: AUTH-006
+  (`auth/demo-sign-in-failure.spec.js`), AUTH-008, 009, 010
+  (`auth/google-sign-in.spec.js`, with the GIS stub in
+  `fixtures/google-stub.js`), NAV-003, 005, 008
+  (`smoke/deep-navigation.spec.js`), NAV-006, 007
+  (`smoke/load-states.spec.js`) and WRK-012, 013
+  (`workouts/save-failures.spec.js`). The new tests passed `--repeat-each=10`
+  (110/110) and the full suite is 80/80 locally. AUTH-007 is still pending
+  because it needs AC-1.
 * **Objective:** the paths users hit when things go wrong, plus Google UI flows
   without Google.
 * **Scenarios:** NAV-003, 005, 006, 007, 008 · AUTH-006, 007, 008, 009, 010 ·

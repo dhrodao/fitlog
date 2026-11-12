@@ -913,19 +913,19 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
-| HEV-001 | Hevy | Disconnected state and input guard | Status mock `{connected:false}`; import modal | `Conectar con Hevy` with empty key; in import modal `Previsualizar` with no file / empty key | Toast `Introduce tu API key`; `Elige primero el archivo CSV`; no request sent | E2E | P1 | MK | ext | S |
-| HEV-002 | Hevy | Connect success | Disconnected mock | Type key, keep auto-sync, `Conectar con Hevy` | Toast `Cuenta de Hevy conectada`; card shows `Conectado a Hevy`, masked key, `Sincronizar ahora` | E2E | P1 | MK | ext | S |
-| HEV-003 | Hevy | Connect failure | Disconnected mock | `connect` → 401 (invalid key), then 429 / network | Inline `import-error` with the message; buttons re-enabled; still disconnected | E2E | P1 | MK | ext | S |
-| HEV-004 | Hevy | Manual sync with changes | Connected mock | `Sincronizar ahora` (response: imported 2, routines 1) | Busy text `Sincronizando…`; summary rows; toast `Sincronizado: +2 entrenos, 1 rutinas`; view refreshes | E2E | P1 | MK | ext | M |
-| HEV-005 | Hevy | Manual sync, nothing new | Connected mock | `Sincronizar ahora` (all zeros) | `Todo al día / Sin cambios`; toast `Ya estabas al día`; no refresh | E2E | P1 | MK | ext | S |
-| HEV-006 | Hevy | Sync status lines | Connected mock | Status with `lastStatus:'error'` + message; with `'warning'` | Error line (`import-error`) or warning line shown; clean status shows none; `última sync` text | E2E | P1 | MK | ext | S |
-| HEV-007 | Hevy | No duplicate actions while busy | Connected mock, delayed response | Click `Sincronizar ahora`; try clicking it and `Desconectar` again | All card buttons disabled during the request; exactly **one** request issued | E2E | P1 | MK | ext | S |
-| HEV-008 | Hevy | Auto-sync / webhook toggles | Connected mock | Toggle auto-sync (success then failure); webhook available / unavailable | Success toasts; failed toggle reverts the checkbox and shows error; unavailable shows the `PUBLIC_URL` hint | E2E | P2 | MK | ext | S |
-| HEV-009 | Hevy | Disconnect | Connected mock | `Desconectar` → cancel; again → confirm | Cancel keeps; confirm toasts `Cuenta de Hevy desconectada` and shows the connect form | E2E | P1 | MK | ext | S |
-| HEV-010 | Hevy | CSV import: preview then import (**no external calls**) | Small fixture CSV; empty history | Profile → `Importar de Hevy` → choose file → `Previsualizar` → `Importar` | Preview shows `Entrenos a importar` etc. and writes nothing; import shows `Entrenos importados`, toast, modal closes, history lists the workouts | E2E | P1 | RB | reset, hevy-csv | M |
-| HEV-011 | Hevy | CSV re-import is idempotent | After HEV-010 | Import the same file again | `Omitidos (duplicados)` > 0; workout count unchanged | E2E | P1 | RB | HEV-010 | S |
-| HEV-012 | Hevy | Delete imported data | After HEV-010 | `Eliminar datos importados de Hevy` → cancel; confirm | Cancel keeps; confirm toasts and removes only imported workouts/routines; manual workouts remain | E2E | P1 | RB | HEV-010, hist | S |
-| HEV-013 | Hevy | Imported content is read-only in the UI | After HEV-010 (workout + routine with `source='hevy'`) | Open imported workout menu; open imported routine editor by URL | No `Editar entrenamiento` item and `Importado de Hevy · solo lectura`; `Rutina de solo lectura` | E2E | P2 | RB | HEV-010 | S |
+| HEV-001 ✅ | Hevy | Disconnected state and input guard | Status mock `{connected:false}`; import modal | `Conectar con Hevy` with empty key; in import modal `Previsualizar` with no file / empty key | Toast `Introduce tu API key`; `Elige primero el archivo CSV`; no request sent | E2E | P1 | MK | ext | S |
+| HEV-002 ✅ | Hevy | Connect success | Disconnected mock | Type key, keep auto-sync, `Conectar con Hevy` | Toast `Cuenta de Hevy conectada`; card shows `Conectado a Hevy`, masked key, `Sincronizar ahora` | E2E | P1 | MK | ext | S |
+| HEV-003 ✅ | Hevy | Connect failure | Disconnected mock | `connect` → 401 (invalid key), then 429 / network | Inline `import-error` with the server message; a 401 surfaces the app's shared session-expired copy (`Tu sesión ha caducado…`); buttons re-enabled; still disconnected | E2E | P1 | MK | ext | S |
+| HEV-004 ✅ | Hevy | Manual sync with changes | Connected mock | `Sincronizar ahora` (response: imported 2, routines 1) | Busy text `Sincronizando…`; summary rows; toast `Sincronizado: +2 entrenos, 1 rutinas`; view refreshes | E2E | P1 | MK | ext | M |
+| HEV-005 ✅ | Hevy | Manual sync, nothing new | Connected mock | `Sincronizar ahora` (all zeros) | `Todo al día / Sin cambios`; toast `Ya estabas al día`; no refresh | E2E | P1 | MK | ext | S |
+| HEV-006 ✅ | Hevy | Sync status lines | Connected mock | Status with `lastStatus:'error'` + message; with `'warning'` | Error line (`import-error`) or warning line shown; clean status shows none; `última sync` text | E2E | P1 | MK | ext | S |
+| HEV-007 ✅ | Hevy | No duplicate actions while busy | Connected mock, delayed response | Click `Sincronizar ahora`; try clicking it and `Desconectar` again | All card buttons disabled during the request; exactly **one** request issued | E2E | P1 | MK | ext | S |
+| HEV-008 ✅ | Hevy | Auto-sync / webhook toggles | Connected mock | Toggle auto-sync (success then failure); webhook available / unavailable | Success toasts; failed toggle reverts the checkbox and shows error; unavailable shows the `PUBLIC_URL` hint | E2E | P2 | MK | ext | S |
+| HEV-009 ✅ | Hevy | Disconnect | Connected mock | `Desconectar` → cancel; again → confirm | Cancel keeps; confirm toasts `Cuenta de Hevy desconectada` and shows the connect form | E2E | P1 | MK | ext | S |
+| HEV-010 ✅ | Hevy | CSV import: preview then import (**no external calls**) | Small fixture CSV; empty history | Profile → `Importar de Hevy` → choose file → `Previsualizar` → `Importar` | Preview shows `Entrenos a importar` etc. and writes nothing; import shows `Entrenos importados`, toast, modal closes, history lists the workouts | E2E | P1 | RB | reset, hevy-csv | M |
+| HEV-011 ✅ | Hevy | CSV re-import is idempotent | After HEV-010 | Import the same file again | `Omitidos (duplicados)` > 0; workout count unchanged | E2E | P1 | RB | HEV-010 | S |
+| HEV-012 ✅ | Hevy | Delete imported data | After HEV-010 | `Eliminar datos importados de Hevy` → cancel; confirm | Cancel keeps; confirm toasts and removes only imported workouts/routines; manual workouts remain | E2E | P1 | RB | HEV-010, hist | S |
+| HEV-013 ✅ | Hevy | Imported content is read-only in the UI | Imported workout (real CSV) and a routine detail mocked with `source='hevy'` | Open imported workout menu; open imported routine editor by URL | No `Editar entrenamiento` item and `Importado de Hevy · solo lectura`; `Rutina de solo lectura` | E2E | P2 | RB+MK | HEV-010 | S |
 
 ### 5.8 Measurements & statistics (G)
 
@@ -1419,7 +1419,19 @@ commit.
   external-host guard reports zero Google requests.
 * **DoD:** common DoD.
 
-### M6 — Hevy integration UI
+### M6 — Hevy integration UI — **Completed**
+* **Status:** Completed. Delivered: HEV-001–003 and 009
+  (`hevy/hevy-connection.spec.js`), HEV-004–008 (`hevy/hevy-sync.spec.js`; the
+  toggle scenario is split into auto-sync and webhook cases) and HEV-010–013
+  (`hevy/hevy-import.spec.js`; HEV-013 covers both the read-only workout and the
+  read-only routine editor). Tier 1 mocks the browser-facing
+  `/api/import/hevy/**` endpoints through `fixtures/hevy-mocks.js`; Tier 2 uses
+  the real local CSV path with `support/hevy-workouts.fixture.csv`, so no test
+  reaches Hevy. The `reset` fixture also drops any stored connection. The new
+  tests passed `--repeat-each=10` and the full suite is 95/95 locally (Node 18,
+  Chromium). Per D-3 the API-key → server → Hevy wiring stays outside E2E. One
+  observed detail: a 401 from `connect` is mapped by the shared API client to
+  the session-expired copy rather than the server's key message.
 * **Objective:** the sync/import UI contract and the local CSV path.
 * **Scenarios:** HEV-001–013.
 * **Infra:** `hevy-mocks.js` (Tier 1), `hevy-workouts.fixture.csv` (Tier 2);

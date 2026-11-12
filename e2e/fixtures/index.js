@@ -2,6 +2,8 @@ import { test as base, expect } from '@playwright/test';
 import {
   finishWorkout,
   getActiveWorkout,
+  importHevyCsv,
+  listWorkouts,
   loginViaApi,
   resetData,
   seedCatalogExercise,
@@ -60,6 +62,8 @@ export const test = base.extend({
       login: () => loginViaApi(context),
       reset: () => resetData(context),
       getActiveWorkout: () => getActiveWorkout(context),
+      listWorkouts: () => listWorkouts(context),
+      importHevyCsv: (csv, write) => importHevyCsv(context, csv, write),
       seedExercise: (name, options) => seedExercise(context, name, options),
       seedCatalogExercise: (catalogId) => seedCatalogExercise(context, catalogId),
       seedRoutine: (payload) => seedRoutine(context, payload),

@@ -50,6 +50,23 @@ export async function resetData(context) {
   for (const measurement of measurements) {
     await context.request.delete(`/api/measurements/${measurement.id}`);
   }
+
+  // Drop any stored Hevy connection so a mocked or imported state never leaks
+  // between tests.
+  await context.request.delete('/api/import/hevy/sync');
+}
+
+export async function listWorkouts(context) {
+  const response = await context.request.get('/api/workouts?limit=100');
+  const { workouts } = await json(response, 'list workouts');
+  return workouts;
+}
+
+export async function importHevyCsv(context, csv, write = false) {
+  const response = await context.request.post('/api/import/hevy/csv', {
+    data: { csv, write },
+  });
+  return json(response, 'import Hevy CSV');
 }
 
 export async function seedExercise(context, name, { category = 'Personalizado' } = {}) {

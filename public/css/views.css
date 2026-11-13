@@ -1963,17 +1963,22 @@
 
 .guide-image {
   width: 100%;
+  /* Hevy's exercise assets are wide (1.6:1) with the figure on a white
+     backdrop. Pin the ratio and contain the media so nothing is cropped or
+     pushed off-frame; the white fill matches the asset background. */
+  aspect-ratio: 1.6 / 1;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: var(--surface-3);
+  background: #fff;
   border: 1px solid var(--border);
 }
 
 .guide-image img,
 .guide-image video {
   width: 100%;
+  height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .guide-block {

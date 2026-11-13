@@ -843,7 +843,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | AUTH-008 ✅ | Authentication | Google sign-in success (stubbed) | Config mock enables Google; GIS script stubbed | Click the stub Google button | `/api/auth/google` handled by delegating to `POST /api/auth/dev` (real cookie); lands on home authenticated; reload keeps session | E2E | P1 | RB+MK | login | M |
 | AUTH-009 ✅ | Authentication | Google credential rejected | Same stub | `/api/auth/google` → 403 `Esta cuenta no tiene acceso a esta instancia` (also 401) | Message shown inline; remains on login; can still retry | E2E | P1 | MK | — | S |
 | AUTH-010 ✅ | Authentication | Google script cannot load | Config mock enables Google | Abort the GIS script request | Notice `No se pudo cargar el acceso con Google…`; demo button still works | E2E | P1 | MK | ext | S |
-| AUTH-011 | Authentication | Independent sessions across contexts | Two browser contexts, both logged in | Log out in A; reload B | B stays authenticated (same user, separate sessions) | E2E | P2 | RB | login | S |
+| AUTH-011 ✅ | Authentication | Independent sessions across contexts | Two browser contexts, both logged in | Log out in A; reload B | B stays authenticated (same user, separate sessions) | E2E | P2 | RB | login | S |
 | AUTH-012 | Authentication | Dev login disabled on the server *(optional second server)* | `webServer` #2 with `ALLOW_DEV_LOGIN=false` | Open login; `POST /api/auth/dev` | Demo button absent; endpoint 404 | E2E | P2 | RB | extra webServer | M |
 
 ### 5.3 Navigation & initialization (B)
@@ -948,7 +948,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | MEA-008 ✅ | Measurements | Empty state | None | Open measurements | `Sin medidas aún`, `Aún sin registros` | E2E | P1 | RB | reset | XS |
 | MEA-009 ✅ | Measurements | Default date is local, not UTC | `clock` near local midnight; non-UTC `timezoneId` | Open form | Date input equals the **local** calendar date | E2E | P2 | RB | clock | M |
 | STA-001 | Statistics | Home weekly stats, local weeks (**needs app change AC-7**, D-9) | Seeded history at fixed dates (`hist`, `clock`), including one workout at 00:30 Monday Europe/Madrid (= Sunday 23:30 UTC in winter) | Open home; tap a week bar; tap again | Totals match seed; the 00:30-Monday workout counts in the **new** local week; selecting a bar swaps label/stats; second tap restores `Esta semana` | E2E | P1 | RB | hist, clock | M |
-| STA-002 | Statistics | Profile metrics & chart | `hist` | Profile → switch `Duración`/`Volumen`/`Repeticiones`; hover/tap a bar | Chart title follows metric; tooltip shows `Entrenos/Tiempo/Volumen/Series` of that week | E2E | P2 | RB | hist, clock | M |
+| STA-002 ✅ | Statistics | Profile metrics & chart | `hist` | Profile → switch `Duración`/`Volumen`/`Repeticiones`; hover/tap a bar | Chart title follows metric; tooltip shows `Entrenos/Tiempo/Volumen/Series` of that week | E2E | P2 | RB | hist, clock | M |
 
 ### 5.9 Responsive / mobile (H)
 
@@ -982,8 +982,8 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
-| A11Y-001 | Accessibility | Dialog focus & Escape | Any confirm dialog | Open via keyboard; press Escape | Focus moves into the `<dialog>`; Escape closes without confirming; focus returns to the trigger | A11y | P1 | RB | login | S |
-| A11Y-002 | Accessibility | Log a set with the keyboard only | Active workout, 1 set | Tab to kg → reps → `Completar serie`; press Enter/Space | Order is logical, controls have names (`Peso en kg`, `Repeticiones`, `Completar serie`); set completes | A11y | P1 | RB | reset, mine | S |
+| A11Y-001 ✅ | Accessibility | Dialog focus & Escape | Any confirm dialog | Open via keyboard; press Escape | Focus moves into the `<dialog>`; Escape closes without confirming; focus returns to the trigger | A11y | P1 | RB | login | S |
+| A11Y-002 ✅ | Accessibility | Log a set with the keyboard only | Active workout, 1 set | Tab to kg → reps → `Completar serie`; press Enter/Space | Order is logical, controls have names (`Peso en kg`, `Repeticiones`, `Completar serie`); set completes | A11y | P1 | RB | reset, mine | S |
 | A11Y-003 | Accessibility | Form labels are programmatically associated (**needs app change AC-8**, D-11) | Measurements, routine editor and finished-workout edit forms | `getByLabel('Peso (kg)')`, `getByLabel('Nombre')`, … | Each field is reachable by its label and clicking the label focuses the input | A11y | P2 | RB | login | S |
 | A11Y-004 | Accessibility | Toast is announced (**needs app change AC-8**, D-11) | Any success action | Perform an action; inspect the toast container | The toast text appears inside an element with `role="status"` (`aria-live="polite"`) | A11y | P2 | RB | login | XS |
 
@@ -1321,8 +1321,8 @@ commit.
   (`auth/expired-session.spec.js`; the AC-2 toast is still pending), NAV-001
   (`smoke/route-sweep.spec.js`), NAV-002 and NAV-004 (`smoke/navigation.spec.js`),
   WRK-001 (`workouts/start-workout.spec.js`). All tagged `@smoke` where the plan
-  asks for it and green locally. AUTH-011 (cross-context sessions) not yet
-  written.
+  asks for it and green locally. AUTH-011 (cross-context sessions) is covered by
+  `auth/independent-sessions.spec.js`.
 * **Objective:** a `@smoke` set that proves boot, auth and guards.
 * **Scenarios:** AUTH-001, 002, 003, 004, 005, 011 · NAV-001, 002, 004 · WRK-001.
 * **Infra:** `login` fixture; console guard active; tag `@smoke`.
@@ -1389,8 +1389,9 @@ commit.
   `measurements/measurement-validation.spec.js` (local-date default included).
   The new tests passed `--repeat-each=10` (100/100 for measurements; 130/130 for
   the earlier batch). The stopgap `test/active-e1rm-parity.test.js` was removed
-  now that the record path is exercised in the browser. Still pending: WRK-016
-  (needs AC-6) and the statistics scenarios (STA-001, 002; STA-001 needs AC-7).
+  now that the record path is exercised in the browser. STA-002 lives in
+  `stats/profile-stats.spec.js` (metric switch plus the week tooltip from seeded
+  history). Still pending: WRK-016 (needs AC-6) and STA-001 (needs AC-7).
 * **Objective:** cover data viewing/editing and the date-sensitive features.
 * **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019, 021, 023, 024, 025, 026 · MEA-001–009 · STA-001, 002.
   (WRK-016 still needs AC-6; WRK-017's confirm part is covered now that AC-4 has
@@ -1498,6 +1499,10 @@ commit.
   manual checklist item.
 
 ### M9 — Accessibility
+* **Status:** In progress. A11Y-001 and A11Y-002 live in
+  `a11y/keyboard.spec.js` (dialog focus/Escape with focus restoration, and
+  completing a set with Tab/typing/Space only). A11Y-003/004 are still pending
+  because they need AC-8.
 * **Objective:** keyboard/focus/ARIA baseline and tracked findings.
 * **Scenarios:** A11Y-001–004.
 * **Infra:** none beyond helpers; decision on `@axe-core/playwright` (default:

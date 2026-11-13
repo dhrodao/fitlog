@@ -232,8 +232,14 @@ function updateNav(routeName) {
   }
   NAV_ITEMS.forEach(([name], index) => {
     const link = nav.querySelector(`[data-nav="${name}"]`);
-    link.classList.toggle('active', name === activeName);
-    if (name === activeName) nav.style.setProperty('--nav-index', String(index));
+    const isActive = name === activeName;
+    link.classList.toggle('active', isActive);
+    if (isActive) {
+      link.setAttribute('aria-current', 'page');
+      nav.style.setProperty('--nav-index', String(index));
+    } else {
+      link.removeAttribute('aria-current');
+    }
   });
   if (activeName) nav.dataset.active = activeName;
   else delete nav.dataset.active;

@@ -92,27 +92,27 @@ export async function render(container, ctx) {
         </div>
         <div class="measurement-form">
           <div class="field">
-            <label>Fecha</label>
-            <input class="input" type="date" data-field="date" value="${esc(formatDateInput(new Date()))}" />
+            <label for="measurement-date">Fecha</label>
+            <input id="measurement-date" class="input" type="date" data-field="date" value="${esc(formatDateInput(new Date()))}" />
           </div>
           <div class="form-grid">
             <div class="field">
-              <label>Peso (kg)</label>
-              <input class="input" type="text" inputmode="decimal" data-field="weightKg" placeholder="0.0" />
+              <label for="measurement-weight">Peso (kg)</label>
+              <input id="measurement-weight" class="input" type="text" inputmode="decimal" data-field="weightKg" placeholder="0.0" />
             </div>
             <div class="field">
-              <label>Grasa (%)</label>
-              <input class="input" type="text" inputmode="decimal" data-field="bodyFat" placeholder="0.0" />
+              <label for="measurement-bodyfat">Grasa (%)</label>
+              <input id="measurement-bodyfat" class="input" type="text" inputmode="decimal" data-field="bodyFat" placeholder="0.0" />
             </div>
           </div>
           <div class="form-grid">
             <div class="field">
-              <label>Cintura (cm)</label>
-              <input class="input" type="text" inputmode="decimal" data-field="waistCm" placeholder="0.0" />
+              <label for="measurement-waist">Cintura (cm)</label>
+              <input id="measurement-waist" class="input" type="text" inputmode="decimal" data-field="waistCm" placeholder="0.0" />
             </div>
             <div class="field">
-              <label>Nota</label>
-              <input class="input" type="text" data-field="notes" placeholder="Opcional" maxlength="200" />
+              <label for="measurement-notes">Nota</label>
+              <input id="measurement-notes" class="input" type="text" data-field="notes" placeholder="Opcional" maxlength="200" />
             </div>
           </div>
           <button type="button" class="btn btn-primary btn-block" data-save>${icon('plus', 16)} Guardar medida</button>

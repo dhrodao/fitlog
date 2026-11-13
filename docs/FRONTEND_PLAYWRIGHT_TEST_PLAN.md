@@ -315,8 +315,8 @@ offline-vs-service-worker interaction, and several fixture mechanics are marked
 
 | Gap | Evidence | Consequence for tests |
 |---|---|---|
-| Form `<label>` elements are **not associated** with inputs (no `for`, no wrapping) in measurements and routine editor. | `views/measurements.js` (`<label>Fecha</label><input …>`), `routine-editor.js`; grep finds no `<label for=`. | `getByLabel('Peso (kg)')` will **not** work; use `[data-field]` / `[data-input]`. Also an a11y defect (A11Y-003). |
-| Toasts have no live region/role. | `ui.js toast()` appends to a bare `div.toast-stack` in `body`; `#app`'s `aria-live` does not contain it. | Toasts must be asserted by text (`.toast` + text); screen-reader announcement is untested/unsupported (A11Y-004). |
+| ~~Form `<label>` elements are **not associated** with inputs (no `for`, no wrapping) in measurements and routine editor.~~ **Fixed by AC-8.** | `views/measurements.js`, `routine-editor.js`, `workout.js` now use `for`/`id`. | `getByLabel('Peso (kg)')` now works in those forms (A11Y-003). |
+| ~~Toasts have no live region/role.~~ **Fixed by AC-8.** | `ui.js toast()` now creates the stack with `role="status"` and `aria-live="polite"`. | Toasts are announced and can be found with `getByRole('status')` (A11Y-004). |
 | Picker search input has only a placeholder. | `exercise-picker.js` | Use `getByPlaceholder('Buscar ejercicio...')`. |
 | Active nav item is only a CSS class (`.active`), no `aria-current`. | `app.js navItem` | Assert via class or add `aria-current` later (optional). |
 | The per-set delete button sits in an `aria-hidden` background layer under the row and is revealed by a swipe. | `views/active.js setRow`, `swipe.js` | Not clickable by normal user-style actions on desktop; needs a pointer-drag/touch gesture (MOB-004, covered with CDP touch input in the mobile project). |
@@ -851,7 +851,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
 | NAV-001 ✅ | Navigation | **Route sweep smoke**: every top-level route renders | Signed in | Visit `#/`, `#/routines`, `#/routines/new`, `#/workouts`, `#/exercises`, `#/measurements`, `#/profile` (and `#/workout/active` with none) | Each shows its own heading/topbar, no `No se pudo cargar`, **zero page errors / console errors** | E2E | P0 | RB | login, console | S |
-| NAV-002 ✅ | Navigation | Bottom nav | Signed in | Click `Inicio`, `Entrenar`, `Perfil` | URL hash and view change each time; correct tab is `.active` and, after AC-8, has `aria-current="page"`; labelled `Navegación principal` | E2E | P0 | RB | login | S |
+| NAV-002 ✅ | Navigation | Bottom nav | Signed in | Click `Inicio`, `Entrenar`, `Perfil` | URL hash and view change each time; correct tab is `.active` and has `aria-current="page"`; labelled `Navegación principal` | E2E | P0 | RB | login | S |
 | NAV-003 ✅ | Navigation | Back / forward | Seeded routine | routines → routine detail → browser back → forward | Correct view each step; no duplicate or lost state | E2E | P1 | RB | mine, reset | S |
 | NAV-004 ✅ | Navigation | Unknown hash | Signed in | Open `#/does-not-exist` | Redirect to home | E2E | P1 | RB | login | XS |
 | NAV-005 ✅ | Navigation | Invalid-state screens | Signed in, no active workout | Open `#/workouts/999999`; open `#/workout/active` | `No se pudo cargar el entrenamiento` + `Volver`; `No hay entrenamiento activo` + `Ir a entrenamientos` | E2E | P1 | RB | reset | S |
@@ -984,8 +984,8 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 |---|---|---|---|---|---|---|---|---|---|---|
 | A11Y-001 ✅ | Accessibility | Dialog focus & Escape | Any confirm dialog | Open via keyboard; press Escape | Focus moves into the `<dialog>`; Escape closes without confirming; focus returns to the trigger | A11y | P1 | RB | login | S |
 | A11Y-002 ✅ | Accessibility | Log a set with the keyboard only | Active workout, 1 set | Tab to kg → reps → `Completar serie`; press Enter/Space | Order is logical, controls have names (`Peso en kg`, `Repeticiones`, `Completar serie`); set completes | A11y | P1 | RB | reset, mine | S |
-| A11Y-003 | Accessibility | Form labels are programmatically associated (**needs app change AC-8**, D-11) | Measurements, routine editor and finished-workout edit forms | `getByLabel('Peso (kg)')`, `getByLabel('Nombre')`, … | Each field is reachable by its label and clicking the label focuses the input | A11y | P2 | RB | login | S |
-| A11Y-004 | Accessibility | Toast is announced (**needs app change AC-8**, D-11) | Any success action | Perform an action; inspect the toast container | The toast text appears inside an element with `role="status"` (`aria-live="polite"`) | A11y | P2 | RB | login | XS |
+| A11Y-003 ✅ | Accessibility | Form labels are programmatically associated (AC-8, D-11) | Measurements, routine editor and finished-workout edit forms | `getByLabel('Peso (kg)')`, `getByLabel('Nombre')`, … | Each field is reachable by its label and clicking the label focuses the input | A11y | P2 | RB | login | S |
+| A11Y-004 ✅ | Accessibility | Toast is announced (AC-8, D-11) | Any success action | Perform an action; inspect the toast container | The toast text appears inside an element with `role="status"` (`aria-live="polite"`) | A11y | P2 | RB | login | XS |
 
 ### 5.12 Catalog totals
 
@@ -1261,7 +1261,7 @@ checklist (shell hash recomputed, `CACHE_VERSION` bumped, `npm test` green).
 | AC-5 | D-7 | Logout uploads a pending offline workout first; warns if it cannot | `public/js/app.js` (`logout`), `public/js/views/profile.js` | OFF-009 |
 | AC-6 | D-8 | Finished-workout edit uses text inputs + `parseDecimalInput` | `public/js/views/workout.js` | WRK-016 |
 | AC-7 | D-9 | `tz`-aware weekly buckets | `public/js/api.js`, **`server/routes/stats.js`** (+ a `node --test` case) | STA-001 |
-| AC-8 | D-11 | Label association, toast live region, `aria-current="page"` | `public/js/views/measurements.js`, `routine-editor.js`, `workout.js`, `ui.js`, `app.js` | A11Y-003, A11Y-004, NAV-002 |
+| AC-8 ✅ | D-11 | Label association, toast live region, `aria-current="page"` | `public/js/views/measurements.js`, `routine-editor.js`, `workout.js`, `ui.js`, `app.js` | A11Y-003, A11Y-004, NAV-002 |
 | AC-9 | D-13 | Toast on the 409 redirect when starting a workout | `public/js/views/training.js` | WRK-006 |
 
 Suggested packaging (one shell bump per batch, fewer service-worker cache
@@ -1498,11 +1498,14 @@ commit.
 * **DoD:** common DoD; spike result written back into §4.I; OFF-007 may end as a
   manual checklist item.
 
-### M9 — Accessibility
-* **Status:** In progress. A11Y-001 and A11Y-002 live in
+### M9 — Accessibility — **Completed**
+* **Status:** Completed. A11Y-001 and A11Y-002 live in
   `a11y/keyboard.spec.js` (dialog focus/Escape with focus restoration, and
-  completing a set with Tab/typing/Space only). A11Y-003/004 are still pending
-  because they need AC-8.
+  completing a set with Tab/typing/Space only). A11Y-003/004 live in
+  `a11y/semantics.spec.js` (label association and click-to-focus in the
+  measurements, routine-editor and finished-workout-edit forms; toast exposed
+  through a `role="status"` / `aria-live="polite"` region). AC-8 also added
+  `aria-current="page"` to the active bottom-nav item, now asserted in NAV-002.
 * **Objective:** keyboard/focus/ARIA baseline and tracked findings.
 * **Scenarios:** A11Y-001–004.
 * **Infra:** none beyond helpers; decision on `@axe-core/playwright` (default:

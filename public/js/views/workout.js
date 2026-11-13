@@ -375,16 +375,16 @@ export async function render(container, ctx, params) {
       </div>
 
       <div class="field">
-        <label>Nombre</label>
-        <input class="input" type="text" data-input="name" value="${esc(workout.name || '')}" placeholder="Entrenamiento" maxlength="120" />
+        <label for="workout-edit-name">Nombre</label>
+        <input id="workout-edit-name" class="input" type="text" data-input="name" value="${esc(workout.name || '')}" placeholder="Entrenamiento" maxlength="120" />
       </div>
       <div class="field">
-        <label>Ubicación (opcional)</label>
-        <input class="input" type="text" data-input="location" value="${esc(workout.location || '')}" placeholder="Gimnasio" maxlength="120" />
+        <label for="workout-edit-location">Ubicación (opcional)</label>
+        <input id="workout-edit-location" class="input" type="text" data-input="location" value="${esc(workout.location || '')}" placeholder="Gimnasio" maxlength="120" />
       </div>
       <div class="field">
-        <label>Notas (opcional)</label>
-        <input class="input" type="text" data-input="notes" value="${esc(workout.notes || '')}" placeholder="Cómo fue el entreno" maxlength="500" />
+        <label for="workout-edit-notes">Notas (opcional)</label>
+        <input id="workout-edit-notes" class="input" type="text" data-input="notes" value="${esc(workout.notes || '')}" placeholder="Cómo fue el entreno" maxlength="500" />
       </div>
 
       <section>

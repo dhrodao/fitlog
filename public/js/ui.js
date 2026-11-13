@@ -251,6 +251,8 @@ export function toast(message, type = 'default') {
   if (!toastStack) {
     toastStack = document.createElement('div');
     toastStack.className = 'toast-stack';
+    toastStack.setAttribute('role', 'status');
+    toastStack.setAttribute('aria-live', 'polite');
     document.body.append(toastStack);
   }
 

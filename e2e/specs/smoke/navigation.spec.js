@@ -13,17 +13,33 @@ test.describe('Navigation', () => {
     await expect(page).toHaveURL(/#\/routines$/);
     await expect(page.getByRole('heading', { name: 'Entrenamiento', exact: true })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Entrenar' })).toHaveClass(/active/);
+    await expect(nav.getByRole('link', { name: 'Entrenar' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
     await expect(nav.getByRole('link', { name: 'Inicio' })).not.toHaveClass(/active/);
+    await expect(nav.getByRole('link', { name: 'Inicio' })).not.toHaveAttribute(
+      'aria-current',
+      'page'
+    );
 
     await nav.getByRole('link', { name: 'Perfil' }).click();
     await expect(page).toHaveURL(/#\/profile$/);
     await expect(page.getByRole('heading', { name: 'Información' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Perfil' })).toHaveClass(/active/);
+    await expect(nav.getByRole('link', { name: 'Perfil' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
 
     await nav.getByRole('link', { name: 'Inicio' }).click();
     await expect(page).toHaveURL(/#\/$/);
     await expect(page.getByRole('heading', { name: 'Atleta', exact: true })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Inicio' })).toHaveClass(/active/);
+    await expect(nav.getByRole('link', { name: 'Inicio' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
   });
 
   test(

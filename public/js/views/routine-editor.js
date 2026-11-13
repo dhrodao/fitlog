@@ -98,12 +98,12 @@ export async function render(container, ctx, params) {
       </div>
       <div class="editor-controls">
         <div class="field">
-          <label>Series</label>
-          <input class="input" type="number" inputmode="numeric" min="1" max="20" value="${esc(String(item.targetSets))}" data-field="targetSets" />
+          <label for="routine-ex-${item.uid}-sets">Series</label>
+          <input id="routine-ex-${item.uid}-sets" class="input" type="number" inputmode="numeric" min="1" max="20" value="${esc(String(item.targetSets))}" data-field="targetSets" />
         </div>
         <div class="field">
-          <label>Reps objetivo</label>
-          <input class="input" type="text" value="${esc(item.targetReps)}" data-field="targetReps" placeholder="8-12" />
+          <label for="routine-ex-${item.uid}-reps">Reps objetivo</label>
+          <input id="routine-ex-${item.uid}-reps" class="input" type="text" value="${esc(item.targetReps)}" data-field="targetReps" placeholder="8-12" />
         </div>
       </div>
     </div>
@@ -126,17 +126,17 @@ export async function render(container, ctx, params) {
       </div>
 
       <div class="field">
-        <label>Nombre</label>
-        <input class="input" type="text" data-input="name" value="${esc(form.name)}" placeholder="Día 1 - Pierna" maxlength="120" />
+        <label for="routine-name">Nombre</label>
+        <input id="routine-name" class="input" type="text" data-input="name" value="${esc(form.name)}" placeholder="Día 1 - Pierna" maxlength="120" />
       </div>
       <div class="form-grid">
         <div class="field">
-          <label>Carpeta (opcional)</label>
-          <input class="input" type="text" data-input="folder" value="${esc(form.folder)}" placeholder="Tirón-Empuje" maxlength="120" />
+          <label for="routine-folder">Carpeta (opcional)</label>
+          <input id="routine-folder" class="input" type="text" data-input="folder" value="${esc(form.folder)}" placeholder="Tirón-Empuje" maxlength="120" />
         </div>
         <div class="field">
-          <label>Descripción (opcional)</label>
-          <input class="input" type="text" data-input="description" value="${esc(form.description)}" placeholder="Notas de la rutina" maxlength="200" />
+          <label for="routine-description">Descripción (opcional)</label>
+          <input id="routine-description" class="input" type="text" data-input="description" value="${esc(form.description)}" placeholder="Notas de la rutina" maxlength="200" />
         </div>
       </div>
 

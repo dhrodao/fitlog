@@ -255,6 +255,7 @@ router.get('/exercise/:exerciseId', (req, res) => {
           force: catalog.force,
           mechanic: catalog.mechanic,
           imageUrl: catalog.imageUrl,
+          videoUrl: catalog.videoUrl,
         };
       })()
     : null;

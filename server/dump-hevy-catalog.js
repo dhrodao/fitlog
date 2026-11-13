@@ -20,9 +20,16 @@ import { seedCatalogFromDump } from './hevy-catalog-seed.js';
  *   <DIR>/exercises.raw.json   the untouched Hevy objects (nothing is lost)
  *   <DIR>/images/<id>.<ext>    the thumbnails Hevy actually exposes
  *
+ * Exercise animations (videos) are NOT handled here: the Hevy public API does
+ * not expose them, so they are not part of this dump. The app serves a video
+ * per exercise by convention when YOU place it at
+ * <DIR>/videos/<templateId>.mp4 (see server/hevy-catalog-seed.js); managing
+ * those files is manual and outside this script.
+ *
  * With --seed-catalog, after writing the dump it also loads it into the app's
  * exercise_catalog table, so the app serves the Hevy catalog (and its local
- * images) with no dependency on free-exercise-db or the Hevy API.
+ * images and any videos/<id>.mp4 you provided) with no dependency on
+ * free-exercise-db or the Hevy API.
  *
  * NOTE: Hevy only returns a single `thumbnail_url` per template, and for the
  * official (non-custom) catalog it is frequently empty, so most standard

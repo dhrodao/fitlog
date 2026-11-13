@@ -139,13 +139,24 @@ function guideTab(stats) {
     ? `<div class="guide-image"><img src="${esc(detail.imageUrl)}" alt="" referrerpolicy="no-referrer" /></div>`
     : '';
 
-  if (!muscles.length && !equipment.length && !instructions.length && !image) {
+  // A short looping animation when the catalog has one (Hevy), otherwise the
+  // static thumbnail. Served by the app from disk, so same-origin. The image is
+  // the poster so nothing flashes before the video loads; it plays as a silent,
+  // controlless loop (like Hevy's own animation), so no scrubber is shown.
+  const media = detail.videoUrl
+    ? `<div class="guide-image"><video
+         src="${esc(detail.videoUrl)}"
+         ${detail.imageUrl ? `poster="${esc(detail.imageUrl)}"` : ''}
+         muted loop autoplay playsinline></video></div>`
+    : image;
+
+  if (!muscles.length && !equipment.length && !instructions.length && !media) {
     return `<div class="chart-empty">No hay indicaciones del catálogo para este ejercicio</div>`;
   }
 
   return `
     <div class="guide">
-      ${image}
+      ${media}
       ${chipRow('Músculos', muscles)}
       ${chipRow('Equipamiento', equipment)}
       ${steps}

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db, getMeta, nowIso, setMeta } from './db.js';
 import config from './config.js';
-import { catalogImageUrl } from './catalog-images.js';
+import { catalogImageUrl, catalogVideoUrl } from './catalog-media.js';
 import { invalidateCatalogCaches } from './catalog-cache-registry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -189,6 +189,9 @@ export function mapExercise(item) {
     imageUrl,
     imageUrl2: images[1] ? buildImageUrl(images[1]) : null,
     thumbnailUrl: imageUrl,
+    // Only the Hevy catalog provides this (derived from the thumbnail); it is
+    // null for free-exercise-db items and for custom exercises.
+    videoUrl: item.videoUrl || null,
     description: instructions.join('\n\n'),
     updatedAt: nowIso(),
   };
@@ -308,11 +311,11 @@ const upsertCatalog = db.prepare(
   `INSERT INTO exercise_catalog
      (id, name, category, muscles, primary_muscles, secondary_muscles,
       equipment, instructions, level, force, mechanic,
-      image_url, image_url_2, thumbnail_url, description, updated_at)
+      image_url, image_url_2, thumbnail_url, video_url, description, updated_at)
    VALUES
      (@id, @name, @category, @muscles, @primaryMuscles, @secondaryMuscles,
       @equipment, @instructions, @level, @force, @mechanic,
-      @imageUrl, @imageUrl2, @thumbnailUrl, @description, @updatedAt)
+      @imageUrl, @imageUrl2, @thumbnailUrl, @videoUrl, @description, @updatedAt)
    ON CONFLICT(id) DO UPDATE SET
      name = excluded.name,
      category = excluded.category,
@@ -327,6 +330,7 @@ const upsertCatalog = db.prepare(
      image_url = excluded.image_url,
      image_url_2 = excluded.image_url_2,
      thumbnail_url = excluded.thumbnail_url,
+     video_url = excluded.video_url,
      description = excluded.description,
      updated_at = excluded.updated_at`
 );
@@ -509,6 +513,7 @@ export function serializeCatalogRow(row) {
     equipment: equipment.map((item) => EQUIPMENT_ES[item] || item),
     imageUrl,
     thumbnailUrl: imageUrl,
+    videoUrl: row.video_url ? catalogVideoUrl(row.id) : null,
     description: row.description,
     instructions,
     level: row.level,

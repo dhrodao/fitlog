@@ -12,7 +12,7 @@ import { syncCatalog } from './catalog.js';
  * images/ folder. We convert each entry into the exact shape mapExercise()
  * expects and feed it to syncCatalog({ dataset }), which upserts into
  * exercise_catalog without touching the network. Local images are referenced
- * as absolute file:// URLs; catalog-images.js serves those straight from disk.
+ * as absolute file:// URLs; catalog-media.js serves those straight from disk.
  */
 
 /** Map Hevy's muscle-group tokens to the free-exercise-db muscle vocabulary. */
@@ -57,6 +57,15 @@ export function dumpEntryToDatasetItem(entry, dumpDir) {
   const images = (entry.images || [])
     .map((rel) => pathToFileURL(path.join(dumpDir, rel)).href);
 
+  // Exercise animation by file convention: if you have placed a video at
+  // <dumpDir>/videos/<templateId>.mp4 (managed manually — not part of the Hevy
+  // public API, so the dump never fetches it), link it as a local file:// URL
+  // and the app serves it from disk. Otherwise the exercise simply has no video.
+  const videoPath = path.join(dumpDir, 'videos', `${String(entry.id)}.mp4`);
+  const videoUrl = fs.existsSync(videoPath)
+    ? pathToFileURL(videoPath).href
+    : null;
+
   return {
     id: String(entry.id),
     name: entry.name,
@@ -68,6 +77,8 @@ export function dumpEntryToDatasetItem(entry, dumpDir) {
     instructions: [],
     category: entry.type === 'cardio' ? 'cardio' : null,
     images,
+    // Local file:// URL of the exercise animation (null when none on disk).
+    videoUrl,
   };
 }
 

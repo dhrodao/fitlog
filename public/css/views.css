@@ -1969,7 +1969,8 @@
   border: 1px solid var(--border);
 }
 
-.guide-image img {
+.guide-image img,
+.guide-image video {
   width: 100%;
   display: block;
   object-fit: cover;

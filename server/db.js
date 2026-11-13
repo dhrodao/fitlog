@@ -26,6 +26,7 @@ const catalogColumns = `
   image_url TEXT,
   image_url_2 TEXT,
   thumbnail_url TEXT,
+  video_url TEXT,
   description TEXT,
   updated_at TEXT NOT NULL
 `;
@@ -257,6 +258,9 @@ ensureColumn('workouts', 'hevy_workout_id', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_token', 'TEXT');
 ensureColumn('hevy_sync', 'webhook_enabled', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('hevy_sync', 'last_warning', 'TEXT');
+// Hevy exercise animation URL, derived from the thumbnail during the Hevy
+// catalog seed (null for free-exercise-db and custom exercises).
+ensureColumn('exercise_catalog', 'video_url', 'TEXT');
 
 // Versioned, transactional migrations. Baseline (001) is a no-op on an existing
 // database; later migrations add integrity constraints. See server/migrations.

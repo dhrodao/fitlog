@@ -103,7 +103,7 @@ companion, not a rewrite.
 | API routes | `server/routes/*.js` | HTTP validation and orchestration for auth, exercises, routines, workouts, measurements, stats, imports and the Hevy webhook. |
 | Domain services | `server/services/workouts.js`, `server/services/exercises.js` | Workout/set operations and exercise resolution. Some routine/measurement/stat logic still lives in route files. |
 | Hevy | `server/hevy-client.js`, `hevy-import.js`, `hevy-routines-import.js`, `hevy-sync.js`, `hevy-templates.js` | API client, normalisation, CSV/API import, incremental sync, routines, template cache. |
-| Catalog | `server/catalog.js`, `catalog-images.js` | free-exercise-db sync, name mapping, image proxy/cache. |
+| Catalog | `server/catalog.js`, `catalog-media.js` | free-exercise-db sync, name mapping, image/video proxy/cache. |
 | Frontend shell | `public/index.html`, `public/js/app.js` | Hash router, view lifecycle, bottom navigation, theme, service-worker registration. |
 | Frontend views | `public/js/views/*.js` | One module per screen, each exporting `render(container, ctx, params)` and optionally a cleanup function. |
 | Frontend infrastructure | `public/js/api.js`, `ui.js`, `charts.js`, `exercise-picker.js`, `swipe.js`, `pull-refresh.js`, `theme.js` | Fetch wrapper, escaping/icons/dialogs/toasts, SVG charts, shared picker and mobile gestures. |
@@ -193,7 +193,7 @@ helpers are duplicated) and relies on discipline to avoid XSS regressions.
 server/index.js
   ├─ server/app.js ── routes/* ── services/* ── db.js
   │                        ├─ auth.js ── db.js/config.js
-  │                        ├─ catalog.js ── catalog-images.js
+  │                        ├─ catalog.js ── catalog-media.js
   │                        └─ hevy-sync.js
   │                              ├─ hevy-client.js
   │                              ├─ hevy-import.js ── services/exercises.js

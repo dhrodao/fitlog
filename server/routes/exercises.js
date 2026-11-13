@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../http.js';
-import { getCatalogImageFile } from '../catalog-images.js';
+import { getCatalogImageFile, getCatalogVideoFile } from '../catalog-media.js';
 import {
   getCatalogExercise,
   listCategories,
@@ -47,6 +47,24 @@ router.get(
       res.sendFile(image.file);
     } catch {
       res.status(502).json({ error: 'No se pudo cargar la imagen' });
+    }
+  })
+);
+
+router.get(
+  '/video/:id',
+  asyncHandler(async (req, res) => {
+    try {
+      const video = await getCatalogVideoFile(req.params.id);
+      if (!video) {
+        return res.status(404).json({ error: 'Vídeo no encontrado' });
+      }
+      res.setHeader('Content-Type', video.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      // sendFile honors Range requests, so the <video> element can seek.
+      res.sendFile(video.file);
+    } catch {
+      res.status(502).json({ error: 'No se pudo cargar el vídeo' });
     }
   })
 );

@@ -52,6 +52,9 @@ export function createApp() {
             'https://*.hevyapp.com',
           ],
           'font-src': ["'self'", 'data:'],
+          // Exercise animations are served by the app itself from disk
+          // (/api/exercises/video/...), so no third-party media host is needed.
+          'media-src': ["'self'", 'blob:'],
           'object-src': ["'none'"],
           'base-uri': ["'self'"],
         },

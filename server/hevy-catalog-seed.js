@@ -47,6 +47,24 @@ function mapMuscle(token) {
   return key in MUSCLE_FROM_HEVY ? MUSCLE_FROM_HEVY[key] : key;
 }
 
+// Candidate extensions for media linked by the <subdir>/<templateId>.<ext>
+// convention, in preference order.
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+const VIDEO_EXTS = ['mp4', 'webm', 'mov'];
+
+/**
+ * Find a media file for a template by convention: <dumpDir>/<subdir>/<id>.<ext>
+ * for the first existing extension. Returns the absolute path, or null.
+ */
+function findMediaByConvention(dumpDir, subdir, id, exts) {
+  const base = path.join(dumpDir, subdir, String(id));
+  for (const ext of exts) {
+    const candidate = `${base}.${ext}`;
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 /**
  * Convert one dump entry into a free-exercise-db-style item. `imagesDir` is the
  * absolute path that the entry's relative image paths resolve against.
@@ -54,17 +72,24 @@ function mapMuscle(token) {
 export function dumpEntryToDatasetItem(entry, dumpDir) {
   const primary = (entry.primaryMuscles || []).map(mapMuscle).filter(Boolean);
   const secondary = (entry.secondaryMuscles || []).map(mapMuscle).filter(Boolean);
-  const images = (entry.images || [])
+
+  // Images: prefer the relative paths recorded in the dump JSON; otherwise fall
+  // back to the file convention images/<templateId>.<ext> on disk. The fallback
+  // makes seeding work when the JSON was written without image paths (e.g. a
+  // --no-images dump) but the image files are present on disk anyway.
+  let images = (entry.images || [])
     .map((rel) => pathToFileURL(path.join(dumpDir, rel)).href);
+  if (!images.length) {
+    const found = findMediaByConvention(dumpDir, 'images', entry.id, IMAGE_EXTS);
+    if (found) images = [pathToFileURL(found).href];
+  }
 
   // Exercise animation by file convention: if you have placed a video at
   // <dumpDir>/videos/<templateId>.mp4 (managed manually — not part of the Hevy
   // public API, so the dump never fetches it), link it as a local file:// URL
   // and the app serves it from disk. Otherwise the exercise simply has no video.
-  const videoPath = path.join(dumpDir, 'videos', `${String(entry.id)}.mp4`);
-  const videoUrl = fs.existsSync(videoPath)
-    ? pathToFileURL(videoPath).href
-    : null;
+  const videoPath = findMediaByConvention(dumpDir, 'videos', entry.id, VIDEO_EXTS);
+  const videoUrl = videoPath ? pathToFileURL(videoPath).href : null;
 
   return {
     id: String(entry.id),

@@ -70,28 +70,27 @@ test('an exercise without a video returns 404', async () => {
 test('a video path escaping the data root is refused (no path traversal)', async () => {
   await loginDev(agent);
 
-  // Write a secret genuinely OUTSIDE the data root (the data root is a temp
-  // dir, so a file under the project cwd is reliably outside it) and point a
-  // crafted catalog row at it.
-  const secret = path.join(process.cwd(), `fitlog-secret-${process.pid}.mp4`);
-  fs.writeFileSync(secret, Buffer.from('top-secret'));
+  // The guard (safeLocalPath) rejects a path by RESOLUTION, before any fs
+  // access, so these targets need not exist — crucially, the test does not
+  // depend on any writable location outside the data root (which may be a
+  // top-level dir like the temp root in CI).
+  const outsideAbs = '/etc/passwd-fitlog-should-never-serve';
+  const outsideUrl = pathToFileURL(outsideAbs).href;
   assert.ok(
-    path.relative(dataRoot, secret).startsWith('..'),
-    'test precondition: secret must be outside the data root'
+    path.relative(dataRoot, outsideAbs).startsWith('..'),
+    'test precondition: target must resolve outside the data root'
   );
 
-  // A direct file:// to the outside file and a ../ traversal that climbs out of
-  // the data root must both be refused.
-  insertCatalog('Escape_Abs', pathToFileURL(secret).href);
+  // A direct file:// outside the data root, and a `..` traversal that climbs
+  // out of it, must both be refused with 404 (no file is ever served).
+  insertCatalog('Escape_Abs', outsideUrl);
   insertCatalog(
     'Escape_Rel',
-    pathToFileURL(path.join(dataRoot, '..', '..', path.basename(secret))).href
+    pathToFileURL(path.join(dataRoot, 'hevy-catalog', '..', '..', '..', 'etc', 'passwd')).href
   );
 
   await agent.get('/api/exercises/video/Escape_Abs').expect(404);
   await agent.get('/api/exercises/video/Escape_Rel').expect(404);
-
-  fs.rmSync(secret, { force: true });
 });
 
 test('a non-existent catalog id returns 404 (no SQL/path injection surface)', async () => {

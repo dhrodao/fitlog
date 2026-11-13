@@ -130,12 +130,66 @@ function navigate(path, { replace = false } = {}) {
   }
 }
 
+// Remember just enough about the signed-in user to reopen the app offline
+// (gym with no signal, or a relaunch after the OS evicted the PWA). The server
+// stays authoritative: the record is cleared on logout and on any 401, so a
+// shared device never keeps the previous account.
+const LAST_USER_KEY = 'fitlog-last-user';
+
+function rememberLastUser(user) {
+  try {
+    if (!user?.id) return;
+    localStorage.setItem(
+      LAST_USER_KEY,
+      JSON.stringify({ id: user.id, name: user.name })
+    );
+  } catch {
+    // storage unavailable: offline cold start simply keeps the old behaviour
+  }
+}
+
+function forgetLastUser() {
+  try {
+    localStorage.removeItem(LAST_USER_KEY);
+  } catch {
+    // no-op
+  }
+}
+
+function loadLastUser() {
+  try {
+    const raw = localStorage.getItem(LAST_USER_KEY);
+    if (!raw) return null;
+    const user = JSON.parse(raw);
+    return user?.id ? { id: user.id, name: user.name } : null;
+  } catch {
+    return null;
+  }
+}
+
+// A workout that only exists on this device (started offline). An adopted
+// online workout keeps its numeric id and is not at risk here.
+function isLocalOnlyWorkout(workout) {
+  return Boolean(workout?.local && String(workout.id).startsWith('local-'));
+}
+
 async function logout() {
+  // Best-effort: upload a workout finished offline before wiping local data.
+  // If it cannot be uploaded (still offline, or in progress) the caller has
+  // already warned the user; whatever remains is discarded below.
+  if (state.user) {
+    try {
+      await syncFinishedOffline(state.user.id, api);
+    } catch {
+      // stay pending; the UI warned that it will be lost
+    }
+  }
   try {
     await api.auth.logout();
   } catch {
     // no-op
   }
+  forgetLastUser();
   // Wipe any locally cached workout so it never leaks to the next user on a
   // shared device.
   clearOfflineData();
@@ -145,6 +199,7 @@ async function logout() {
 }
 
 async function handleUnauthorized() {
+  forgetLastUser();
   state.user = null;
   state.activeWorkout = null;
   toast('Tu sesión ha caducado. Vuelve a entrar.', 'error');
@@ -181,6 +236,7 @@ const ctx = {
     state.user = user;
     state.authConfig = null;
     state.authConfigError = false;
+    rememberLastUser(user);
     navigate('/', { replace: true });
   },
   navigate,
@@ -204,6 +260,13 @@ const ctx = {
       }
       return null;
     }
+  },
+  // A workout that only lives on this device and would be lost on logout.
+  // The profile confirm dialog uses it to warn before discarding.
+  async pendingOfflineWorkout() {
+    if (!state.user) return null;
+    const workout = await loadActiveWorkout(state.user.id);
+    return isLocalOnlyWorkout(workout) ? workout : null;
   },
 };
 
@@ -387,13 +450,19 @@ async function boot() {
   try {
     const { user } = await api.auth.me();
     state.user = user;
+    rememberLastUser(user);
   } catch (error) {
-    state.user = null;
     // status 0 means the request never reached the server (offline). Treat that
-    // differently from a 401: the shell loaded from cache, so show an explicit
-    // offline state with a retry instead of bouncing to the login screen as if
-    // the session had expired.
+    // differently from a 401: the shell loaded from cache, so reopen the app
+    // for the last user we saw on this device instead of bouncing to the login
+    // screen as if the session had expired.
     offline = error?.status === 0;
+    if (offline) {
+      state.user = loadLastUser();
+    } else {
+      state.user = null;
+      forgetLastUser();
+    }
   }
 
   if (offline && !state.user) {

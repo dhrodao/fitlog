@@ -34,6 +34,30 @@ const METRICS = {
   },
 };
 
+// Logout is a data-loss risk when a workout only exists on this device. Warn
+// when it cannot be uploaded first; the app-level logout uploads it otherwise.
+async function confirmLogout(ctx) {
+  const pending = await ctx.pendingOfflineWorkout();
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  let message = '¿Quieres salir de tu cuenta?';
+  if (pending) {
+    message =
+      !offline && pending.finishedOffline
+        ? 'Se subirá el entrenamiento pendiente antes de cerrar sesión. ¿Quieres salir?'
+        : 'Tienes un entrenamiento pendiente que se perderá si cierras sesión. ¿Quieres salir igualmente?';
+  }
+
+  const confirmed = await confirmDialog({
+    title: 'Cerrar sesión',
+    message,
+    confirmLabel: 'Cerrar sesión',
+    danger: true,
+  });
+  if (!confirmed) return;
+  toast('Hasta pronto', 'success');
+  ctx.logout();
+}
+
 // "12 entrenos y 5 rutinas" / "12 entrenos" / "5 rutinas".
 function hevyFlushLabel(workouts, routines) {
   const parts = [];
@@ -492,17 +516,9 @@ export async function render(container, ctx) {
   if (offline) {
     container.querySelector('[data-retry]')?.addEventListener('click', () => ctx.refresh());
     container.querySelector('[data-theme-toggle]')?.addEventListener('click', () => toggleTheme());
-    container.querySelector('[data-logout]')?.addEventListener('click', async () => {
-      const confirmed = await confirmDialog({
-        title: 'Cerrar sesión',
-        message: '¿Quieres salir de tu cuenta?',
-        confirmLabel: 'Cerrar sesión',
-        danger: true,
-      });
-      if (!confirmed) return;
-      toast('Hasta pronto', 'success');
-      ctx.logout();
-    });
+    container
+      .querySelector('[data-logout]')
+      ?.addEventListener('click', () => confirmLogout(ctx));
     return () => {
       window.removeEventListener('themechange', themeListener);
     };
@@ -673,17 +689,9 @@ export async function render(container, ctx) {
     attachBarChart(container.querySelector('[data-chart]'));
   });
 
-  container.querySelector('[data-logout]')?.addEventListener('click', async () => {
-    const confirmed = await confirmDialog({
-      title: 'Cerrar sesión',
-      message: '¿Quieres salir de tu cuenta?',
-      confirmLabel: 'Cerrar sesión',
-      danger: true,
-    });
-    if (!confirmed) return;
-    toast('Hasta pronto', 'success');
-    ctx.logout();
-  });
+  container
+    .querySelector('[data-logout]')
+    ?.addEventListener('click', () => confirmLogout(ctx));
 
   return () => {
     window.removeEventListener('themechange', themeListener);

@@ -120,3 +120,34 @@ export async function addOfflineExercise(page, name) {
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   await page.locator('[data-exercises]').getByText(name).waitFor();
 }
+
+/** Adds a set to an offline workout and waits until it is marked complete. */
+export async function addOfflineSet(page, name, weight, reps) {
+  const block = page
+    .locator('[data-exercises] [data-we-id]')
+    .filter({ hasText: name });
+  await block.locator('[data-add-set]').click();
+  const row = block.locator('[data-set-id]').first();
+  await row.locator('[data-field="weightKg"]').fill(String(weight));
+  await row.locator('[data-field="reps"]').fill(String(reps));
+  await row.locator('[data-toggle]').click();
+  await row.locator('[data-set-handle].completed').waitFor();
+}
+
+/** Builds an offline workout with one exercise and one completed set. */
+async function buildOfflineWorkout(
+  page,
+  name,
+  { weight = 42.5, reps = 8 } = {}
+) {
+  await startOfflineWorkout(page);
+  await addOfflineExercise(page, name);
+  await addOfflineSet(page, name, weight, reps);
+}
+
+/** Builds and finishes an offline workout, leaving the app on home. */
+export async function finishOfflineWorkout(page, name) {
+  await buildOfflineWorkout(page, name);
+  await page.locator('[data-finish]').click();
+  await page.waitForURL(/#\/$/);
+}

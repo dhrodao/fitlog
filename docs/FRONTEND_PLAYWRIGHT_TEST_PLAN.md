@@ -767,12 +767,11 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
   are also not used with `page.route` mocks; the PWA specs only cut/restore
   connectivity, so the interception caveat above does not apply to them.
 * Offline cold boot (OFF-002): load online once (SW installs and precaches),
-  reload so the SW controls the page, set offline, reload → app shell renders
-  and, with a session, shows the offline/inline states rather than the login
-  screen (`boot()` treats status 0 with no user as `offlineScreen`; note that
-  with **no** `/api/auth/me` answer there is no user, so the cold-offline
-  start shows `Sin conexión` + `Reintentar` — verify and record as intended
-  behaviour, Q-5).
+  reload so the SW controls the page, set offline, reload → the app opens for
+  the last user remembered on the device (AC-3), so the shell renders with the
+  offline/inline states instead of the login or a dead `Sin conexión` screen.
+  The cold-start spec also leaves a local workout in progress and proves it is
+  reachable after the offline reload.
 * Offline workout end-to-end (OFF-004/005): the catalog / "Mis ejercicios" cache
   is warmed by `refreshCatalogCache` **after a successful online start** of a
   workout (`training.js` `startEmpty`/`startRoutine`), and the routines cache
@@ -844,7 +843,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | AUTH-009 ✅ | Authentication | Google credential rejected | Same stub | `/api/auth/google` → 403 `Esta cuenta no tiene acceso a esta instancia` (also 401) | Message shown inline; remains on login; can still retry | E2E | P1 | MK | — | S |
 | AUTH-010 ✅ | Authentication | Google script cannot load | Config mock enables Google | Abort the GIS script request | Notice `No se pudo cargar el acceso con Google…`; demo button still works | E2E | P1 | MK | ext | S |
 | AUTH-011 ✅ | Authentication | Independent sessions across contexts | Two browser contexts, both logged in | Log out in A; reload B | B stays authenticated (same user, separate sessions) | E2E | P2 | RB | login | S |
-| AUTH-012 | Authentication | Dev login disabled on the server *(optional second server)* | `webServer` #2 with `ALLOW_DEV_LOGIN=false` | Open login; `POST /api/auth/dev` | Demo button absent; endpoint 404 | E2E | P2 | RB | extra webServer | M |
+| AUTH-012 ✅ | Authentication | Dev login disabled on the server *(optional second server)* | `webServer` #2 with `ALLOW_DEV_LOGIN=false` | Open login; `POST /api/auth/dev` | Demo button absent; endpoint 404 | E2E | P2 | RB | extra webServer | M |
 
 ### 5.3 Navigation & initialization (B)
 
@@ -969,14 +968,14 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | ID | Category | Scenario | Preconditions | User actions | Expected result | Type | Pri | Approach | Deps | Cx |
 |---|---|---|---|---|---|---|---|---|---|---|
 | OFF-001 ✅ | PWA | SW registers and controls; manifest sane | `sw`, signed in | Load, wait for `serviceWorker.ready`, reload; fetch `/manifest.webmanifest` and icons | Controller present after reload; manifest has name/start_url/icons that resolve (200) | E2E | P1 | SW | sw | S |
-| OFF-002 | PWA | **Cold start offline opens the app** (**needs app change AC-3**, D-5) | `sw`, signed in online once (last user remembered), SW controlling, then context offline | `setOffline(true)`; reload / new page | App shell renders and the app opens normally for the remembered user (no login form, no dead `Sin conexión` screen); data sections show their inline `Sin conexión` blocks; an in-progress local workout is reachable. **Before AC-3** run it as a characterization spike: today it shows `Sin conexión` + `Reintentar` | E2E | P0 | SW | sw | M |
+| OFF-002 ✅ | PWA | **Cold start offline opens the app** (AC-3, D-5) | `sw`, signed in online once (last user remembered), SW controlling, then context offline | `setOffline(true)`; reload / new page | App shell renders and the app opens normally for the remembered user (no login form, no dead `Sin conexión` screen); data sections show their inline `Sin conexión` blocks; an in-progress local workout is reachable | E2E | P0 | SW | sw | M |
 | OFF-003 ✅ | PWA | Inline offline states | `sw`, signed in, then offline | Open history, exercises, measurements, profile, workout detail | Each keeps its header and shows `Sin conexión` block with `Reintentar`; no crash, no login redirect | E2E | P1 | SW | sw, login | M |
 | OFF-004 ✅ | PWA | **Build and finish a workout offline** | Caches warmed online (start a workout online once and discard it; training view loaded online); then offline | `Empezar Entrenamiento Vacío` → add exercise from cache → add set, kg/reps, check → `Terminar` | `Sin conexión · se sincronizará` pill while active; on finish toast `Entreno guardado localmente…` and navigate home; nothing in server history yet | E2E | P0 | SW | sw, mine, reset | L |
 | OFF-005 ✅ | PWA | **Reconnect uploads exactly once** | After OFF-004 | `setOffline(false)` (+ dispatch `online`); then reload and trigger `online` again | Workout appears in history **once** with the right sets; banner/dot cleared; repeated triggers create no duplicate (idempotent sync) | E2E | P0 | SW | OFF-004 | L |
 | OFF-006 ✅ | PWA | Server-only actions degrade clearly | `sw`, active **local** workout | Reorder / superset / replace; training `Nueva Rutina` | Toast `No disponible sin conexión` / `Necesitas conexión para crear una rutina`; nothing breaks | E2E | P2 | SW | sw | S |
 | OFF-007 | PWA | SW update takes over once — **Spike / maybe manual** | Old SW controlling page | Serve a changed `sw.js`/`CACHE_VERSION`; reload | New worker activates; page reloads **once**; old caches removed | E2E | P2 | SW | sw | XL |
 | OFF-008 ✅ | PWA | Reconnect mid-workout does not finish it | Active local workout, offline then online | Go online while still editing | Workout stays active and local (not uploaded); pill clears only when appropriate; "Anterior" suggestions refill | E2E | P1 | SW | sw, hist | M |
-| OFF-009 | PWA | Logout never silently loses a workout, never leaks data (**needs app change AC-5**, D-7) | Local finished-offline workout exists | (a) go online, log out; (b) stay offline, open logout; confirm; log in as the same user afterwards | (a) workout is uploaded first and appears once in history; (b) the confirm dialog warns that the unsent workout will be lost; cancel keeps everything; after confirm there is no stale active workout/banner for the next session (assert via UI, not internals) | E2E | P1 | SW | sw | M |
+| OFF-009 ✅ | PWA | Logout never silently loses a workout, never leaks data (AC-5, D-7) | Local finished-offline workout exists | (a) go online, log out; (b) stay offline, open logout; confirm; log in as the same user afterwards | (a) workout is uploaded first and appears once in history; (b) the confirm dialog warns that the unsent workout will be lost; cancel keeps everything; after confirm there is no stale active workout/banner for the next session (assert via UI, not internals) | E2E | P1 | SW | sw | M |
 
 ### 5.11 Accessibility (cross-cutting)
 
@@ -1256,9 +1255,9 @@ checklist (shell hash recomputed, `CACHE_VERSION` bumped, `npm test` green).
 |---|---|---|---|---|
 | AC-1 ✅ | D-1 | No `devLoginEnabled: true` fallback when `/api/auth/config` fails; explicit error + retry | `public/js/app.js` (`boot`), `public/js/views/login.js` | AUTH-007 |
 | AC-2 ✅ | D-2 | Toast `Tu sesión ha caducado. Vuelve a entrar.` on the 401 redirect | `public/js/app.js` (`handleUnauthorized`) | AUTH-005 |
-| AC-3 | D-5 | Offline cold start for the last known user (`{id,name}` persisted at login, cleared on logout/401) | `public/js/app.js` (`boot`), `public/js/offline/*` | OFF-002, OFF-004 |
+| AC-3 ✅ | D-5 | Offline cold start for the last known user (`{id,name}` persisted at login, cleared on logout/401) | `public/js/app.js` (`boot`), `public/js/offline/*` | OFF-002, OFF-004 |
 | AC-4 | D-6 | Confirm before removing an exercise in finished-workout edit mode | `public/js/views/workout.js` | WRK-017 |
-| AC-5 | D-7 | Logout uploads a pending offline workout first; warns if it cannot | `public/js/app.js` (`logout`), `public/js/views/profile.js` | OFF-009 |
+| AC-5 ✅ | D-7 | Logout uploads a pending offline workout first; warns if it cannot | `public/js/app.js` (`logout`), `public/js/views/profile.js` | OFF-009 |
 | AC-6 ✅ | D-8 | Finished-workout edit uses text inputs + `parseDecimalInput` | `public/js/views/workout.js` | WRK-016 |
 | AC-7 ✅ | D-9 | `tz`-aware weekly buckets | `public/js/api.js`, **`server/routes/stats.js`** (+ a `node --test` case) | STA-001 |
 | AC-8 ✅ | D-11 | Label association, toast live region, `aria-current="page"` | `public/js/views/measurements.js`, `routine-editor.js`, `workout.js`, `ui.js`, `app.js` | A11Y-003, A11Y-004, NAV-002 |
@@ -1270,11 +1269,10 @@ invalidations for installed clients):
 * **Batch 1 — AC-1, 2, 4, 5, 6, 7, 8, 9**, done after M0 and before M1/M2/M4/M5
   (the scenarios above are written only once their change exists; until then a
   scenario can assert just the part that does not need it). AC-1, 2, 4, 6, 7, 8
-  and 9 have landed; AC-5 moves with the offline-session work in Batch 2.
-* **Batch 2 — AC-3** as its own task before M8: first run the OFF-002
-  characterization (what the app does today when launched offline), then
-  implement, because it is the largest and riskiest change (identity persisted
-  on the device).
+  and 9 have landed.
+* **Batch 2 — AC-3 and AC-5 have landed** with their tests (OFF-002 and
+  OFF-009) in the PWA project; the identity persisted for offline cold starts
+  is cleared on logout and on any 401.
 
 ---
 
@@ -1478,20 +1476,23 @@ commit.
 * **DoD:** common DoD; §7.6 device checklist handed to the owner.
 
 ### M8 — PWA & offline
-* **Status:** In progress. The `pwa` project (service workers allowed) runs only
-  `e2e/specs/pwa/`, and the desktop project now ignores that folder. Delivered:
-  OFF-001 (`pwa/installability.spec.js`), OFF-003 (`pwa/offline-states.spec.js`),
-  OFF-004/005 (`pwa/offline-workout.spec.js`, build → finish offline → upload
-  exactly once) and OFF-008 (same file: reconnecting mid-workout keeps it local
-  and refills the "Anterior" suggestions). OFF-006
+* **Status:** In progress (only OFF-007 left). The `pwa` project (service
+  workers allowed) runs only `e2e/specs/pwa/`, and the desktop project now
+  ignores that folder. Delivered: OFF-001 (`pwa/installability.spec.js`),
+  OFF-002 (`pwa/offline-cold-start.spec.js`, AC-3: cold reload offline reopens
+  for the remembered user and keeps an in-progress local workout reachable),
+  OFF-003 (`pwa/offline-states.spec.js`), OFF-004/005
+  (`pwa/offline-workout.spec.js`, build → finish offline → upload exactly once,
+  including a cold-start variant) and OFF-008 (same file: reconnecting
+  mid-workout keeps it local and refills the "Anterior" suggestions). OFF-006
   (`pwa/offline-limits.spec.js`) covers reorder/replace/superset and
-  `Nueva Rutina` while offline. Helpers live in `e2e/fixtures/pwa.js`
-  (service-worker control, `setOffline`/online, catalog-cache warm-up). The
+  `Nueva Rutina` while offline. OFF-009 (`pwa/logout-offline-workout.spec.js`,
+  AC-5: logout uploads a finished-offline workout first; the confirm warns and
+  cancel keeps it when it cannot be uploaded, and confirming discards it for
+  good). Helpers live in `e2e/fixtures/pwa.js` (service-worker control,
+  `setOffline`/online, catalog-cache warm-up, offline set/workout builders). The
   spike confirmed `context.setOffline`/`online` events and SW-served shell work
-  under the pinned Chromium. The 5 tests passed `--repeat-each=10` (50/50) and
-  the full suite is 107/107 locally (Node 18, Chromium + Pixel 7 + PWA).
-  Still pending: OFF-002 (needs AC-3), OFF-007 (spike/manual update flow) and
-  OFF-009 (needs AC-5).
+  under the pinned Chromium. Still pending: OFF-007 (spike/manual update flow).
 * **Objective:** guard the offline workout feature and shell behaviour.
 * **Scenarios:** OFF-001–009.
 * **Infra:** `pwa` project (SW allowed); offline helper; **spike first** for
@@ -1523,8 +1524,12 @@ commit.
 * **DoD:** common DoD.
 
 ### M10 — Scale-out hardening
+* **Status:** AUTH-012 delivered (a second `webServer` with
+  `ALLOW_DEV_LOGIN=false` in `playwright.config.js` and
+  `auth/dev-login-disabled.spec.js`). Parallel per-worker servers are still
+  deferred until the suite grows slow or flaky.
 * **Objective:** only if the suite grows slow or flaky.
-* **Scenarios:** AUTH-012 (optional second server).
+* **Scenarios:** AUTH-012 ✅ (optional second server).
 * **Infra:** worker-scoped server+DB fixture (`basePort + workerIndex`);
   `fullyParallel`.
 * **Depends on:** M1–M9 as needed. **Complexity:** M.

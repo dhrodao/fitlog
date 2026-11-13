@@ -5,6 +5,7 @@ import {
   goOffline,
   goOnline,
   startOfflineWorkout,
+  waitForServiceWorkerControl,
   warmOfflineCatalog,
 } from '../../fixtures/pwa.js';
 
@@ -143,3 +144,62 @@ test.describe('Offline workout', () => {
     }
   );
 });
+
+test(
+  'a workout logged after an offline cold start uploads once on reconnect',
+  { tag: '@pwa' },
+  async ({ login, reset, api, context, page }) => {
+    const name = uniqueName('Cold Start Press');
+    await api.seedExercise(name);
+
+    await page.goto('/');
+    await expect(
+      page.getByRole('heading', { name: 'Atleta', exact: true })
+    ).toBeVisible();
+    await waitForServiceWorkerControl(page);
+    await page.reload();
+    await expect(
+      page.getByRole('heading', { name: 'Atleta', exact: true })
+    ).toBeVisible();
+    await warmOfflineCatalog(page, context);
+
+    // Reload while offline: the shell and the last user come from the device.
+    await goOffline(context, page);
+    await page.reload();
+    await expect(
+      page.getByRole('heading', { name: 'Atleta', exact: true })
+    ).toBeVisible();
+
+    await startOfflineWorkout(page);
+    await addOfflineExercise(page, name);
+    await addOfflineSet(page, name, 51, 6);
+
+    await page.locator('[data-finish]').click();
+    await expect(
+      page.getByText(
+        'Entreno guardado localmente; se sincronizará al recuperar la conexión'
+      )
+    ).toBeVisible();
+    await expect(page).toHaveURL(/#\/$/);
+    expect(await api.listWorkouts()).toHaveLength(0);
+
+    const uploaded = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().endsWith('/api/workouts/sync')
+    );
+    await goOnline(context, page);
+    await uploaded;
+
+    await expect.poll(async () => (await api.listWorkouts()).length).toBe(1);
+    const [workout] = await api.listWorkouts();
+    const detailResponse = await context.request.get(
+      `/api/workouts/${workout.id}`
+    );
+    const { workout: detail } = await detailResponse.json();
+    expect(detail.exercises[0].name).toBe(name);
+    expect(detail.exercises[0].sets).toMatchObject([
+      { weightKg: 51, reps: 6, completed: true },
+    ]);
+  }
+);

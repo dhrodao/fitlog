@@ -786,10 +786,16 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
   warmed cache leaves the picker empty — a behaviour worth one assertion (OFF-004
   variant) and a question if it is not intended.
 * SW update path (OFF-007, P2/Spike): serve a changed `sw.js` version and assert
-  a single reload on `controllerchange`. Hard to do against the real static
-  server without editing files; the repo already has a hash unit test — keep
-  this as a manual release checklist item unless a cheap route-based version
-  swap proves reliable.
+  a single reload on `controllerchange`. The cheap route-based swap does **not**
+  work: Playwright cannot intercept a service worker's main-script update
+  request (upstream limitation, issue #14711), confirmed with a spike (the route
+  handler never fired). Instead the spec points a dedicated browser context at a
+  tiny test-only reverse proxy (`e2e/fixtures/versioned-proxy.js`) that forwards
+  everything to the real server and swaps only `/sw.js` after the first install.
+  This exercises the real browser update path: the new worker installs,
+  `skipWaiting` + `clients.claim`, the app reloads once, and the previous
+  versioned cache is deleted. The spec covers it with `--repeat-each=10`; the
+  manual release checklist item remains for a real deploy.
 * Separate "implemented now" from "only after future work": everything listed
   as unavailable offline above is **future coverage**; do not write tests that
   assume it.
@@ -973,7 +979,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | OFF-004 ✅ | PWA | **Build and finish a workout offline** | Caches warmed online (start a workout online once and discard it; training view loaded online); then offline | `Empezar Entrenamiento Vacío` → add exercise from cache → add set, kg/reps, check → `Terminar` | `Sin conexión · se sincronizará` pill while active; on finish toast `Entreno guardado localmente…` and navigate home; nothing in server history yet | E2E | P0 | SW | sw, mine, reset | L |
 | OFF-005 ✅ | PWA | **Reconnect uploads exactly once** | After OFF-004 | `setOffline(false)` (+ dispatch `online`); then reload and trigger `online` again | Workout appears in history **once** with the right sets; banner/dot cleared; repeated triggers create no duplicate (idempotent sync) | E2E | P0 | SW | OFF-004 | L |
 | OFF-006 ✅ | PWA | Server-only actions degrade clearly | `sw`, active **local** workout | Reorder / superset / replace; training `Nueva Rutina` | Toast `No disponible sin conexión` / `Necesitas conexión para crear una rutina`; nothing breaks | E2E | P2 | SW | sw | S |
-| OFF-007 | PWA | SW update takes over once — **Spike / maybe manual** | Old SW controlling page | Serve a changed `sw.js`/`CACHE_VERSION`; reload | New worker activates; page reloads **once**; old caches removed | E2E | P2 | SW | sw | XL |
+| OFF-007 ✅ | PWA | SW update takes over once | Old SW controlling page | Serve a changed `sw.js`/`CACHE_VERSION` through the versioned proxy; trigger `registration.update()` | New worker activates; page reloads **once**; old versioned cache removed and the app keeps working | E2E | P2 | SW | sw | XL |
 | OFF-008 ✅ | PWA | Reconnect mid-workout does not finish it | Active local workout, offline then online | Go online while still editing | Workout stays active and local (not uploaded); pill clears only when appropriate; "Anterior" suggestions refill | E2E | P1 | SW | sw, hist | M |
 | OFF-009 ✅ | PWA | Logout never silently loses a workout, never leaks data (AC-5, D-7) | Local finished-offline workout exists | (a) go online, log out; (b) stay offline, open logout; confirm; log in as the same user afterwards | (a) workout is uploaded first and appears once in history; (b) the confirm dialog warns that the unsent workout will be lost; cancel keeps everything; after confirm there is no stale active workout/banner for the next session (assert via UI, not internals) | E2E | P1 | SW | sw | M |
 
@@ -1475,13 +1481,13 @@ commit.
   change.
 * **DoD:** common DoD; §7.6 device checklist handed to the owner.
 
-### M8 — PWA & offline
-* **Status:** In progress (only OFF-007 left). The `pwa` project (service
-  workers allowed) runs only `e2e/specs/pwa/`, and the desktop project now
-  ignores that folder. Delivered: OFF-001 (`pwa/installability.spec.js`),
-  OFF-002 (`pwa/offline-cold-start.spec.js`, AC-3: cold reload offline reopens
-  for the remembered user and keeps an in-progress local workout reachable),
-  OFF-003 (`pwa/offline-states.spec.js`), OFF-004/005
+### M8 — PWA & offline — **Completed**
+* **Status:** Completed. The `pwa` project (service workers allowed) runs only
+  `e2e/specs/pwa/`, and the desktop project now ignores that folder. Delivered:
+  OFF-001 (`pwa/installability.spec.js`), OFF-002
+  (`pwa/offline-cold-start.spec.js`, AC-3: cold reload offline reopens for the
+  remembered user and keeps an in-progress local workout reachable), OFF-003
+  (`pwa/offline-states.spec.js`), OFF-004/005
   (`pwa/offline-workout.spec.js`, build → finish offline → upload exactly once,
   including a cold-start variant) and OFF-008 (same file: reconnecting
   mid-workout keeps it local and refills the "Anterior" suggestions). OFF-006
@@ -1489,10 +1495,16 @@ commit.
   `Nueva Rutina` while offline. OFF-009 (`pwa/logout-offline-workout.spec.js`,
   AC-5: logout uploads a finished-offline workout first; the confirm warns and
   cancel keeps it when it cannot be uploaded, and confirming discards it for
-  good). Helpers live in `e2e/fixtures/pwa.js` (service-worker control,
-  `setOffline`/online, catalog-cache warm-up, offline set/workout builders). The
-  spike confirmed `context.setOffline`/`online` events and SW-served shell work
-  under the pinned Chromium. Still pending: OFF-007 (spike/manual update flow).
+  good). OFF-007 (`pwa/sw-update.spec.js`) drives a real worker update through
+  the test-only reverse proxy described in §4.I: the new worker takes over, the
+  page reloads once and the old cache is deleted. Helpers live in
+  `e2e/fixtures/pwa.js` (service-worker control, `setOffline`/online,
+  catalog-cache warm-up, offline set/workout builders) and
+  `e2e/fixtures/versioned-proxy.js` (the update proxy). The spike confirmed
+  `context.setOffline`/`online` events and SW-served shell work under the pinned
+  Chromium; the update request itself cannot be routed (issue #14711), hence the
+  proxy. The new update spec passed `--repeat-each=10` and the full suite is
+  124/124 locally (Node 18, Chromium + Pixel 7 + PWA).
 * **Objective:** guard the offline workout feature and shell behaviour.
 * **Scenarios:** OFF-001–009.
 * **Infra:** `pwa` project (SW allowed); offline helper; **spike first** for
@@ -1618,13 +1630,22 @@ executed earlier in the session (2 passed, Node 18, Chromium).
 * The `e2e` Docker target build, the bundled Node version of the Playwright
   image, and the CI `e2e` job on the self-hosted runner.
 * Interaction of `context.setOffline` with the service worker and with
-  `page.route` in the pinned Chromium (**spike, M8**).
+  `page.route` in the pinned Chromium (**spike, M8**). *Resolved in M8:* offline
+  navigation falls back to the cached shell, going online fires the page event
+  that drives sync, and SW-served requests are not used with `page.route` mocks.
+  A service worker's main-script update request cannot be intercepted
+  (Playwright issue #14711), so the update spec uses a test-only reverse proxy.
 * Reset-endpoint completeness and cost; whether `syncCatalog({dataset})` avoids
-  every network call; the exact dataset schema.
-* Touch gestures (swipe, pull-to-refresh) under Playwright emulation.
+  every network call; the exact dataset schema. *Resolved in M0:* the public API
+  reset is sufficient, the injected dataset prevents the boot-time fetch, and
+  its shape is pinned by `e2e/support/catalog.fixture.json`.*
+* Touch gestures (swipe, pull-to-refresh) under Playwright emulation. *Resolved
+  in M7* with CDP touch sequences.
 * Whether the routines IndexedDB cache is cleared on logout — `clearAll()` was
   read to clear the active-workout and catalog stores only; the routines cache
-  module was not read in full (relevant to OFF-009).
+  module was not read in full (relevant to OFF-009). *The OFF-009 specs drive
+  logout through the UI and assert the visible outcome, so the suite does not
+  depend on this detail.*
 * No new tests were run for this document; no application behaviour was changed.
 
 ### 10.4 Out of scope

@@ -26,12 +26,32 @@ test.describe('One active workout at a time', () => {
     expect(original).not.toBeNull();
 
     await page.goto('/#/routines');
+    const emptyConflict = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === '/api/workouts' &&
+        response.status() === 409
+    );
     await page.locator('[data-start-empty]').click();
+    await emptyConflict;
     await expect(page).toHaveURL(/#\/workout\/active$/);
+    await expect(
+      page.getByText('Ya tienes un entrenamiento en curso').first()
+    ).toBeVisible();
 
     await page.goto('/#/routines');
+    const routineConflict = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === `/api/routines/${routine.id}/start` &&
+        response.status() === 409
+    );
     await page.locator(`[data-start-routine="${routine.id}"]`).click();
+    await routineConflict;
     await expect(page).toHaveURL(/#\/workout\/active$/);
+    await expect(
+      page.getByText('Ya tienes un entrenamiento en curso').last()
+    ).toBeVisible();
 
     const stillActive = await api.getActiveWorkout();
     expect(stillActive.id).toBe(original.id);

@@ -837,9 +837,9 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | AUTH-002 ✅ | Authentication | Demo sign-in through the real button | Signed out, dev login on | Click `Entrar en modo demo` | Toast `Hola, Atleta Demo`; home with greeting heading `Atleta`; nav visible | E2E | P0 | RB | reset | XS |
 | AUTH-003 ✅ | Authentication | Session survives reload | Signed in | Reload on home and on `#/profile` | Still authenticated on the same route; no login flash as final state | E2E | P0 | RB | login | XS |
 | AUTH-004 ✅ | Authentication | Logout | Signed in | Profile → `Cerrar sesión` → confirm | Toast `Hasta pronto`; login screen; opening `#/` afterwards returns to login; `Cancelar` in the dialog keeps the session | E2E | P0 | RB | login | S |
-| AUTH-005 🟡 | Authentication | Expired/invalid session mid-use (**message needs app change AC-2**, D-2) | Signed in on home | `context.clearCookies()`; click the `Entrenar` tab | Redirected to login (no error screen loop) and a toast `Tu sesión ha caducado. Vuelve a entrar.` is shown; before AC-2 only the redirect can be asserted | E2E | P0 | RB | login | S |
+| AUTH-005 ✅ | Authentication | Expired/invalid session mid-use (AC-2, D-2) | Signed in on home | `context.clearCookies()`; click the `Entrenar` tab | Redirected to login (no error screen loop) and a toast `Tu sesión ha caducado. Vuelve a entrar.` is shown | E2E | P0 | RB | login | S |
 | AUTH-006 ✅ | Authentication | Demo sign-in failure | Signed out | Mock `POST /api/auth/dev` → 500 (and 404); click demo button | Inline danger notice with the message; button usable again (not stuck in `Entrando…`); still on login | E2E | P1 | MK | — | S |
-| AUTH-007 | Authentication | Demo button only when the server says so (**needs app change AC-1**, D-1) | Signed out | (a) Mock `/api/auth/config` → `{googleEnabled:false, devLoginEnabled:false}`; (b) mock `/api/auth/config` → 500 | (a) Notice `El acceso no está configurado…`, no demo button; (b) **no demo button**, an explicit "could not check access" state with a retry that, once the mock is removed, shows the normal login | E2E | P1 | MK | — | XS |
+| AUTH-007 ✅ | Authentication | Demo button only when the server says so (AC-1, D-1) | Signed out | (a) Mock `/api/auth/config` → `{googleEnabled:false, devLoginEnabled:false}`; (b) mock `/api/auth/config` → 500 | (a) Notice `El acceso no está configurado…`, no demo button; (b) **no demo button**, an explicit "could not check access" state with a retry that, once the mock is removed, shows the normal login | E2E | P1 | MK | — | XS |
 | AUTH-008 ✅ | Authentication | Google sign-in success (stubbed) | Config mock enables Google; GIS script stubbed | Click the stub Google button | `/api/auth/google` handled by delegating to `POST /api/auth/dev` (real cookie); lands on home authenticated; reload keeps session | E2E | P1 | RB+MK | login | M |
 | AUTH-009 ✅ | Authentication | Google credential rejected | Same stub | `/api/auth/google` → 403 `Esta cuenta no tiene acceso a esta instancia` (also 401) | Message shown inline; remains on login; can still retry | E2E | P1 | MK | — | S |
 | AUTH-010 ✅ | Authentication | Google script cannot load | Config mock enables Google | Abort the GIS script request | Notice `No se pudo cargar el acceso con Google…`; demo button still works | E2E | P1 | MK | ext | S |
@@ -868,7 +868,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | WRK-003 ✅ | Workouts | Edits persist (debounce + flush paths) | Active workout with 1 set | Type reps; wait for save indicator to clear; reload. Variant: type then immediately navigate to home and back | Value present after reload in both variants; no save notice appears on a normal edit (`[data-save-state]` stays hidden) | E2E | P0 | RB | reset, mine | M |
 | WRK-004 ✅ | Workouts | Finish with no completed sets | Active workout, 0 completed | `Terminar` → dialog `Terminar sin series` → `Cancelar`, then again → `Terminar` | Cancel keeps the workout active; confirm finishes and opens detail | E2E | P0 | RB | reset | S |
 | WRK-005 ✅ | Workouts | Discard | Active workout | `Descartar entrenamiento` → cancel; again → confirm | Cancel keeps it; confirm toasts `Entrenamiento descartado`, goes home, banner gone, `GET /api/workouts/active` returns none | E2E | P0 | RB | reset | S |
-| WRK-006 ✅ | Workouts | One active workout rule (**message needs app change AC-9**, D-13) | Active workout exists | From training view click `Empezar Entrenamiento Vacío` and, separately, `Empezar Rutina`; open the banner from home | No second workout; user lands on the existing active screen and sees a toast `Ya tienes un entrenamiento en curso`; banner opens the same workout | E2E | P1 | RB | reset | S |
+| WRK-006 ✅ | Workouts | One active workout rule (AC-9, D-13) | Active workout exists | From training view click `Empezar Entrenamiento Vacío` and, separately, `Empezar Rutina`; open the banner from home | No second workout; user lands on the existing active screen and sees a toast `Ya tienes un entrenamiento en curso`; banner opens the same workout | E2E | P1 | RB | reset | S |
 | WRK-007 ✅ | Workouts | Remove exercise from active workout | Active workout with 2 exercises | Exercise ⋯ → `Eliminar Ejercicio` | Exercise removed immediately (no confirm on the active screen by decision D-6); the other remains; totals update | E2E | P1 | RB | reset, mine | S |
 | WRK-008 ✅ | Workouts | Invalid numeric input | Active workout, 1 set | Type `5kg` in weight; type `-3` in reps | Weight field flagged (`input-error`) and **not** saved (reload → empty); negative reps clamp to `0` | E2E | P1 | RB | reset, mine | S |
 | WRK-009 ✅ | Workouts | Decimal comma and point | Same | Weight `72,5` then `72.5` | Both stored as 72.5; displayed value/volume consistent after reload | E2E | P1 | RB | reset, mine | XS |
@@ -1254,22 +1254,23 @@ checklist (shell hash recomputed, `CACHE_VERSION` bumped, `npm test` green).
 
 | ID | Decision | Change | Files (as read) | Scenarios that depend on it |
 |---|---|---|---|---|
-| AC-1 | D-1 | No `devLoginEnabled: true` fallback when `/api/auth/config` fails; explicit error + retry | `public/js/app.js` (`boot`), `public/js/views/login.js` | AUTH-007 |
-| AC-2 | D-2 | Toast `Tu sesión ha caducado. Vuelve a entrar.` on the 401 redirect | `public/js/app.js` (`handleUnauthorized`) | AUTH-005 |
+| AC-1 ✅ | D-1 | No `devLoginEnabled: true` fallback when `/api/auth/config` fails; explicit error + retry | `public/js/app.js` (`boot`), `public/js/views/login.js` | AUTH-007 |
+| AC-2 ✅ | D-2 | Toast `Tu sesión ha caducado. Vuelve a entrar.` on the 401 redirect | `public/js/app.js` (`handleUnauthorized`) | AUTH-005 |
 | AC-3 | D-5 | Offline cold start for the last known user (`{id,name}` persisted at login, cleared on logout/401) | `public/js/app.js` (`boot`), `public/js/offline/*` | OFF-002, OFF-004 |
 | AC-4 | D-6 | Confirm before removing an exercise in finished-workout edit mode | `public/js/views/workout.js` | WRK-017 |
 | AC-5 | D-7 | Logout uploads a pending offline workout first; warns if it cannot | `public/js/app.js` (`logout`), `public/js/views/profile.js` | OFF-009 |
 | AC-6 ✅ | D-8 | Finished-workout edit uses text inputs + `parseDecimalInput` | `public/js/views/workout.js` | WRK-016 |
 | AC-7 ✅ | D-9 | `tz`-aware weekly buckets | `public/js/api.js`, **`server/routes/stats.js`** (+ a `node --test` case) | STA-001 |
 | AC-8 ✅ | D-11 | Label association, toast live region, `aria-current="page"` | `public/js/views/measurements.js`, `routine-editor.js`, `workout.js`, `ui.js`, `app.js` | A11Y-003, A11Y-004, NAV-002 |
-| AC-9 | D-13 | Toast on the 409 redirect when starting a workout | `public/js/views/training.js` | WRK-006 |
+| AC-9 ✅ | D-13 | Toast on the 409 redirect when starting a workout | `public/js/views/training.js` | WRK-006 |
 
 Suggested packaging (one shell bump per batch, fewer service-worker cache
 invalidations for installed clients):
 
 * **Batch 1 — AC-1, 2, 4, 5, 6, 7, 8, 9**, done after M0 and before M1/M2/M4/M5
   (the scenarios above are written only once their change exists; until then a
-  scenario can assert just the part that does not need it).
+  scenario can assert just the part that does not need it). AC-1, 2, 4, 6, 7, 8
+  and 9 have landed; AC-5 moves with the offline-session work in Batch 2.
 * **Batch 2 — AC-3** as its own task before M8: first run the OFF-002
   characterization (what the app does today when launched offline), then
   implement, because it is the largest and riskiest change (identity persisted
@@ -1407,16 +1408,18 @@ commit.
   then 25 rows.
 * **DoD:** common DoD; AC-6 and AC-7 landed before WRK-016 / STA-001 are written.
 
-### M5 — Failure states & Google stub — **In progress**
-* **Status:** In progress. Delivered: AUTH-006
+### M5 — Failure states & Google stub — **Completed**
+* **Status:** Completed. Delivered: AUTH-006
   (`auth/demo-sign-in-failure.spec.js`), AUTH-008, 009, 010
   (`auth/google-sign-in.spec.js`, with the GIS stub in
   `fixtures/google-stub.js`), NAV-003, 005, 008
   (`smoke/deep-navigation.spec.js`), NAV-006, 007
   (`smoke/load-states.spec.js`) and WRK-012, 013
-  (`workouts/save-failures.spec.js`). The new tests passed `--repeat-each=10`
-  (110/110) and the full suite is 80/80 locally. AUTH-007 is still pending
-  because it needs AC-1.
+  (`workouts/save-failures.spec.js`). The later batch added AC-1 with AUTH-007
+  (`auth/access-config.spec.js`), AC-2 asserted in `auth/expired-session.spec.js`
+  and AC-9 asserted in `workouts/active-workout-rules.spec.js`. The affected
+  tests passed `--repeat-each=10` (50/50 across the three files) and the full
+  suite is 117/117 locally (Node 18, Chromium + Pixel 7 + PWA).
 * **Objective:** the paths users hit when things go wrong, plus Google UI flows
   without Google.
 * **Scenarios:** NAV-003, 005, 006, 007, 008 · AUTH-006, 007, 008, 009, 010 ·

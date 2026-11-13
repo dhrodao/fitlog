@@ -19,13 +19,67 @@ function loadGoogleScript() {
   return window.__googleScriptPromise;
 }
 
+function renderAccessCheckError(container, ctx) {
+  container.innerHTML = `
+    <div class="login-screen">
+      <div class="row-between">
+        <div class="login-brand">
+          <span class="brand-mark">${icon('dumbbell', 21, 2.2)}</span>
+          <span>Fitlog</span>
+        </div>
+        <button type="button" class="icon-btn surface" data-theme-toggle aria-label="Cambiar tema">
+          ${icon(currentTheme() === 'dark' ? 'sun' : 'moon', 19)}
+        </button>
+      </div>
+
+      <div class="card" style="margin-top:24px">
+        <div class="empty">
+          <div class="empty-icon">${icon('info', 22)}</div>
+          <h3>No se pudo comprobar el acceso</h3>
+          <p>Revisa tu conexión e inténtalo de nuevo.</p>
+          <button type="button" class="btn btn-secondary btn-sm" data-retry-config>Reintentar</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const themeListener = () => {
+    const button = container.querySelector('[data-theme-toggle]');
+    if (button) {
+      button.innerHTML = icon(currentTheme() === 'dark' ? 'sun' : 'moon', 19);
+    }
+  };
+  window.addEventListener('themechange', themeListener);
+  container
+    .querySelector('[data-theme-toggle]')
+    .addEventListener('click', () => toggleTheme());
+
+  const retry = container.querySelector('[data-retry-config]');
+  retry.addEventListener('click', async () => {
+    setLoading(retry, true, 'Reintentando...');
+    try {
+      await ctx.refreshAuthConfig();
+      ctx.refresh();
+    } catch (error) {
+      setLoading(retry, false);
+      toast(errorMessage(error), 'error');
+    }
+  });
+
+  return () => {
+    window.removeEventListener('themechange', themeListener);
+  };
+}
+
 export async function render(container, ctx) {
   let config = ctx.authConfig;
   if (!config) {
-    config = await api.auth.config().catch(() => ({
-      googleEnabled: false,
-      devLoginEnabled: true,
-    }));
+    if (ctx.authConfigError) return renderAccessCheckError(container, ctx);
+    try {
+      config = await ctx.refreshAuthConfig();
+    } catch {
+      return renderAccessCheckError(container, ctx);
+    }
   }
 
   const googleEnabled = Boolean(config.googleEnabled && config.googleClientId);

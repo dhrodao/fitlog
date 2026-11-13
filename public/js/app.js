@@ -1,6 +1,6 @@
 import { api, errorMessage } from './api.js';
 import { initTheme } from './theme.js';
-import { esc, errorScreen, icon, loaderScreen, offlineScreen } from './ui.js';
+import { esc, errorScreen, icon, loaderScreen, offlineScreen, toast } from './ui.js';
 import { clearAll as clearOfflineData, loadActiveWorkout } from './offline/active-store.js';
 import { syncFinishedOffline } from './offline/sync.js';
 import * as LoginView from './views/login.js';
@@ -99,6 +99,7 @@ const routes = [
 const state = {
   user: null,
   authConfig: null,
+  authConfigError: false,
   cleanup: null,
   version: 0,
   activeWorkout: null,
@@ -146,7 +147,14 @@ async function logout() {
 async function handleUnauthorized() {
   state.user = null;
   state.activeWorkout = null;
+  toast('Tu sesión ha caducado. Vuelve a entrar.', 'error');
   navigate('/login', { replace: true });
+}
+
+async function refreshAuthConfig() {
+  state.authConfig = await api.auth.config();
+  state.authConfigError = false;
+  return state.authConfig;
 }
 
 const ctx = {
@@ -155,6 +163,9 @@ const ctx = {
   },
   get authConfig() {
     return state.authConfig;
+  },
+  get authConfigError() {
+    return state.authConfigError;
   },
   get activeWorkout() {
     return state.activeWorkout;
@@ -169,11 +180,13 @@ const ctx = {
   completeLogin(user) {
     state.user = user;
     state.authConfig = null;
+    state.authConfigError = false;
     navigate('/', { replace: true });
   },
   navigate,
   logout,
   handleUnauthorized,
+  refreshAuthConfig,
   refresh: () => handleRoute(),
   refreshActive: async () => {
     if (!state.user) return null;
@@ -361,8 +374,13 @@ async function boot() {
 
   try {
     state.authConfig = await api.auth.config();
+    state.authConfigError = false;
   } catch {
-    state.authConfig = { googleEnabled: false, devLoginEnabled: true };
+    // Never assume the demo login is available when the server cannot be
+    // asked: the login screen shows an explicit "could not check" state with
+    // a retry instead of silently exposing the demo button.
+    state.authConfig = null;
+    state.authConfigError = true;
   }
 
   let offline = false;

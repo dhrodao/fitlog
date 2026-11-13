@@ -16,6 +16,9 @@ test.describe('Expired session', () => {
 
       await expect(page.locator('[data-dev-login]')).toBeVisible();
       await expect(page).toHaveURL(/#\/login$/);
+      await expect(
+        page.getByText('Tu sesión ha caducado. Vuelve a entrar.')
+      ).toBeVisible();
       await expect(page.getByText(/No se pudo cargar/)).toHaveCount(0);
     }
   );

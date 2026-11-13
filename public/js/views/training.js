@@ -256,6 +256,7 @@ export async function render(container, ctx) {
     } catch (error) {
       buttons.forEach((button) => setLoading(button, false));
       if (error.status === 409) {
+        toast(error.message, 'error');
         ctx.navigate('/workout/active');
       } else if (error.status === 401) {
         ctx.handleUnauthorized();
@@ -300,6 +301,7 @@ export async function render(container, ctx) {
     } catch (error) {
       setLoading(button, false);
       if (error.status === 409) {
+        toast(error.message, 'error');
         ctx.navigate('/workout/active');
       } else if (error.status === 401) {
         ctx.handleUnauthorized();

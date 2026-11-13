@@ -1,5 +1,6 @@
 import { api, errorMessage } from '../api.js';
 import { openExerciseDetail } from '../exercise-detail.js';
+import { parseDecimalInput, INVALID } from '../format.js';
 import {
   confirmDialog,
   connectionNeeded,
@@ -72,17 +73,19 @@ function exerciseBlock(exercise, { inSuperset = false } = {}) {
 function editSetRow(set, index) {
   // On touch devices the on-screen keypad replaces the system keyboard. The
   // weight field is plain text there: a number input would drop a trailing "."
-  // while the decimal is still being typed.
+  // while the decimal is still being typed. Edited sets follow the active
+  // screen's rules (comma or point, invalid input flagged, negatives clamped,
+  // reps rounded), so both fields stay text inputs.
   const touch = isTouchKeypad();
   return `
     <div class="set-row ${set.completed ? 'completed' : ''}" data-set-id="${set.id}">
       <div class="set-num">${index + 1}</div>
       <div class="set-cell">
-        <input class="number-input" type="${touch ? 'text' : 'number'}" inputmode="${touch ? 'none' : 'decimal'}" step="0.5" min="0" placeholder="0"
+        <input class="number-input" type="text" inputmode="${touch ? 'none' : 'decimal'}" placeholder="0"
           value="${set.weightKg != null ? esc(String(set.weightKg)) : ''}" data-field="weightKg" aria-label="Peso en kg" />
       </div>
       <div class="set-cell">
-        <input class="number-input" type="number" inputmode="${touch ? 'none' : 'numeric'}" min="0" placeholder="0"
+        <input class="number-input" type="text" inputmode="${touch ? 'none' : 'numeric'}" placeholder="0"
           value="${set.reps != null ? esc(String(set.reps)) : ''}" data-field="reps" aria-label="Repeticiones" />
       </div>
       <button type="button" class="check-btn ${set.completed ? 'checked' : ''}" data-toggle aria-label="Completar serie">
@@ -414,6 +417,16 @@ export async function render(container, ctx, params) {
     const exercisesEl = container.querySelector('[data-exercises]');
     if (isTouchKeypad()) keypad = createSetKeypad({ scope: exercisesEl });
 
+    exercisesEl.addEventListener('input', (event) => {
+      const field = event.target.closest('[data-field]');
+      if (!field) return;
+      if (parseDecimalInput(field.value) === INVALID) {
+        field.classList.add('input-error');
+      } else {
+        field.classList.remove('input-error');
+      }
+    });
+
     exercisesEl.addEventListener('change', async (event) => {
       const field = event.target.closest('[data-field]');
       if (!field) return;
@@ -423,13 +436,21 @@ export async function render(container, ctx, params) {
       const setId = Number(row.dataset.setId);
       const set = getSet(weId, setId);
       if (!set) return;
-      const raw = field.value;
-      let value = raw === '' ? null : Number(String(raw).replace(',', '.'));
+      const parsed = parseDecimalInput(field.value);
+
+      // Invalid input (e.g. "5kg") must not silently become 0: flag it and
+      // leave the stored value untouched until it is fixed.
+      if (parsed === INVALID) {
+        field.classList.add('input-error');
+        return;
+      }
+      field.classList.remove('input-error');
+
+      let value = parsed;
       if (value != null) {
-        const invalid = !Number.isFinite(value) || value < 0;
-        if (invalid) value = 0;
+        if (value < 0) value = 0;
         if (field.dataset.field === 'reps') value = Math.round(value);
-        field.value = String(value);
+        if (String(value) !== field.value.trim()) field.value = String(value);
       }
       set[field.dataset.field] = value;
       try {

@@ -12,16 +12,48 @@ function periodDays(period) {
   return 90;
 }
 
-function startOfWeek(date) {
-  const d = new Date(date);
-  d.setUTCHours(0, 0, 0, 0);
-  const day = (d.getUTCDay() + 6) % 7;
-  d.setUTCDate(d.getUTCDate() - day);
-  return d;
+// Weekly buckets use the user's local calendar when a valid IANA zone is
+// supplied. Instants stay in UTC: the time zone only decides which local date
+// (and therefore which local Monday) a workout belongs to.
+function normalizeTimeZone(value) {
+  if (typeof value !== 'string') return null;
+  const tz = value.trim();
+  if (!tz || tz.length > 64) return null;
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+    return tz;
+  } catch {
+    return null;
+  }
 }
 
-function dateKey(date) {
-  return date.toISOString().slice(0, 10);
+function localDateKey(date, timeZone) {
+  if (!timeZone) return date.toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+function mondayOf(dateKey) {
+  const d = new Date(`${dateKey}T00:00:00.000Z`);
+  const day = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - day);
+  return d.toISOString().slice(0, 10);
+}
+
+function weekStartKey(date, timeZone) {
+  return mondayOf(localDateKey(date, timeZone));
+}
+
+function addDays(dateKey, days) {
+  const d = new Date(`${dateKey}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 function workoutRows(userId, fromIso) {
@@ -51,6 +83,7 @@ function workoutRows(userId, fromIso) {
 
 router.get('/overview', (req, res) => {
   const days = periodDays(req.query.period);
+  const timeZone = normalizeTimeZone(req.query.tz);
   const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const rows = workoutRows(req.user.id, from.toISOString());
 
@@ -67,15 +100,15 @@ router.get('/overview', (req, res) => {
   );
 
   const buckets = new Map();
-  const firstWeek = startOfWeek(from);
-  const currentWeek = startOfWeek(new Date());
+  const firstWeek = weekStartKey(from, timeZone);
+  const currentWeek = weekStartKey(new Date(), timeZone);
   for (
-    let cursor = new Date(firstWeek);
+    let cursor = firstWeek;
     cursor <= currentWeek;
-    cursor.setUTCDate(cursor.getUTCDate() + 7)
+    cursor = addDays(cursor, 7)
   ) {
-    buckets.set(dateKey(cursor), {
-      weekStart: dateKey(cursor),
+    buckets.set(cursor, {
+      weekStart: cursor,
       durationSeconds: 0,
       volume: 0,
       reps: 0,
@@ -85,7 +118,7 @@ router.get('/overview', (req, res) => {
   }
 
   for (const row of rows) {
-    const key = dateKey(startOfWeek(new Date(row.date)));
+    const key = weekStartKey(new Date(row.date), timeZone);
     const bucket = buckets.get(key);
     if (!bucket) continue;
     bucket.durationSeconds += row.durationSeconds;
@@ -95,8 +128,7 @@ router.get('/overview', (req, res) => {
     bucket.workouts += 1;
   }
 
-  const thisWeekKey = dateKey(currentWeek);
-  const thisWeek = buckets.get(thisWeekKey)?.durationSeconds || 0;
+  const thisWeek = buckets.get(currentWeek)?.durationSeconds || 0;
   const allTime = db
     .prepare(
       'SELECT COUNT(*) AS count FROM workouts WHERE user_id = ? AND finished_at IS NOT NULL'

@@ -878,7 +878,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | WRK-013 ✅ | Workouts | Finish fails | Active workout with a completed set | Mock `POST …/finish` → 500; click finish | Error toast; user stays on active screen; finish button usable again | E2E | P1 | RB+MK | reset, mine | S |
 | WRK-014 ✅ | Workouts | Workout detail & exercise detail modal | ≥ 2 finished workouts of one exercise (`hist`) | Open history card → detail → tap the exercise name/image | Totals, exercises and sets match the seed; the exercise detail modal opens with the *Resumen* tab showing a `Gráfico de progreso` image and the personal-record grid, and closes | E2E | P1 | RB | hist | M |
 | WRK-015 ✅ | Workouts | History empty state | No workouts (`reset`) | Open `#/workouts` and home | `Sin entrenamientos` (+ `Empezar`) / `Sin entrenamientos aún` | E2E | P1 | RB | reset | XS |
-| WRK-016 | Workouts | Edit numeric values of a finished workout (**needs app change AC-6**, D-8) | Finished workout | ⋯ → `Editar entrenamiento` → weight `72,5` then `72.5`; `5kg`; `-3`; reps `8.4`; `Listo`; reload | Same rules as the active screen: comma and point both give 72.5; `5kg` flagged (`input-error`) and not saved; negative → `0`; reps rounded to an integer; values survive reload and totals in the detail update | E2E | P1 | RB | hist | S |
+| WRK-016 ✅ | Workouts | Edit numeric values of a finished workout (AC-6, D-8) | Finished workout | ⋯ → `Editar entrenamiento` → weight `72,5` then `72.5`; `5kg`; `-3`; reps `8.4`; `Listo`; reload | Same rules as the active screen: comma and point both give 72.5; `5kg` flagged (`input-error`) and not saved; negative → `0`; reps rounded to an integer; values survive reload and totals in the detail update | E2E | P1 | RB | hist | S |
 | WRK-017 ✅ | Workouts | Edit finished workout: name / location / notes and exercise removal (D-6) | Finished workout with 2 exercises | ⋯ → `Editar entrenamiento`; fill name, `Ubicación`, `Notas`; leave field; trash on one exercise → cancel, then confirm; `Listo` | Detail shows the new name/location/notes; they survive reload; history card shows the new name; exercise removal asks for confirmation (cancel keeps it, confirm removes it and updates totals); deleting a single set stays immediate | E2E | P1 | RB | hist | M |
 | WRK-018 ✅ | Workouts | History pagination | 25 workouts (`hist`) | Open history; click `Cargar más` | First 20 then all 25, grouped by month headings, button disappears | E2E | P1 | RB | hist | M |
 | WRK-019 ✅ | Workouts | Delete finished workout | Finished workout | ⋯ → `Eliminar entrenamiento` → cancel; again → confirm | Cancel keeps; confirm toasts `Entrenamiento eliminado`, history no longer lists it, home totals update | E2E | P1 | RB | hist | S |
@@ -947,7 +947,7 @@ stats, measurements read/write, profile data/Hevy, superset/reorder/replace
 | MEA-007 ✅ | Measurements | At-least-one-measure guard | Form with only a note | Save | Toast `Añade al menos una medida`; no request | E2E | P1 | RB | reset | XS |
 | MEA-008 ✅ | Measurements | Empty state | None | Open measurements | `Sin medidas aún`, `Aún sin registros` | E2E | P1 | RB | reset | XS |
 | MEA-009 ✅ | Measurements | Default date is local, not UTC | `clock` near local midnight; non-UTC `timezoneId` | Open form | Date input equals the **local** calendar date | E2E | P2 | RB | clock | M |
-| STA-001 | Statistics | Home weekly stats, local weeks (**needs app change AC-7**, D-9) | Seeded history at fixed dates (`hist`, `clock`), including one workout at 00:30 Monday Europe/Madrid (= Sunday 23:30 UTC in winter) | Open home; tap a week bar; tap again | Totals match seed; the 00:30-Monday workout counts in the **new** local week; selecting a bar swaps label/stats; second tap restores `Esta semana` | E2E | P1 | RB | hist, clock | M |
+| STA-001 ✅ | Statistics | Home weekly stats, local weeks (AC-7, D-9) | Seeded history at fixed dates (`hist`, `clock`), including one workout at 00:30 Monday Europe/Madrid (= Sunday 23:30 UTC in winter) | Open home; tap a week bar; tap again | Totals match seed; the 00:30-Monday workout counts in the **new** local week; selecting a bar swaps label/stats; second tap restores `Esta semana` | E2E | P1 | RB | hist, clock | M |
 | STA-002 ✅ | Statistics | Profile metrics & chart | `hist` | Profile → switch `Duración`/`Volumen`/`Repeticiones`; hover/tap a bar | Chart title follows metric; tooltip shows `Entrenos/Tiempo/Volumen/Series` of that week | E2E | P2 | RB | hist, clock | M |
 
 ### 5.9 Responsive / mobile (H)
@@ -1259,8 +1259,8 @@ checklist (shell hash recomputed, `CACHE_VERSION` bumped, `npm test` green).
 | AC-3 | D-5 | Offline cold start for the last known user (`{id,name}` persisted at login, cleared on logout/401) | `public/js/app.js` (`boot`), `public/js/offline/*` | OFF-002, OFF-004 |
 | AC-4 | D-6 | Confirm before removing an exercise in finished-workout edit mode | `public/js/views/workout.js` | WRK-017 |
 | AC-5 | D-7 | Logout uploads a pending offline workout first; warns if it cannot | `public/js/app.js` (`logout`), `public/js/views/profile.js` | OFF-009 |
-| AC-6 | D-8 | Finished-workout edit uses text inputs + `parseDecimalInput` | `public/js/views/workout.js` | WRK-016 |
-| AC-7 | D-9 | `tz`-aware weekly buckets | `public/js/api.js`, **`server/routes/stats.js`** (+ a `node --test` case) | STA-001 |
+| AC-6 ✅ | D-8 | Finished-workout edit uses text inputs + `parseDecimalInput` | `public/js/views/workout.js` | WRK-016 |
+| AC-7 ✅ | D-9 | `tz`-aware weekly buckets | `public/js/api.js`, **`server/routes/stats.js`** (+ a `node --test` case) | STA-001 |
 | AC-8 ✅ | D-11 | Label association, toast live region, `aria-current="page"` | `public/js/views/measurements.js`, `routine-editor.js`, `workout.js`, `ui.js`, `app.js` | A11Y-003, A11Y-004, NAV-002 |
 | AC-9 | D-13 | Toast on the 409 redirect when starting a workout | `public/js/views/training.js` | WRK-006 |
 
@@ -1376,8 +1376,8 @@ commit.
   workouts survive deletion.
 * **DoD:** common DoD.
 
-### M4 — History, workout edit, measurements, statistics — **In progress**
-* **Status:** In progress. Delivered: WRK-011, 024 (`workouts/previous-sets.spec.js`),
+### M4 — History, workout edit, measurements, statistics — **Completed**
+* **Status:** Completed. Delivered: WRK-011, 024 (`workouts/previous-sets.spec.js`),
   WRK-014, 021 (`workouts/exercise-detail-history.spec.js`; the detail half also
   in `workouts/workout-detail-edit.spec.js`), WRK-015, 018, 019
   (`workouts/history-list.spec.js`), WRK-017
@@ -1391,11 +1391,13 @@ commit.
   the earlier batch). The stopgap `test/active-e1rm-parity.test.js` was removed
   now that the record path is exercised in the browser. STA-002 lives in
   `stats/profile-stats.spec.js` (metric switch plus the week tooltip from seeded
-  history). Still pending: WRK-016 (needs AC-6) and STA-001 (needs AC-7).
+  history). WRK-016 lives in `workouts/edit-numeric.spec.js` and STA-001 in
+  `stats/home-weekly.spec.js`; both passed `--repeat-each=10` (20/20) and the
+  `tz` server test lives in `test/stats-timezone.test.js`. The full suite is
+  115/115 locally (Node 18, Chromium + Pixel 7 + PWA).
 * **Objective:** cover data viewing/editing and the date-sensitive features.
 * **Scenarios:** WRK-011, 014, 015, 016, 017, 018, 019, 021, 023, 024, 025, 026 · MEA-001–009 · STA-001, 002.
-  (WRK-016 still needs AC-6; WRK-017's confirm part is covered now that AC-4 has
-  landed.)
+  (WRK-017's confirm part is covered now that AC-4 has landed.)
 * **Infra:** `seedWorkouts`/`seedMeasurements` with fixed dates; `clock`;
   non-UTC `timezoneId` case.
 * **Depends on:** M0, M2. **Complexity:** L.

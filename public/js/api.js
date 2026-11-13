@@ -143,7 +143,18 @@ export const api = {
     remove: (id) => request(`/measurements/${id}`, { method: 'DELETE' }),
   },
   stats: {
-    overview: (period = '3m') => request(`/stats/overview?period=${period}`),
+    overview: (period = '3m') => {
+      // Weekly stats are bucketed by the user's local Monday; the browser is
+      // the only place that knows the IANA zone.
+      let tz = '';
+      try {
+        tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      } catch {
+        tz = '';
+      }
+      const query = tz ? `&tz=${encodeURIComponent(tz)}` : '';
+      return request(`/stats/overview?period=${period}${query}`);
+    },
     exercise: (id) => request(`/stats/exercise/${id}`),
   },
   import: {
